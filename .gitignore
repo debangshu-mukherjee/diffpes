@@ -134,3 +134,6 @@ target/
 /.mypy_cache/
 /.pytest_cache
 .qodo
+
+# Symlink to the private planning repo (not part of this package)
+/diffpes-plans
