@@ -18,14 +18,14 @@ import math
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Float, jaxtyped
+from jaxtyping import Array, Float, Integer, jaxtyped
 
 from diffpes.types import ScalarFloat
 
 
 def _associated_laguerre(
     order: int,
-    alpha: int,
+    alpha: ScalarFloat,
     x: Float[Array, " ..."],
 ) -> Float[Array, " ..."]:
     r"""Evaluate associated Laguerre polynomial.
@@ -71,7 +71,7 @@ def _associated_laguerre(
     ----------
     order : int
         Polynomial order (n >= 0).
-    alpha : int
+    alpha : ScalarFloat
         Generalization parameter (alpha >= 0). For hydrogenic
         wavefunctions, alpha = 2*l + 1.
     x : Float[Array, " ..."]
@@ -105,7 +105,7 @@ def _associated_laguerre(
         return laguerre_one
 
     def _recurrence_step(
-        current_order: int,
+        current_order: Integer[Array, ""],
         state: tuple[Float[Array, " ..."], Float[Array, " ..."]],
     ) -> tuple[Float[Array, " ..."], Float[Array, " ..."]]:
         laguerre_prev_prev: Float[Array, " ..."]

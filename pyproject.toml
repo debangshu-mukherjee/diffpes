@@ -21,6 +21,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Physics",
@@ -31,9 +32,7 @@ classifiers = [
 dependencies = [
     "numpy>=2.2.1",
     "matplotlib>=3.10.0",
-    "jax>=0.7.0 ; sys_platform == 'win64'",
-    "jax>=0.7.0 ; sys_platform == 'darwin'",
-    "jax>=0.7.0 ; sys_platform == 'linux'",
+    "jax>=0.7.0",
     "jaxtyping>=0.3.0",
     "chex>=0.1.85",
     "beartype>=0.21.0",
@@ -45,14 +44,6 @@ dependencies = [
     "optax>=0.2.8",
     "lineax>=0.1.0",
 ]
-
-[tool.setuptools]
-include-package-data = true
-license-files = []
-
-[tool.setuptools.packages.find]
-namespaces = true
-where = ["src"]
 
 [project.optional-dependencies]
 cuda = [
@@ -104,6 +95,7 @@ requires = ["uv_build>=0.10.4,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]
+addopts = "-n auto --dist loadgroup --jaxtyping-packages=diffpes,beartype.beartype"
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
@@ -123,13 +115,12 @@ require-yield-section-when-yielding = true
 
 [tool.interrogate]
 fail-under = 90
-style = "sphinx"
 exclude = ["tests", "build", "dist"]
 ignore-init-module = true
 quiet = true
 
 [tool.ruff]
-include = ["pyproject.toml", "src/**/*.py"]
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
 line-length = 79
 target-version = "py312"
 exclude = [

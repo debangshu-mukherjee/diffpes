@@ -26,6 +26,11 @@ and the project uses calendar versioning.
 
 - Corrected the supported Python range to `>=3.12,<3.15` and documented
   Python 3.12 support.
+- Repaired project metadata by making JAX platform-independent, removing dead
+  setuptools configuration, aligning interrogate with NumPy docstrings, and
+  extending Ruff and runtime type-checking coverage to the test suite.
+- Corrected real-to-complex Gaunt transformation coefficients to satisfy their
+  complex-valued runtime type contract.
 
 ## [2026.03.01] - 2026-07-13
 

@@ -34,7 +34,7 @@ import math
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Float, jaxtyped
+from jaxtyping import Array, Float, Integer, jaxtyped
 
 
 def _normalization(l: int, m: int) -> float:
@@ -178,7 +178,7 @@ def _associated_legendre_plm(
 
     # Upward recurrence: (l-m) P_l^m = (2l-1) x P_{l-1}^m - (l+m-1) P_{l-2}^m
     def _step(
-        idx: int,
+        idx: Integer[Array, ""],
         state: tuple[Float[Array, " ..."], Float[Array, " ..."]],
     ) -> tuple[Float[Array, " ..."], Float[Array, " ..."]]:
         p_prev2, p_prev1 = state

@@ -308,11 +308,11 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
         """
         if mm > 0:
             return [
-                (1.0 / sqrt2, mm),
-                ((-1) ** mm / sqrt2, -mm),
+                (complex(1.0 / sqrt2), mm),
+                (complex((-1) ** mm / sqrt2), -mm),
             ]
         if mm == 0:
-            return [(1.0, 0)]
+            return [(1.0 + 0.0j, 0)]
         am: int = abs(mm)
         return [
             (-1j * (-1) ** am / sqrt2, am),

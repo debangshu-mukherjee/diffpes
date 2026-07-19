@@ -18,7 +18,7 @@ import math
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Float, jaxtyped
+from jaxtyping import Array, Float, Integer, jaxtyped
 
 _SMALL_ARGUMENT: float = 1.0e-8
 
@@ -171,8 +171,8 @@ def spherical_bessel_jl(
         )
         return j1_result
 
-    def _recurrence_step(
-        index: int,
+        def _recurrence_step(
+            index: Integer[Array, ""],
         state: tuple[Float[Array, " ..."], Float[Array, " ..."]],
     ) -> tuple[Float[Array, " ..."], Float[Array, " ..."]]:
         previous: Float[Array, " ..."]
