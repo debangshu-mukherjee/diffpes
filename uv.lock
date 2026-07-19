@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">3.12, <3.15"
+requires-python = ">=3.12, <3.15"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win64'",
     "python_full_version == '3.13.*' and sys_platform == 'win64'",
@@ -694,6 +694,7 @@ dependencies = [
     { name = "jax", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win64'" },
     { name = "jaxtyping" },
     { name = "jupyter" },
+    { name = "lineax" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "optax" },
@@ -842,6 +843,7 @@ requires-dist = [
     { name = "jaxtyping", specifier = ">=0.3.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "jupyter-black", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "lineax", specifier = ">=0.1.0" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=2.0.0" },
     { name = "nbconvert", marker = "extra == 'docs'", specifier = ">=7.16.6" },

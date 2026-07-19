@@ -485,6 +485,85 @@ suite that only checks forward values cannot catch a corrupted Fisher row.
 - Test JAX compatibility explicitly: `jit`, `grad`, and `vmap` paths where
   relevant.
 
+### Test Code Conventions
+
+Tests are first-class source: the same style discipline as `src/` applies —
+with a few test-specific adaptations:
+
+- **Type-hint test bodies and helpers exactly as in `src/`.** Every test
+  method is `def test_*(self) -> None:`; annotate intermediate variables; the
+  assign-before-returning rule applies to any helper that returns data.
+  Shared helpers carry full `jaxtyping` annotations (and
+  `@jaxtyped(typechecker=beartype)` where arrays flow).
+- **Document *what* and *how* on every test, class, and module (numpydoc).**
+  A test's docstring is its specification, not a label. Open with the
+  imperative summary line, then an `Extended Summary` stating **what** is
+  verified (the property, invariant, or expected value — with units and
+  tolerances), and a `Notes` section describing **how** (inputs/fixtures, the
+  assertion strategy, and the `jit`/`grad`/`vmap` variant exercised). The
+  **module** docstring summarises that file's coverage; each **`Test<Symbol>`
+  class** docstring names the symbol under test and the scope of its cases.
+- **Test docstrings are published documentation.** The test suite is rendered
+  as a *Testing / Validation* reference in the Sphinx docs, so these
+  docstrings are user-facing documentation of *what the library guarantees
+  and how each guarantee is checked*. Write them as reader-facing prose; the
+  `:see:` cross-reference makes the source ↔ test link navigable in **both**
+  directions in the rendered docs.
+- **No `__all__` or `Routine Listings` in test modules.** Tests are not a
+  public API, so the three-places rule does **not** apply; a test module needs
+  only a one-line summary + extended-summary docstring.
+- **Private helpers are `_`-prefixed and local; reused fixtures go in the
+  shared helper modules** (`tests/_factories.py`, `tests/_assertions.py`,
+  `tests/_types.py`), not copy-pasted across files.
+
+Example:
+
+```python
+import chex
+import jax.numpy as jnp
+from jaxtyping import Array, Float
+
+import diffpes
+
+
+class TestFermiFunction(chex.TestCase):
+    """Validate :func:`~diffpes.simul.fermi_function`.
+
+    Covers the Fermi-Dirac occupation across the ARPES temperature range:
+    known-value accuracy at the Fermi level, shape, and finiteness.
+
+    :see: :func:`~diffpes.simul.fermi_function`
+    """
+
+    def test_half_occupation_at_fermi_level(self) -> None:
+        """Occupation at the Fermi level equals 1/2 at any temperature.
+
+        Confirms ``fermi_function`` reproduces the analytic Fermi-Dirac
+        value :math:`f(E_F) = 1/2` independent of temperature (the *what*).
+
+        Notes
+        -----
+        Evaluates ``fermi_function`` at ``E = E_F = 0`` eV for temperatures
+        [10, 100, 300] K and asserts shape ``(3,)``, finiteness, and
+        closeness to 0.5 at ``rtol=1e-12`` (the *how*).
+        """
+        temperatures: Float[Array, "3"] = jnp.array([10.0, 100.0, 300.0])
+        occupations: Float[Array, "3"] = diffpes.simul.fermi_function(
+            energy=jnp.zeros(3),
+            fermi_energy=0.0,
+            temperature=temperatures,
+        )
+
+        chex.assert_shape(occupations, (3,))
+        chex.assert_tree_all_finite(occupations)
+        chex.assert_trees_all_close(occupations, 0.5 * jnp.ones(3), rtol=1e-12)
+```
+
+The `:see:` pair is matched: the source symbol points forward to
+`Test<Symbol>`, and the test class points back to the symbol — add the
+back-reference whenever you add the forward one, and renaming either side
+means updating both.
+
 ### Running Tests
 
 ```bash
