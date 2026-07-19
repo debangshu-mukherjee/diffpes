@@ -10,12 +10,17 @@ and the project uses calendar versioning.
 ### Added
 
 - Added Equinox, Optimistix, Lineax, and Optax as the differentiable type,
-  nonlinear-solver, linear-solver, and optimizer stack.
+  nonlinear-solver, linear-solver, and optimizer stack, following the stack
+  decision adopted on 2026-07-13.
+- Added Hypothesis and psutil to the test environment for property-based
+  verification and runtime memory guards.
 
 ### Removed
 
 - Removed the unused `difftb` dependency and its broken editable
   `[tool.uv.sources]` path so DiffPES installs as a standalone package.
+- Retired Black, isort, jupyter-black, build, and Twine from the development
+  environment; Ruff owns formatting and uv owns build and publish workflows.
 
 ### Fixed
 
