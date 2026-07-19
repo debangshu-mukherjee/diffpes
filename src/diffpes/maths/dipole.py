@@ -20,9 +20,9 @@ the polarization vector.
 Routine Listings
 ----------------
 :func:`dipole_intensities_all_orbitals`
-    Compute |M|^2 for all orbitals in the basis.
+    Compute ``|M|^2`` for all orbitals in the basis.
 :func:`dipole_intensity_orbital`
-    Compute |M|^2 for one orbital.
+    Compute ``|M|^2`` for one orbital.
 :func:`dipole_matrix_element_single`
     Compute dipole matrix element for a single orbital (n, l, m).
 """
@@ -237,7 +237,7 @@ def dipole_intensity_orbital(
     m: int,
     efield: Complex[Array, " 3"],
 ) -> Float[Array, " "]:
-    r"""Compute |M|^2 for one orbital.
+    r"""Compute ``|M|^2`` for one orbital.
 
     Extended Summary
     ----------------
@@ -290,7 +290,7 @@ def dipole_intensities_all_orbitals(
     slater_params: SlaterParams,
     efield: Complex[Array, " 3"],
 ) -> Float[Array, " O"]:
-    r"""Compute |M|^2 for all orbitals in the basis.
+    r"""Compute ``|M|^2`` for all orbitals in the basis.
 
     Extended Summary
     ----------------
@@ -330,7 +330,7 @@ def dipole_intensities_all_orbitals(
     Returns
     -------
     intensities : Float[Array, " O"]
-        |M|^2 per orbital.
+        ``|M|^2`` per orbital.
 
     Notes
     -----

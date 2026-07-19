@@ -148,7 +148,7 @@ def _manifest(payloads: dict[str, dict[str, np.ndarray]]) -> str:
         "- Device policy: CPU, JAX x64 enabled",
         f"- Platform: `{platform.platform()}`",
         f"- Python: `{platform.python_version()}`",
-        f"- DiffPES: `{diffpes.__version__}`",
+        f"- diffpes: `{diffpes.__version__}`",
         f"- JAX: `{jax.__version__}`",
         f"- NumPy: `{np.__version__}`",
         "",

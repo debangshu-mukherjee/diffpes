@@ -1,7 +1,7 @@
 """Verify the repository dependency and runtime foundation.
 
 The tests in this module establish that the differentiable solver stack is
-installed, DiffPES enables JAX 64-bit precision before numerical work, and
+installed, diffpes enables JAX 64-bit precision before numerical work, and
 Equinox modules retain their structure through JAX PyTree operations.
 """
 
@@ -10,7 +10,7 @@ import re
 import tomllib
 from pathlib import Path
 
-# ruff: noqa: I001 -- DiffPES must configure JAX before stack imports.
+# ruff: noqa: I001 -- diffpes must configure JAX before stack imports.
 import diffpes
 
 import chex
@@ -356,6 +356,41 @@ class TestCI(chex.TestCase):
         chex.assert_equal(triggers, ["push", "pull_request"])
         chex.assert_equal(python_versions, ["3.12", "3.13", "3.14"])
 
+    def test_pypi_release_workflow(self) -> None:
+        """Publish matching version tags through trusted PyPI identity.
+
+        Confirms the dedicated release workflow is tag-only, uses the protected
+        ``pypi`` environment with job-scoped OIDC permission, smoke-tests both
+        distribution formats, and requires uv trusted publishing.
+
+        Notes
+        -----
+        Parses the workflow as YAML and inspects its trigger, permissions, and
+        executable commands without contacting PyPI or minting credentials.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[1]
+        workflow_path: Path = repository_root / ".github/workflows/release.yml"
+        workflow: dict[str, Any] = yaml.safe_load(workflow_path.read_text())
+        publish_job: dict[str, Any] = workflow["jobs"]["publish"]
+        run_commands: tuple[str, ...] = tuple(
+            step["run"] for step in publish_job["steps"] if "run" in step
+        )
+        combined_commands: str = "\n".join(run_commands)
+
+        chex.assert_equal(workflow["on"]["push"]["tags"], ["v*"])
+        chex.assert_equal(publish_job["environment"]["name"], "pypi")
+        chex.assert_equal(
+            publish_job["permissions"],
+            {"contents": "read", "id-token": "write"},
+        )
+        self.assertIn("uv build --no-sources", combined_commands)
+        self.assertIn("--with dist/*.whl", combined_commands)
+        self.assertIn("--with dist/*.tar.gz", combined_commands)
+        self.assertIn(
+            "uv publish --trusted-publishing always dist/*",
+            combined_commands,
+        )
+
 
 class TestRegressionReferences(chex.TestCase):
     """Validate the pre-refactor forward baselines from WP6.1.
@@ -463,12 +498,12 @@ class TestStack(chex.TestCase):
         """Preserve stack imports, x64 precision, and PyTree structure.
 
         Confirms that every library selected for types and solvers imports in
-        the DiffPES runtime, scalar JAX arrays default to float64, and a native
+        the diffpes runtime, scalar JAX arrays default to float64, and a native
         Equinox module round-trips through JAX tree flattening.
 
         Notes
         -----
-        Imports the runtime packages at module collection after DiffPES,
+        Imports the runtime packages at module collection after diffpes,
         constructs a scalar Equinox linear layer with a fixed key, and checks
         the reconstructed module type and leaves exactly.
         """

@@ -1,12 +1,12 @@
-# Contributing to DiffPES
+# Contributing to diffpes
 
-Thank you for your interest in contributing to DiffPES! This guide describes how
+Thank you for your interest in contributing to diffpes! This guide describes how
 the codebase is written — type hinting, documentation, validation, testing, and
 tooling — so your contributions match the existing standards.
 
 ## Core Principle: Invertible Modularity
 
-DiffPES is a bidirectional instrument: the same differentiable pipeline that
+diffpes is a bidirectional instrument: the same differentiable pipeline that
 takes a band structure to an ARPES spectrum is run in reverse to recover band
 structures, self-energies, and matrix-element parameters from measured data.
 Every module is a differentiable operator, and the boundaries between modules
@@ -56,8 +56,8 @@ principle.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/debangshu-mukherjee/DiffPES.git
-   cd DiffPES
+   git clone https://github.com/debangshu-mukherjee/diffpes.git
+   cd diffpes
    ```
 
 2. **Install in development mode:**
@@ -81,7 +81,7 @@ principle.
 ### Project Structure
 
 ```
-DiffPES/
+diffpes/
 ├── src/diffpes/           # Main source code
 │   ├── inout/             # Data I/O (POSCAR, EIGENVAL, KPOINTS, DOSCAR,
 │   │                      #   PROCAR, CHGCAR, HDF5) and plotting
@@ -112,7 +112,7 @@ standard it lands against.
 
 ### JAX-First Development
 
-DiffPES is built on JAX for differentiable, high-performance computation. All
+diffpes is built on JAX for differentiable, high-performance computation. All
 new code must follow JAX best practices:
 
 **Required JAX Patterns:**
@@ -496,7 +496,7 @@ tests/
 
 ### What a Test Must Validate Against
 
-**External truths, never DiffPES's own outputs.** A verification test compares
+**External truths, never diffpes's own outputs.** A verification test compares
 against a closed-form result (hydrogenic radial integrals, Rashba spinors,
 free-electron kinematics), a `scipy`/`sympy` reference value, or a published
 number (e.g. a pinned chinook cross-check) — not against a stored output of
@@ -748,5 +748,5 @@ Release checklist:
 - **Questions:** Open a discussion or issue
 - **Documentation:** Check the rendered docs (Read the Docs)
 
-Thank you for contributing to DiffPES and advancing differentiable ARPES
+Thank you for contributing to diffpes and advancing differentiable ARPES
 simulation!

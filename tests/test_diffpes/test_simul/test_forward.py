@@ -258,7 +258,8 @@ class TestSimulateTBRadial:
         1. **Setup**: Use the ``chain_setup`` fixture and run the
            simulation twice with work_function=4.0 eV and
            work_function=6.0 eV. The work function enters the
-           photoelectron kinetic energy calculation (Ek = hv - phi - |Eb|),
+           photoelectron kinetic energy calculation
+           (``Ek = hv - phi - |Eb|``),
            which affects the Slater radial matrix element via the
            outgoing plane-wave momentum.
         2. **Simulate both**: Call ``simulate_tb_radial`` twice with

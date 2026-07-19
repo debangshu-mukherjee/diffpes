@@ -50,10 +50,12 @@ def read_kpoints(  # noqa: PLR0915
     --------------------
     1. Parse comment, line-2 integer, and line-3 mode/scheme.
     2. Dispatch by mode:
+
        - Line-mode: parse paired endpoint lines, derive segment count,
          endpoint k-points, labels, and label indices.
        - Automatic: parse grid and shift vectors.
        - Explicit: parse listed k-points and weights.
+
     3. Construct ``KPathInfo`` with both legacy plotting fields and
        richer mode-specific metadata.
 

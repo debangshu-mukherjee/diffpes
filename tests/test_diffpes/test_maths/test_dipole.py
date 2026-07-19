@@ -8,7 +8,7 @@ photoemission intensity simulation: the single-orbital matrix element
 ``dipole_intensity_orbital``, and the multi-orbital batch function
 ``dipole_intensities_all_orbitals``.  Tests cover nonzero output for
 allowed transitions, numerical finiteness, JIT compatibility,
-non-negativity of intensities, consistency between |M|^2 and the
+non-negativity of intensities, consistency between ``|M|^2`` and the
 intensity function, output shapes for multi-orbital bases, and
 differentiability with respect to both the electric-field polarization
 vector and Slater orbital exponents (zeta).
@@ -76,7 +76,7 @@ class TestDipoleMatrixElementSingle:
     """Tests for ``dipole_matrix_element_single``.
 
     Validates the core single-orbital dipole matrix element
-    M = <k | e . r | n l m> which combines a radial integral with Gaunt
+    ``M = <k | e . r | n l m>`` which combines a radial integral with Gaunt
     angular coupling.  Tests verify that allowed transitions produce
     nonzero matrix elements, that outputs are always numerically finite,
     that the function is compatible with JAX JIT compilation, and that
@@ -89,7 +89,8 @@ class TestDipoleMatrixElementSingle:
 
         Uses an n=1, zeta=1.0 Slater 1s orbital with z-polarized light and
         k along z.  The dipole selection rule allows l=0 -> l'=1 (Delta l = +1)
-        with q=0, so the matrix element must be nonzero.  Asserts |M| > 1e-6
+        with q=0, so the matrix element must be nonzero.  Asserts
+        ``|M| > 1e-6``
         to confirm the angular (Gaunt) and radial integrals both contribute.
         """
         R_vals = slater_radial(r_grid, 1, 1.0)
@@ -137,7 +138,7 @@ class TestDipoleMatrixElementSingle:
     def test_gradient_wrt_efield(self, r_grid):
         """Verify autodiff gradient of intensity w.r.t. polarization vector.
 
-        Defines a scalar loss = |M(E)|^2 for an s-orbital with k along z
+        Defines a scalar ``loss = |M(E)|^2`` for an s-orbital with k along z
         and differentiates through the full dipole pipeline with respect to
         the complex electric-field vector E using ``jax.grad``.  Asserts
         all three gradient components are finite, confirming the Gaunt
@@ -161,7 +162,7 @@ class TestDipoleIntensityOrbital:
     Validates the single-orbital intensity function, which returns the
     modulus squared of the dipole matrix element.  Tests verify the
     physical constraint that intensity is non-negative and that the
-    function is consistent with computing |M|^2 directly from
+    function is consistent with computing ``|M|^2`` directly from
     ``dipole_matrix_element_single``.
     """
 
@@ -170,7 +171,7 @@ class TestDipoleIntensityOrbital:
 
         Uses an n=2, zeta=1.5 Slater p-orbital (l=1, m=0) with an
         off-axis k-vector and z-polarization.  Since intensity is defined
-        as |M|^2, it must be >= 0.  Asserts ``I >= 0.0`` as a basic
+        as ``|M|^2``, it must be >= 0.  Asserts ``I >= 0.0`` as a basic
         physical sanity check.
         """
         R_vals = slater_radial(r_grid, 2, 1.5)
@@ -234,7 +235,7 @@ class TestDipoleIntensitiesAllOrbitals:
         Constructs a four-orbital basis (1s, 2py, 2pz, 2px) spanning all
         three p sub-orbitals plus s, with an off-axis k-vector and
         z-polarization.  Asserts ``I >= 0`` element-wise, confirming the
-        |M|^2 definition holds for every orbital in the batch.
+        ``|M|^2`` definition holds for every orbital in the batch.
         """
         basis = make_orbital_basis(
             n_values=(1, 2, 2, 2),

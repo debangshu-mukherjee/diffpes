@@ -55,6 +55,7 @@ docs = [
     "sphinx-rtd-theme>=3.0.2",
     "nbsphinx>=0.9.7",
     "myst-parser>=2.0.0",
+    "myst-nb>=1.1.0",
     "ipykernel>=6.29.5",
     "nbconvert>=7.16.6",
     "furo>=2025.7.19",
@@ -93,6 +94,12 @@ all = [
 [build-system]
 requires = ["uv_build>=0.10.4,<0.11.0"]
 build-backend = "uv_build"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+explicit = true
 
 [tool.pytest.ini_options]
 addopts = "-n auto --dist loadgroup --jaxtyping-packages=diffpes,beartype.beartype"

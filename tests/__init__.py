@@ -1,1 +1,1 @@
-"""Contain the DiffPES validation suite and its shared private helpers."""
+"""Contain the diffpes validation suite and its shared private helpers."""

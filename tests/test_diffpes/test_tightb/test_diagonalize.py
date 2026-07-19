@@ -151,7 +151,7 @@ class TestDiagonalizeTB:
         Diagonalizes the graphene model at a single k-point and asserts
         the eigenvectors array has shape (1, 2, 2) -- (K=1, B=2, O=2).
         Also verifies that each band's eigenvector is normalized
-        (sum |c_o|^2 = 1) to within 1e-10, confirming the convention
+        (``sum |c_o|^2 = 1``) to within 1e-10, confirming the convention
         that the last axis indexes orbital coefficients.
         """
         model = make_graphene_model()
@@ -214,7 +214,7 @@ class TestVaspToDiagonalized:
         0.7 for a single atom across K=3 k-points and B=2 bands.  Uses
         ``phase_loss="ignore"`` to suppress the phase-loss warning.  The
         adapter should re-normalize these weights to unit length.  Asserts
-        that sum(|c_o|^2, axis=-1) = 1.0 for all (k, band) pairs to
+        that ``sum(|c_o|^2, axis=-1) = 1.0`` for all (k, band) pairs to
         within 1e-10, confirming the normalization step works correctly
         even when raw VASP projections do not sum to unity.
         """

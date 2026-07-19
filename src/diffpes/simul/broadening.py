@@ -44,23 +44,30 @@ def gaussian(
 
     Implementation Logic
     --------------------
-    The function evaluates the analytic Gaussian probability density:
+    The function evaluates the analytic Gaussian probability density::
 
-        G(E) = exp(-(E - E0)^2 / (2 * sigma^2)) / (sqrt(2 * pi) * sigma)
+        G(E) = exp(-(E - E0)^2 / (2 * sigma^2))
+               / (sqrt(2 * pi) * sigma)
 
-    1. **Compute energy differences**:
-       diff = energy_range - center
-       - Shifts the energy axis so the peak is at the origin.
+    1. **Compute energy differences**::
 
-    2. **Compute normalization factor**:
-       norm_factor = sqrt(2 * pi) * sigma
-       - This prefactor ensures the profile integrates to unity over
-         (-inf, +inf), i.e. the Gaussian is normalized to unit area.
+           diff = energy_range - center
 
-    3. **Evaluate Gaussian profile**:
-       profile = exp(-diff^2 / (2 * sigma^2)) / norm_factor
-       - Element-wise evaluation of the normalized Gaussian at each
-         energy point.
+       Shifts the energy axis so the peak is at the origin.
+
+    2. **Compute normalization factor**::
+
+           norm_factor = sqrt(2 * pi) * sigma
+
+       This prefactor ensures the profile integrates to unity over
+       (-inf, +inf), i.e. the Gaussian is normalized to unit area.
+
+    3. **Evaluate Gaussian profile**::
+
+           profile = exp(-diff^2 / (2 * sigma^2)) / norm_factor
+
+       Element-wise evaluation of the normalized Gaussian at each
+       energy point.
 
     Parameters
     ----------
@@ -94,7 +101,8 @@ def voigt(
     """Compute normalized Voigt profile via pseudo-Voigt approximation.
 
     Evaluates a Voigt lineshape using the pseudo-Voigt method of
-    Thompson, Cox & Hastings (1987), which expresses the Voigt profile
+    Thompson, Cox & Hastings (1987) [1]_, which expresses the Voigt
+    profile
     as a linear combination of Gaussian and Lorentzian components:
 
         V(E) = eta * L(E) + (1 - eta) * G(E)
@@ -106,36 +114,47 @@ def voigt(
     --------------------
     The pseudo-Voigt approximation proceeds in four stages:
 
-    1. **Compute component FWHMs**:
-       f_G = 2 * sigma * sqrt(2 * ln2)   (Gaussian FWHM)
-       f_L = 2 * gamma                    (Lorentzian FWHM)
-       - Converts the Gaussian standard deviation and Lorentzian
-         half-width to their respective full-width at half-maximum
-         values.
+    1. **Compute component FWHMs**::
 
-    2. **Compute Voigt FWHM via empirical formula**:
-       f_V = (f_G^5 + 2.69269 * f_G^4 * f_L + 2.42843 * f_G^3 * f_L^2
-              + 4.47163 * f_G^2 * f_L^3 + 0.07842 * f_G * f_L^4
-              + f_L^5)^(1/5)
-       - The Thompson-Cox-Hastings empirical relation approximates
-         the FWHM of the true Voigt convolution from the component
-         FWHMs. A safety guard replaces f_V = 0 with 1e-30 to avoid
-         division by zero.
+           f_G = 2 * sigma * sqrt(2 * ln2)   (Gaussian FWHM)
+           f_L = 2 * gamma                    (Lorentzian FWHM)
 
-    3. **Compute mixing ratio eta**:
-       ratio = f_L / f_V
-       eta = 1.36603 * ratio - 0.47719 * ratio^2 + 0.11116 * ratio^3
-       - The mixing ratio interpolates between pure Gaussian (eta = 0)
-         and pure Lorentzian (eta = 1). It is clipped to [0, 1].
+       Converts the Gaussian standard deviation and Lorentzian
+       half-width to their respective full-width at half-maximum
+       values.
 
-    4. **Combine Gaussian and Lorentzian components**:
-       sigma_V = f_V / (2 * sqrt(2 * ln2))
-       gamma_V = f_V / 2
-       G = gaussian(energy_range, center, sigma_V)
-       L = gamma_V / (pi * (diff^2 + gamma_V^2))
-       profile = eta * L + (1 - eta) * G
-       - Both components use the Voigt FWHM (not the original widths)
-         so that the combined profile has the correct total width.
+    2. **Compute Voigt FWHM via empirical formula**::
+
+           f_V = (f_G^5 + 2.69269 * f_G^4 * f_L
+                  + 2.42843 * f_G^3 * f_L^2
+                  + 4.47163 * f_G^2 * f_L^3
+                  + 0.07842 * f_G * f_L^4
+                  + f_L^5)^(1/5)
+
+       The Thompson-Cox-Hastings empirical relation approximates
+       the FWHM of the true Voigt convolution from the component
+       FWHMs. A safety guard replaces f_V = 0 with 1e-30 to avoid
+       division by zero.
+
+    3. **Compute mixing ratio eta**::
+
+           ratio = f_L / f_V
+           eta = 1.36603 * ratio - 0.47719 * ratio^2
+                 + 0.11116 * ratio^3
+
+       The mixing ratio interpolates between pure Gaussian (eta = 0)
+       and pure Lorentzian (eta = 1). It is clipped to [0, 1].
+
+    4. **Combine Gaussian and Lorentzian components**::
+
+           sigma_V = f_V / (2 * sqrt(2 * ln2))
+           gamma_V = f_V / 2
+           G = gaussian(energy_range, center, sigma_V)
+           L = gamma_V / (pi * (diff^2 + gamma_V^2))
+           profile = eta * L + (1 - eta) * G
+
+       Both components use the Voigt FWHM (not the original widths)
+       so that the combined profile has the correct total width.
 
     Parameters
     ----------
@@ -194,31 +213,37 @@ def fermi_dirac(
     """Compute Fermi-Dirac distribution value.
 
     Evaluates the Fermi-Dirac thermal occupation function at a given
-    energy, Fermi level, and temperature:
+    energy, Fermi level, and temperature::
 
         f(E) = 1 / (1 + exp((E - Ef) / (kB * T)))
 
     Implementation Logic
     --------------------
-    1. **Compute thermal energy kT**:
-       kt = kB * T
-       - Multiplies the Boltzmann constant kB = 8.617333e-5 eV/K by the
-         temperature in Kelvin to obtain the thermal energy scale. Both
-         values are cast to float64 for numerical precision.
+    1. **Compute thermal energy kT**::
 
-    2. **Guard against T = 0**:
-       safe_kt = max(kt, 1e-10)
-       - At zero temperature the distribution becomes a step function,
-         but the exponential would diverge. Clamping kT to a small
-         positive value (1e-10 eV) avoids division by zero while
-         preserving the sharp step-function behavior numerically.
+           kt = kB * T
 
-    3. **Evaluate Fermi-Dirac function**:
-       exponent = (E - Ef) / safe_kt
-       occupation = 1 / (1 + exp(exponent))
-       - Computes the occupation probability. For E << Ef the result
-         approaches 1 (filled states); for E >> Ef it approaches 0
-         (empty states).
+       Multiplies the Boltzmann constant kB = 8.617333e-5 eV/K by the
+       temperature in Kelvin to obtain the thermal energy scale. Both
+       values are cast to float64 for numerical precision.
+
+    2. **Guard against T = 0**::
+
+           safe_kt = max(kt, 1e-10)
+
+       At zero temperature the distribution becomes a step function,
+       but the exponential would diverge. Clamping kT to a small
+       positive value (1e-10 eV) avoids division by zero while
+       preserving the sharp step-function behavior numerically.
+
+    3. **Evaluate Fermi-Dirac function**::
+
+           exponent = (E - Ef) / safe_kt
+           occupation = 1 / (1 + exp(exponent))
+
+       Computes the occupation probability. For E << Ef the result
+       approaches 1 (filled states); for E >> Ef it approaches 0
+       (empty states).
 
     Parameters
     ----------

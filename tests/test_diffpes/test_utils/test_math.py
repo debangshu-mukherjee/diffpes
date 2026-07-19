@@ -55,7 +55,7 @@ class TestFaddeeva(chex.TestCase):
         -------
         Output shape matches (100,) and all real components are finite,
         confirming the Taylor-series evaluation is numerically stable on
-        the real line within |x| <= 3.
+        the real line within ``|x| <= 3``.
         """
         x = jnp.linspace(-3.0, 3.0, 100)
         z = x + 0j

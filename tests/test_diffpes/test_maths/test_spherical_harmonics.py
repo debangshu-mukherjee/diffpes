@@ -8,7 +8,7 @@ Tests cover known analytical values for low-order harmonics (Y_0^0,
 Y_1^0, Y_1^{+1}, Y_1^{-1}) using the Condon-Shortley phase convention,
 numerical orthonormality via quadrature, JIT compatibility, autodiff
 gradients with respect to theta and phi, input validation (negative l,
-|m| > l), output shape of the batch function, and consistency between
+``|m| > l``), output shape of the batch function, and consistency between
 the single and batch interfaces.
 
 Routine Listings
@@ -98,7 +98,7 @@ class TestRealSphericalHarmonics:
 
         Evaluates Y_1^{-1} at theta=pi/3, phi=pi/4 and compares against
         the analytical expression.  For m < 0, the real spherical harmonic
-        uses sin(|m|*phi) and the Condon-Shortley phase cancels, yielding
+        uses ``sin(|m|*phi)`` and the Condon-Shortley phase cancels, yielding
         a positive prefactor.  Asserts agreement to within 1e-10.
         """
         theta = jnp.array(jnp.pi / 3)
@@ -118,7 +118,7 @@ class TestRealSphericalHarmonics:
         Constructs a (100 x 200) grid in (theta, phi) using midpoint
         quadrature in cos(theta) and uniform spacing in phi.  Computes
         the cross-overlap integral Y_0^0 * Y_1^0 * sin(theta) and the
-        self-overlap integral |Y_0^0|^2 * sin(theta).  Asserts the
+        self-overlap integral ``|Y_0^0|^2 * sin(theta)``.  Asserts the
         cross-overlap is < 0.01 (orthogonality) and the self-overlap
         is within 0.01 of 1.0 (normalization).  The moderate grid
         density gives ~1% numerical accuracy, sufficient for a smoke
@@ -226,12 +226,12 @@ class TestRealSphericalHarmonics:
             real_spherical_harmonic(-1, 0, jnp.array(0.0), jnp.array(0.0))
 
     def test_invalid_m_raises(self):
-        """Verify that |m| > l raises ``ValueError``.
+        """Verify that ``|m| > l`` raises ``ValueError``.
 
         Calls ``real_spherical_harmonic(1, 2, 0, 0)`` where m=2 > l=1
         and asserts a ``ValueError`` is raised with a message matching
         "must be <= l".  This tests the input-validation guard for the
-        constraint |m| <= l.
+        constraint ``|m| <= l``.
         """
         with pytest.raises(ValueError, match="must be <= l"):
             real_spherical_harmonic(1, 2, jnp.array(0.0), jnp.array(0.0))

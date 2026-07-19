@@ -381,7 +381,8 @@ class TestDipoleMatrixElements(chex.TestCase):
         Asserts
         -------
         Every element of the 9-element matrix element vector is non-negative,
-        as expected from the squared-modulus definition |e . d|^2 >= 0.
+        as expected from the squared-modulus definition
+        ``|e . d|^2 >= 0``.
         """
         efield = jnp.array([0.5, 0.3, 0.8], dtype=jnp.complex128)
         efield = efield / jnp.linalg.norm(efield)

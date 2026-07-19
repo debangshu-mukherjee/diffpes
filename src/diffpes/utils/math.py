@@ -169,7 +169,8 @@ def faddeeva(
     Notes
     -----
     Accuracy is approximately double-precision (~15 significant digits)
-    for |z| < 6. For |z| >= 6 the Taylor series converges slowly and
+    for ``|z| < 6``. For ``|z| >= 6`` the Taylor series converges slowly
+    and
     an asymptotic expansion or continued-fraction representation should
     be used instead. The current implementation does **not** fall back
     to an asymptotic form, so callers must ensure inputs stay within the

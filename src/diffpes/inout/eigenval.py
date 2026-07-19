@@ -57,6 +57,7 @@ def read_eigenval(
     The EIGENVAL file format written by VASP consists of:
 
     * **Header** (6 lines):
+
       - Line 1: four integers including ``ISPIN`` as the 4th value.
         ``ISPIN=2`` indicates spin-polarized eigenvalues.
       - Lines 2-5: additional metadata (unused here).

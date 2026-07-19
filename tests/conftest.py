@@ -24,7 +24,7 @@ Routine Listings
 
 import hashlib
 
-# ruff: noqa: I001 -- DiffPES must configure JAX before JAX is imported.
+# ruff: noqa: I001 -- diffpes must configure JAX before JAX is imported.
 import diffpes  # noqa: F401 -- Import activates the package-wide x64 contract.
 
 import jax
@@ -53,11 +53,11 @@ def assert_x64_enabled() -> Iterator[None]:
     Raises
     ------
     AssertionError
-        If importing DiffPES did not enable JAX 64-bit precision.
+        If importing diffpes did not enable JAX 64-bit precision.
     """
     actual_dtype: jnp.dtype = jnp.zeros(()).dtype
     assert actual_dtype == jnp.float64, (
-        "DiffPES tests require JAX 64-bit mode; "
+        "diffpes tests require JAX 64-bit mode; "
         f"the default scalar dtype is {actual_dtype}."
     )
     yield

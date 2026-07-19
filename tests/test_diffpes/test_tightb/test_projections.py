@@ -45,9 +45,10 @@ class TestEigenvectorOrbitalWeights:
         assert jnp.allclose(weights, expected, atol=1e-12)
 
     def test_complex_eigenvectors_give_modulus_squared(self):
-        """Verify that complex eigenvectors produce |c|^2 for each coefficient.
+        """Verify complex eigenvectors produce ``|c|^2`` per coefficient.
 
-        Uses (3+4j)/5 which has |c|^2 = (9+16)/25 = 1.0. Checks that the
+        Uses (3+4j)/5 which has ``|c|^2 = (9+16)/25 = 1.0``. Checks that
+        the
         function computes the squared modulus, not the real part squared.
         """
         # (3+4j)/5 has magnitude 1, so |c|^2 = 1.0

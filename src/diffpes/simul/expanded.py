@@ -516,7 +516,7 @@ def simulate_advanced_expanded(  # noqa: PLR0913
 
     Builds on the basicplus level by adding polarization-dependent
     selection rules. The photoemission intensity is weighted by
-    |e . d|^2, where e is the light electric-field vector and d is
+    ``|e . d|^2``, where e is the light electric-field vector and d is
     the dipole matrix element for each orbital channel. For
     unpolarized light the s- and p-polarization contributions are
     averaged.

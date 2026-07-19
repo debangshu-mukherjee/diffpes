@@ -52,6 +52,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
     The DOSCAR file format written by VASP consists of:
 
     * **Header** (6 lines):
+
       - Line 1: system header with ``NATOMS`` as the first integer.
       - Lines 2-5: additional metadata (unused here).
       - Line 6: ``EMIN  EMAX  NEDOS  EFERMI  ...`` -- energy window

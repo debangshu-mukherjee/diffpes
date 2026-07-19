@@ -74,34 +74,42 @@ def build_polarization_vectors(
 
     Implementation Logic
     --------------------
-    1. **Construct photon wavevector k from spherical coordinates**:
-       k = [sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)]
-       k = k / ||k||
-       - Converts the incidence angles (theta from surface normal,
-         phi azimuthal) into a unit wavevector in Cartesian
-         coordinates.
+    1. **Construct photon wavevector k from spherical coordinates**::
 
-    2. **Choose reference axis**:
-       ref = z_hat  unless  |k . z_hat| >= 0.99
-       ref = y_hat  if k is nearly collinear with z_hat
-       - The reference axis is used to define the incidence plane.
-         When k is nearly parallel to z_hat, the cross product
-         k x z_hat would be poorly conditioned, so y_hat is used
-         as a fallback.
+           k = [sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)]
+           k = k / ||k||
 
-    3. **Compute s-polarization: e_s = normalize(k x ref)**:
-       e_s_raw = cross(k, ref)
-       e_s = e_s_raw / ||e_s_raw||
-       - The s-polarization vector is perpendicular to both the
-         wavevector and the reference axis, hence perpendicular to
-         the incidence plane.
+       Converts the incidence angles (theta from surface normal,
+       phi azimuthal) into a unit wavevector in Cartesian
+       coordinates.
 
-    4. **Compute p-polarization: e_p = normalize(e_s x k)**:
-       e_p_raw = cross(e_s, k)
-       e_p = e_p_raw / ||e_p_raw||
-       - The p-polarization vector lies in the incidence plane and
-         is perpendicular to the wavevector, completing the
-         right-handed orthonormal basis {k, e_s, e_p}.
+    2. **Choose reference axis**::
+
+           ref = z_hat  unless  |k . z_hat| >= 0.99
+           ref = y_hat  if k is nearly collinear with z_hat
+
+       The reference axis is used to define the incidence plane.
+       When k is nearly parallel to z_hat, the cross product
+       k x z_hat would be poorly conditioned, so y_hat is used
+       as a fallback.
+
+    3. **Compute s-polarization** ``e_s = normalize(k x ref)``::
+
+           e_s_raw = cross(k, ref)
+           e_s = e_s_raw / ||e_s_raw||
+
+       The s-polarization vector is perpendicular to both the
+       wavevector and the reference axis, hence perpendicular to
+       the incidence plane.
+
+    4. **Compute p-polarization** ``e_p = normalize(e_s x k)``::
+
+           e_p_raw = cross(e_s, k)
+           e_p = e_p_raw / ||e_p_raw||
+
+       The p-polarization vector lies in the incidence plane and
+       is perpendicular to the wavevector, completing the
+       right-handed orthonormal basis {k, e_s, e_p}.
 
     Parameters
     ----------
@@ -197,11 +205,13 @@ def build_efield(
 
     Implementation Logic
     --------------------
-    1. **Build s- and p-polarization basis**:
-       e_s, e_p = build_polarization_vectors(theta, phi)
-       - Computes the real-valued orthonormal basis vectors from the
-         incidence angles in the config. Both are cast to complex128
-         for compatibility with circular polarization states.
+    1. **Build s- and p-polarization basis**::
+
+           e_s, e_p = build_polarization_vectors(theta, phi)
+
+       Computes the real-valued orthonormal basis vectors from the
+       incidence angles in the config. Both are cast to complex128
+       for compatibility with circular polarization states.
 
     2. **Dispatch on polarization type**:
        The ``polarization_type`` string (case-insensitive) selects
@@ -386,7 +396,7 @@ def dipole_matrix_elements(
     """Compute dipole matrix elements for all 9 orbitals.
 
     Evaluates the squared modulus of the dipole transition matrix
-    element for each orbital:
+    element for each orbital::
 
         M_i = |e . d_i|^2
 
@@ -395,8 +405,10 @@ def dipole_matrix_elements(
 
     Implementation Logic
     --------------------
-    1. **Dot product of E-field with each orbital direction**:
-       dots = ORBITAL_DIRS_NORMALIZED @ efield
+    1. **Dot product of E-field with each orbital direction**::
+
+           dots = ORBITAL_DIRS_NORMALIZED @ efield
+
        - Computes the inner product of the complex electric field
          vector with each of the 9 normalized orbital direction
          vectors (shape [9, 3] @ [3] -> [9]). The result is a
@@ -406,12 +418,14 @@ def dipole_matrix_elements(
          E-field, reflecting the isotropic (zero directionality)
          character of the s-orbital.
 
-    2. **Square modulus |e . d|^2**:
-       matrix_elements = |dots|^2
-       - Takes the absolute value squared of each complex dot
-         product. For real-valued E-fields this reduces to the
-         squared real dot product. For circular polarization
-         (complex E-field) this correctly accounts for the phase.
+    2. **Square modulus** ``|e . d|^2``::
+
+           matrix_elements = |dots|^2
+
+       Takes the absolute value squared of each complex dot
+       product. For real-valued E-fields this reduces to the
+       squared real dot product. For circular polarization
+       (complex E-field) this correctly accounts for the phase.
 
     Parameters
     ----------
@@ -421,7 +435,7 @@ def dipole_matrix_elements(
     Returns
     -------
     matrix_elements : Float[Array, " 9"]
-        |e dot d_orbital|^2 for each orbital.
+        ``|e dot d_orbital|^2`` for each orbital.
 
     Notes
     -----

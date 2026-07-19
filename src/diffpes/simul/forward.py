@@ -351,7 +351,7 @@ def simulate_tb_radial(  # noqa: PLR0915
             eigvec: Complex[Array, " O"],
             eigenval: Float[Array, " "],
         ) -> Float[Array, " "]:
-            """Compute |M|^2 for a single (k-point, band) pair.
+            """Compute ``|M|^2`` for a single (k-point, band) pair.
 
             Converts the crystal k-vector to the photoelectron
             wavevector using free-electron kinematics, then sums the

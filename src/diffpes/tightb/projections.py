@@ -62,7 +62,7 @@ def eigenvector_orbital_weights(
     Returns
     -------
     weights : Float[Array, "K B O"]
-        |c_{k,b,orb}|^2 per orbital.
+        ``|c_{k,b,orb}|^2`` per orbital.
 
     Notes
     -----
@@ -81,7 +81,7 @@ def orbital_coefficients(
     """Return the raw complex orbital coefficients.
 
     For full matrix element calculation the complex coefficients
-    c_{k,b,orb} are needed (not just |c|^2).
+    c_{k,b,orb} are needed (not just ``|c|^2``).
 
     Extended Summary
     ----------------

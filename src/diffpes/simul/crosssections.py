@@ -50,18 +50,22 @@ def heuristic_weights(
     The function selects between two pre-defined weight vectors
     based on a 50 eV energy threshold:
 
-    1. **Below 50 eV (low-energy regime)**:
-       weights = [1, 2, 2, 2, 1, 1, 1, 1, 1]
-       - p-orbitals (indices 1-3) are enhanced with weight 2,
-         reflecting the stronger p-orbital cross-section at low
-         photon energies typical of He-I or laser ARPES.
+    1. **Below 50 eV (low-energy regime)**::
 
-    2. **Above 50 eV (high-energy regime)**:
-       weights = [1, 1, 1, 1, 2, 2, 2, 2, 2]
-       - d-orbitals (indices 4-8) are enhanced with weight 2,
-         reflecting the resonant enhancement of d-orbital
-         cross-sections at higher photon energies (e.g., He-II,
-         synchrotron).
+           weights = [1, 2, 2, 2, 1, 1, 1, 1, 1]
+
+       p-orbitals (indices 1-3) are enhanced with weight 2,
+       reflecting the stronger p-orbital cross-section at low
+       photon energies typical of He-I or laser ARPES.
+
+    2. **Above 50 eV (high-energy regime)**::
+
+           weights = [1, 1, 1, 1, 2, 2, 2, 2, 2]
+
+       d-orbitals (indices 4-8) are enhanced with weight 2,
+       reflecting the resonant enhancement of d-orbital
+       cross-sections at higher photon energies (e.g., He-II,
+       synchrotron).
 
     The selection is performed via ``jnp.where`` for JIT
     compatibility (no Python-level branching).
@@ -138,29 +142,35 @@ def yeh_lindau_weights(
     """Compute Yeh-Lindau cross-section weights per orbital.
 
     Interpolates tabulated photoionization cross-sections from
-    Yeh & Lindau (1985) to produce orbital-resolved weights at
-    the specified photon energy.
+    Yeh & Lindau (1985) [2]_ to produce orbital-resolved weights
+    at the specified photon energy.
 
     Implementation Logic
     --------------------
-    1. **Cast photon energy to float64**:
-       pe = jnp.asarray(photon_energy, dtype=float64)
-       - Ensures consistent precision for the interpolation.
+    1. **Cast photon energy to float64**::
 
-    2. **Interpolate s, p, d cross-sections independently**:
-       s_w = _interp_cross_section(pe, _SIGMA_S)
-       p_w = _interp_cross_section(pe, _SIGMA_P)
-       d_w = _interp_cross_section(pe, _SIGMA_D)
-       - Each call linearly interpolates the corresponding
-         tabulated values at 20, 40, and 60 eV. The tabulated
-         data (_SIGMA_S, _SIGMA_P, _SIGMA_D) encodes simplified
-         Yeh-Lindau cross-sections for s, p, and d subshells.
+           pe = jnp.asarray(photon_energy, dtype=float64)
 
-    3. **Broadcast to 9-orbital weight vector**:
-       weights = [s_w, p_w, p_w, p_w, d_w, d_w, d_w, d_w, d_w]
-       - Maps the three subshell cross-sections onto the full
-         9-orbital basis: 1 s-orbital, 3 p-orbitals (each
-         receiving p_w), and 5 d-orbitals (each receiving d_w).
+       Ensures consistent precision for the interpolation.
+
+    2. **Interpolate s, p, d cross-sections independently**::
+
+           s_w = _interp_cross_section(pe, _SIGMA_S)
+           p_w = _interp_cross_section(pe, _SIGMA_P)
+           d_w = _interp_cross_section(pe, _SIGMA_D)
+
+       Each call linearly interpolates the corresponding
+       tabulated values at 20, 40, and 60 eV. The tabulated
+       data (_SIGMA_S, _SIGMA_P, _SIGMA_D) encodes simplified
+       Yeh-Lindau cross-sections for s, p, and d subshells.
+
+    3. **Broadcast to 9-orbital weight vector**::
+
+           weights = [s_w, p_w, p_w, p_w, d_w, d_w, d_w, d_w, d_w]
+
+       Maps the three subshell cross-sections onto the full
+       9-orbital basis: 1 s-orbital, 3 p-orbitals (each
+       receiving p_w), and 5 d-orbitals (each receiving d_w).
 
     Parameters
     ----------
@@ -175,7 +185,7 @@ def yeh_lindau_weights(
 
     References
     ----------
-    .. [1] Yeh & Lindau, "Atomic subshell photoionization cross
+    .. [2] Yeh & Lindau, "Atomic subshell photoionization cross
        sections and asymmetry parameters: 1 <= Z <= 103", Atomic
        Data and Nuclear Data Tables 32, 1-155 (1985).
     """

@@ -191,9 +191,9 @@ def vasp_to_diagonalized(
 ) -> DiagonalizedBands:
     """Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
 
-    VASP PROCAR gives |c_{k,b,orb}|^2, not the complex coefficients.
-    This adapter uses sqrt(|c|^2) with positive sign as an
-    approximation. Phase information is lost.
+    VASP PROCAR gives ``|c_{k,b,orb}|^2``, not the complex
+    coefficients. This adapter uses ``sqrt(|c|^2)`` with positive
+    sign as an approximation. Phase information is lost.
 
     The orbital projections are summed over atoms and mapped to
     the orbital basis ordering.

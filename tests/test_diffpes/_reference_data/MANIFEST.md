@@ -9,7 +9,7 @@
 - Device policy: CPU, JAX x64 enabled
 - Platform: `Linux-5.15.0-185-generic-x86_64-with-glibc2.35`
 - Python: `3.13.6`
-- DiffPES: `2026.6.1`
+- diffpes: `2026.6.1`
 - JAX: `0.9.0.1`
 - NumPy: `2.4.2`
 
@@ -45,4 +45,3 @@
   - `leaf_001_energy_axis`: shape `(512,)`, dtype `float64`
   - `leaf_002_intensity_sum`: shape `()`, dtype `float64`
   - `leaf_003_zeta_gradient`: shape `(2,)`, dtype `float64`
-

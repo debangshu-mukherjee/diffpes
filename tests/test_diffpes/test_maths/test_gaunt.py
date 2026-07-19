@@ -54,7 +54,7 @@ class TestGauntTable:
         """Verify the dipole selection rule Delta l = +/-1.
 
         Iterates over every valid combination of (l, m, q, l', m') in the
-        table and asserts that whenever |l' - l| != 1 the Gaunt
+        table and asserts that whenever ``|l' - l| != 1`` the Gaunt
         coefficient is zero (< 1e-12).  This is the fundamental angular
         momentum selection rule for electric-dipole transitions.
         """
@@ -74,7 +74,8 @@ class TestGauntTable:
 
         Looks up G(l=0, m=0, q=0, l'=1, m'=0), the prototypical
         electric-dipole transition from an s-orbital to pz.  Asserts
-        |G| > 1e-6, confirming the table correctly encodes the coupling.
+        ``|G| > 1e-6``, confirming the table correctly encodes the
+        coupling.
         """
         val = gaunt_lookup(0, 0, 0, 1, 0)
         assert abs(val) > 1e-6
@@ -83,7 +84,7 @@ class TestGauntTable:
         """Verify the p -> s allowed transition has a nonzero Gaunt coefficient.
 
         Looks up G(l=1, m=0, q=0, l'=0, m'=0), the reverse of the s->p
-        transition.  Asserts |G| > 1e-6, confirming reciprocity of the
+        transition.  Asserts ``|G| > 1e-6``, confirming reciprocity of the
         Gaunt integral.
         """
         val = gaunt_lookup(1, 0, 0, 0, 0)
@@ -93,14 +94,15 @@ class TestGauntTable:
         """Verify the p -> d allowed transition has a nonzero Gaunt coefficient.
 
         Looks up G(l=1, m=0, q=0, l'=2, m'=0), a higher-l allowed dipole
-        transition.  Asserts |G| > 1e-6, confirming that the table covers
+        transition.  Asserts ``|G| > 1e-6``, confirming that the table
+        covers
         transitions beyond the lowest-order s<->p coupling.
         """
         val = gaunt_lookup(1, 0, 0, 2, 0)
         assert abs(val) > 1e-6
 
     def test_forbidden_delta_m(self):
-        """Verify the magnetic selection rule forbids |Delta m| > 1.
+        """Verify the magnetic selection rule forbids ``|Delta m| > 1``.
 
         Looks up G(l=2, m=0, q=0, l'=1, m'=2) where m' - m = 2 != q = 0.
         The selection rule requires m' = m + q, so m' = 2 is forbidden.
@@ -156,10 +158,11 @@ class TestWigner3jSelectionRules:
     """
 
     def test_abs_m_exceeds_j_returns_zero(self):
-        """Verify |m1| > j1 causes _wigner3j to return 0.0.
+        """Verify ``|m1| > j1`` causes _wigner3j to return 0.0.
 
-        Constructs a call where |m1| = 2 > j1 = 1, violating the
-        |mi| <= ji constraint, and asserts the result is 0.0 (line 111).
+        Constructs a call where ``|m1| = 2 > j1 = 1``, violating the
+        ``|mi| <= ji`` constraint, and asserts the result is 0.0
+        (line 111).
         """
         from diffpes.maths.gaunt import _wigner3j
 
@@ -169,7 +172,7 @@ class TestWigner3jSelectionRules:
     def test_triangle_inequality_violated_returns_zero(self):
         """Verify triangle inequality violation causes _wigner3j to return 0.0.
 
-        Uses j1=2, j2=1, j3=0 where j3 < |j1 - j2| = 1, violating the
+        Uses j1=2, j2=1, j3=0 where ``j3 < |j1 - j2| = 1``, violating the
         triangle inequality, and asserts the result is 0.0 (line 113).
         """
         from diffpes.maths.gaunt import _wigner3j

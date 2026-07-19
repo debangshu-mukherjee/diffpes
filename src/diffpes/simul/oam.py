@@ -13,7 +13,7 @@ Routine Listings
 
 Notes
 -----
-OAM_z = sum(m * |projection(m)|^2) where m is the magnetic
+``OAM_z = sum(m * |projection(m)|^2)`` where m is the magnetic
 quantum number. For p-orbitals, m = {+1, 0, -1} corresponding
 to px+ipy, pz, px-ipy. For d-orbitals, m = {-2, -1, 0, +1, +2}.
 """
@@ -39,7 +39,7 @@ def compute_oam(
     """Compute orbital angular momentum z-component.
 
     Evaluates the expectation value of the z-component of orbital
-    angular momentum from orbital-resolved projections:
+    angular momentum from orbital-resolved projections::
 
         OAM_z = sum_m  m * |c_m|^2
 
@@ -50,34 +50,44 @@ def compute_oam(
     Implementation Logic
     --------------------
     1. **Extract p-orbital projections**
-       (``slice(1, 4)``, indices 1 through 3):
-       p_proj = projections[..., slice(1, 4)]
-       - Selects the three p-orbital coefficients [py, pz, px]
-         corresponding to magnetic quantum numbers m = {+1, 0, -1}.
+       (``slice(1, 4)``, indices 1 through 3)::
 
-    2. **Compute p-orbital OAM**:
-       p_oam = sum(m_p * |p_proj|^2, axis=-1)
-       - Weights each squared projection by its magnetic quantum
-         number m_p = [+1, 0, -1] and sums over the p-orbital
-         subspace.
+           p_proj = projections[..., slice(1, 4)]
+
+       Selects the three p-orbital coefficients [py, pz, px]
+       corresponding to magnetic quantum numbers m = {+1, 0, -1}.
+
+    2. **Compute p-orbital OAM**::
+
+           p_oam = sum(m_p * |p_proj|^2, axis=-1)
+
+       Weights each squared projection by its magnetic quantum
+       number m_p = [+1, 0, -1] and sums over the p-orbital
+       subspace.
 
     3. **Extract d-orbital projections**
-       (``slice(4, 9)``, indices 4 through 8):
-       d_proj = projections[..., slice(4, 9)]
-       - Selects the five d-orbital coefficients [dxy, dyz, dz2,
-         dxz, dx2-y2] corresponding to m = {-2, -1, 0, +1, +2}.
+       (``slice(4, 9)``, indices 4 through 8)::
 
-    4. **Compute d-orbital OAM**:
-       d_oam = sum(m_d * |d_proj|^2, axis=-1)
-       - Weights each squared projection by its magnetic quantum
-         number m_d = [-2, -1, 0, +1, +2] and sums over the
-         d-orbital subspace.
+           d_proj = projections[..., slice(4, 9)]
 
-    5. **Stack results as [p, d, total]**:
-       total_oam = p_oam + d_oam
-       oam = stack([p_oam, d_oam, total_oam], axis=-1)
-       - Returns all three components so that downstream analysis
-         can inspect orbital-resolved or total OAM.
+       Selects the five d-orbital coefficients [dxy, dyz, dz2,
+       dxz, dx2-y2] corresponding to m = {-2, -1, 0, +1, +2}.
+
+    4. **Compute d-orbital OAM**::
+
+           d_oam = sum(m_d * |d_proj|^2, axis=-1)
+
+       Weights each squared projection by its magnetic quantum
+       number m_d = [-2, -1, 0, +1, +2] and sums over the
+       d-orbital subspace.
+
+    5. **Stack results as [p, d, total]**::
+
+           total_oam = p_oam + d_oam
+           oam = stack([p_oam, d_oam, total_oam], axis=-1)
+
+       Returns all three components so that downstream analysis
+       can inspect orbital-resolved or total OAM.
 
     Parameters
     ----------

@@ -3,7 +3,8 @@
 Extended Summary
 ----------------
 Validates the ``slater_radial`` and ``hydrogenic_radial`` wavefunction
-constructors.  Slater tests verify normalization (integral |R|^2 r^2 dr = 1)
+constructors.  Slater tests verify normalization
+(``integral |R|^2 r^2 dr = 1``)
 and autodiff gradient accuracy against finite differences.  Hydrogenic
 tests compare the R_{10} (1s) and R_{21} (2p) radial functions against
 known analytical expressions and verify the boundary condition R_{2p}(0) = 0.
@@ -28,7 +29,7 @@ class TestSlaterRadial(chex.TestCase):
     """Validate Slater radial normalization and autodiff gradients.
 
     Tests the Slater-type orbital R(r) = N * r^{n-1} * exp(-zeta*r)
-    for correct normalization (integral |R|^2 r^2 dr = 1) and verify
+    for correct normalization (``integral |R|^2 r^2 dr = 1``) and verify
     that ``jax.grad`` of a sum-of-values objective with respect to the
     Slater exponent zeta agrees with central finite differences.
     """
@@ -38,7 +39,7 @@ class TestSlaterRadial(chex.TestCase):
         """Verify the Slater 2s orbital is normalized to unity.
 
         Constructs R(r) for n=2, zeta=1.3 on a 20000-point grid up to
-        r=30 Bohr and numerically integrates |R(r)|^2 * r^2 using the
+        r=30 Bohr and numerically integrates ``|R(r)|^2 * r^2`` using the
         trapezoidal rule.  Asserts the integral is within 2e-3 of 1.0.
         The dense grid and large cutoff ensure the exponential tail
         contributes negligibly.  Run under both JIT and eager modes.

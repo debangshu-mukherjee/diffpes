@@ -1,0 +1,310 @@
+import os
+import sys
+import tomllib
+from datetime import datetime
+
+# Disable JAX GPU usage during doc building to prevent timeouts
+os.environ["JAX_PLATFORM_NAME"] = "cpu"
+os.environ["JAX_PLATFORMS"] = "cpu"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["JAX_ENABLE_X64"] = "True"
+os.environ["BUILDING_DOCS"] = "1"
+
+
+# Make jaxtyped decorator a no-op during doc building to preserve docstrings
+# This MUST be done before any diffpes imports
+def _noop_decorator(*args, **kwargs):
+    """No-op decorator for documentation building."""
+    if len(args) == 1 and callable(args[0]) and not kwargs:
+        return args[0]
+    return lambda fn: fn
+
+
+import jaxtyping
+
+jaxtyping.jaxtyped = _noop_decorator
+
+
+# Add project paths
+project_root = os.path.abspath("../..")
+src_path = os.path.join(project_root, "src")
+venv_bin_path = os.path.join(project_root, ".venv", "bin")
+
+sys.path.insert(0, src_path)
+sys.path.insert(0, project_root)
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_ext")
+)
+if os.path.isdir(venv_bin_path):
+    os.environ["PATH"] = os.pathsep.join(
+        [venv_bin_path, os.environ.get("PATH", "")]
+    )
+
+print(f"Added to sys.path: {src_path}")
+
+# Read project metadata from pyproject.toml
+pyproject_path = os.path.join(project_root, "pyproject.toml")
+with open(pyproject_path, "rb") as f:
+    pyproject_data = tomllib.load(f)
+
+project = pyproject_data["project"]["name"]
+
+authors_data = pyproject_data["project"]["authors"]
+author = (
+    authors_data[0]["name"]
+    if isinstance(authors_data[0], dict)
+    else authors_data[0]
+)
+
+project_copyright = f"{datetime.now().year}, {author}"
+release = pyproject_data["project"]["version"]
+
+# -- General configuration ---------------------------------------------------
+
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.intersphinx",
+    "sphinx_autodoc_typehints",
+    "myst_nb",
+    "test_links",
+]
+
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "myst-nb",
+    ".ipynb": "myst-nb",
+}
+
+# MyST-Parser configuration for LaTeX math rendering
+myst_enable_extensions = [
+    "dollarmath",  # Enable $...$ and $$...$$ math delimiters
+    "amsmath",  # Enable LaTeX math environments like \begin{equation}
+    "colon_fence",  # Enable ::: and ```{directive} fenced directives
+]
+# "autodoc": silence the non-actionable "error while formatting signature"
+# warnings emitted when sphinx_autodoc_typehints introspects @chex.all_variants
+# test methods (the generated ``test_*__with_jit`` / ``__without_jit`` variants
+# have no resolvable signature).
+suppress_warnings = ["myst.mathjax", "autodoc"]
+
+# Ensure MyST parses all dollar-delimited math correctly
+myst_dmath_double_inline = True
+myst_heading_anchors = 3
+
+# Under "auto", only files with kernelspec metadata (the tutorial notebooks)
+# execute; plain .md guides without a kernelspec are rendered without running.
+nb_execution_mode = "auto"
+nb_execution_timeout = 300
+
+# MathJax configuration to ensure math renders properly
+mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+mathjax3_config = {
+    "tex": {
+        "inlineMath": [["$", "$"], ["\\(", "\\)"]],
+        "displayMath": [["$$", "$$"], ["\\[", "\\]"]],
+        "processEscapes": True,
+        "processEnvironments": True,
+    },
+    "options": {
+        "ignoreHtmlClass": "tex2jax_ignore",
+        "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area|content",
+    },
+    "chtml": {
+        "scale": 1.0,
+        "minScale": 0.5,
+    },
+}
+
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+# -- Options for HTML output -------------------------------------------------
+
+html_theme = "furo"
+html_static_path = ["_static"]
+html_extra_path = ["_extra"] if os.path.isdir("_extra") else []
+
+html_css_files = [
+    "custom.css",
+]
+
+html_js_files = [
+    "custom.js",
+]
+
+html_theme_options = {
+    "light_css_variables": {
+        "color-brand-primary": "#0066cc",
+        "color-brand-content": "#0066cc",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#3399ff",
+        "color-brand-content": "#3399ff",
+    },
+    "sidebar_hide_name": False,
+    "source_repository": "https://github.com/debangshu-mukherjee/diffpes/",
+    "source_branch": "main",
+    "source_directory": "docs/source/",
+    "footer_icons": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/debangshu-mukherjee/diffpes/",
+            "html": """
+                <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+            """,
+            "class": "",
+        },
+    ],
+}
+
+# -- Extension configuration -------------------------------------------------
+
+# Napoleon settings for NumPy style docstrings
+napoleon_google_docstring = False
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = True
+napoleon_use_admonition_for_notes = True
+napoleon_use_admonition_for_references = True
+napoleon_use_ivar = True
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_preprocess_types = True
+napoleon_attr_annotations = True
+
+# All runtime dependencies are installed during the docs build (RTD installs
+# the [docs, test, notebooks] extras), so no imports need to be mocked.
+autodoc_mock_imports = []
+
+# Autodoc settings
+autodoc_default_options = {
+    "members": True,
+    "member-order": "bysource",
+    "undoc-members": False,
+    "show-inheritance": True,
+    "inherited-members": False,
+    "ignore-module-all": False,
+}
+
+autodoc_typehints = "signature"
+autodoc_typehints_format = "short"
+autodoc_typehints_description_target = "documented"
+python_use_unqualified_type_names = True
+typehints_fully_qualified = False
+always_document_param_types = False
+typehints_document_rtype = True
+typehints_use_signature = True
+typehints_use_signature_return = True
+autodoc_preserve_defaults = True
+autodoc_inherit_docstrings = True
+
+# Nitpicky cross-reference checking (-n) is intentionally OFF: it flags many
+# refs (jaxtyping/beartype type names autodoc cannot resolve) for little gain.
+# The nitpick_ignore list below is staged for if/when strict -n is enabled; it
+# is inert while nitpicky = False.
+nitpicky = False
+
+# Type aliases for jaxtyping annotations
+napoleon_type_aliases = {
+    'Float[Array, " "]': "scalar float",
+    'Float[Array, " 3"]': "3D float array",
+    'Float[Array, " 3 3"]': "3x3 float array",
+    'Float[Array, " M 3"]': "Mx3 float array",
+    'Float[Array, " N 3"]': "Nx3 float array",
+    'Float[Array, " N 4"]': "Nx4 float array",
+    'Int[Array, " "]': "scalar int",
+    'Int[Array, " N"]': "N int array",
+    'Int[Array, " 2"]': "2-element int array",
+    'Num[Array, " N"]': "N numeric array",
+    'Bool[Array, " "]': "scalar bool",
+    'Complex[Array, " "]': "scalar complex",
+    "scalar_float": "float",
+    "scalar_int": "int",
+    "scalar_num": "numeric",
+}
+
+typehints_defaults = "comma"
+typehints_type_aliases = napoleon_type_aliases
+
+# Staged for a future strict-nitpicky (-n) build (inert while nitpicky = False):
+# jaxtyping/beartype type names autodoc cannot resolve as Python classes.
+nitpick_ignore = [
+    ("py:class", "Float"),
+    ("py:class", "Array"),
+    ("py:class", "Int"),
+    ("py:class", "Num"),
+    ("py:class", "Bool"),
+    ("py:class", "Complex"),
+    ("py:class", "jaxtyping.Float"),
+    ("py:class", "jaxtyping.Array"),
+    ("py:class", "beartype"),
+    ("py:class", "jaxtyped"),
+    ("py:obj", "beartype"),
+    ("py:obj", "jaxtyped"),
+]
+
+# Intersphinx mapping for cross-references
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "equinox": ("https://docs.kidger.site/equinox/", None),
+}
+
+# -- Custom setup ------------------------------------------------------------
+
+
+def skip_member(app, what, name, obj, skip, options):
+    """
+    Skip specific members in documentation.
+    """
+    skip_names = [
+        "Float",
+        "Array",
+        "Int",
+        "Num",
+        "Bool",
+        "Complex",
+        "beartype",
+        "jaxtyped",
+        "tree_flatten",
+        "tree_unflatten",
+    ]
+    if name in skip_names:
+        return True
+    if name.startswith("_") and not name.startswith("__"):
+        return True
+
+    # Skip NamedTuple field descriptors to avoid duplicate object descriptions
+    # when both class attributes and module-level data entries are documented
+    if what == "data" and hasattr(obj, "_field_types"):
+        return True
+
+    return skip
+
+
+def process_signature(
+    app, what, name, obj, options, signature, return_annotation
+):
+    """
+    Process signatures to handle jaxtyping annotations.
+    """
+    if isinstance(signature, str) and signature:
+        signature = signature.replace('Float[Array, " ', "FloatArray[")
+        signature = signature.replace('Int[Array, " ', "IntArray[")
+        signature = signature.replace('Bool[Array, " ', "BoolArray[")
+        signature = signature.replace('Num[Array, " ', "NumArray[")
+        signature = signature.replace('Complex[Array, " ', "ComplexArray[")
+        signature = signature.replace('"]', "]")
+    return signature, return_annotation
+
+
+def setup(app):
+    app.connect("autodoc-skip-member", skip_member)
+    app.connect("autodoc-process-signature", process_signature)

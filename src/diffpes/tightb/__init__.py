@@ -2,7 +2,7 @@
 
 Extended Summary
 ----------------
-The native tight-binding layer of DiffPES provides model construction,
+The native tight-binding layer of diffpes provides model construction,
 Slater-Koster coupling, spin-orbit coupling, slabs, and degeneracy-safe
 diagonalization as the plan series is implemented. It also consumes
 ``DiagonalizedBands`` from other electronic-structure sources.

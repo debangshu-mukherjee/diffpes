@@ -329,7 +329,7 @@ class SpinOrbitalProjection(NamedTuple):
     Attributes
     ----------
     projections : Float[Array, "K B A 9"]
-        Orbital projection weights |<psi_{k,b}|Y_{lm}>|^2 for K
+        Orbital projection weights ``|<psi_{k,b}|Y_{lm}>|^2`` for K
         k-points, B bands, A atoms, and 9 orbitals following VASP
         ordering ``[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]``.
         Units are dimensionless (squared overlap). JAX-traced
@@ -482,7 +482,7 @@ def make_spin_orbital_projection(
     Parameters
     ----------
     projections : Float[Array, "K B A 9"]
-        Orbital projection weights |<psi|Y_{lm}>|^2 following VASP
+        Orbital projection weights ``|<psi|Y_{lm}>|^2`` following VASP
         ordering. Must share the K, B, A dimensions with ``spin``.
     spin : Float[Array, "K B A 6"]
         Spin projections ``[Sx_up, Sx_dn, Sy_up, Sy_dn, Sz_up,
