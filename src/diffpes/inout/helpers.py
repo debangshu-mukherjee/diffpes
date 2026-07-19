@@ -1,19 +1,21 @@
 """Parser-adjacent workflow helpers for assembling simulation-ready arrays.
 
+Extended Summary
+----------------
 Provides utilities for atom-subset aggregation, orbital channel
 reductions, and cross-file consistency checks between EIGENVAL,
 PROCAR, and KPOINTS parsed data.
 
 Routine Listings
 ----------------
-:func:`select_atoms`
-    Extract orbital projections for a subset of atoms.
 :func:`aggregate_atoms`
     Sum orbital projections over a set of atoms.
-:func:`reduce_orbitals`
-    Reduce 9 orbital channels to s/p/d totals.
 :func:`check_consistency`
     Check dimension agreement across parsed VASP files.
+:func:`reduce_orbitals`
+    Reduce 9 orbital channels to s/p/d totals.
+:func:`select_atoms`
+    Extract orbital projections for a subset of atoms.
 """
 
 import jax.numpy as jnp

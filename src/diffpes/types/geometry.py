@@ -10,9 +10,9 @@ symbols, and atom counts per species.
 Routine Listings
 ----------------
 :class:`CrystalGeometry`
-    PyTree NamedTuple for crystal geometry data.
+    PyTree for crystal geometry from VASP POSCAR.
 :func:`make_crystal_geometry`
-    Factory function with validation and reciprocal lattice computation.
+    Create a validated CrystalGeometry instance.
 
 Notes
 -----

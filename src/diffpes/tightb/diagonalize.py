@@ -218,7 +218,7 @@ def vasp_to_diagonalized(
     **Orbital mapping.** VASP stores projections in a fixed 9-orbital
     ordering for the s, p, and d channels::
 
-        [s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]
+        [s, py, pz, px, dxy, dyz, dz2, dxz, dx2 - y2]
 
     This differs from some standard orderings (e.g. the ``(l, m)``
     convention with m running from -l to +l).  The function maps from

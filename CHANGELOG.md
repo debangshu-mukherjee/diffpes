@@ -18,6 +18,15 @@ and the project uses calendar versioning.
   random keys, JAX cache cleanup, RSS leak limits, and xdist memory grouping.
 - Added typed deterministic toy factories, strict numerical tree assertions,
   and an NPZ reference-comparison scaffold for the test suite.
+- Added the program-wide gradient verification harness with scaled finite
+  differences, Wirtinger checks, and zero-gradient tripwires.
+- Added Python 3.12--3.14 GitHub Actions testing with informational Codecov
+  uploads and lock-aligned Ruff and ty pre-commit hooks; install them with
+  `uv run pre-commit install`.
+- Added deterministic pre-refactor novice and tight-binding radial regression
+  references, including standing zeta-gradient baselines and provenance.
+- Added deterministic pre-refactor novice and tight-binding radial regression
+  references, including standing zeta-gradient baselines and provenance.
 
 ### Removed
 
@@ -28,6 +37,8 @@ and the project uses calendar versioning.
 
 ### Fixed
 
+- Restored Python 3.14 imports while beartype 0.22.9 still references the
+  removed `collections.abc.ByteString` name.
 - Corrected the supported Python range to `>=3.12,<3.15` and documented
   Python 3.12 support.
 - Repaired project metadata by making JAX platform-independent, removing dead

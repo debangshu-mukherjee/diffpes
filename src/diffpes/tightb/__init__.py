@@ -1,9 +1,9 @@
-r"""Provide native tight-binding tools and ARPES-side adapters.
+"""Provide native tight-binding tools and ARPES-side adapters.
 
 Extended Summary
 ----------------
 The native tight-binding layer of DiffPES provides model construction,
-Slater–Koster coupling, spin–orbit coupling, slabs, and degeneracy-safe
+Slater-Koster coupling, spin-orbit coupling, slabs, and degeneracy-safe
 diagonalization as the plan series is implemented. It also consumes
 ``DiagonalizedBands`` from other electronic-structure sources.
 
@@ -17,27 +17,33 @@ This module retains:
   ``diagonalize_tb``, ``make_1d_chain_model``,
   ``make_graphene_model``.
 
+The submodules are organized as follows:
+
+- :mod:`diagonalize`
+    Differentiable band diagonalization and VASP adapter.
+- :mod:`hamiltonian`
+    Tight-binding Hamiltonian builder in JAX.
+- :mod:`projections`
+    Eigenvector to orbital weight conversions.
+
 Routine Listings
 ----------------
-:func:`vasp_to_diagonalized`
-    Convert VASP ``BandStructure`` + ``OrbitalProjection`` to
-    ``DiagonalizedBands`` (phase-less sqrt approximation).
-:func:`eigenvector_orbital_weights`
-    Compute orbital weights :math:`|c_{k,b,\\mathrm{orb}}|^2` from
-    eigenvectors.
-:func:`orbital_coefficients`
-    Return raw complex orbital coefficients (identity accessor).
 :func:`build_hamiltonian_k`
-    (Legacy) Build the Bloch Hamiltonian H(k) at a single k-point.
+    Build the Bloch Hamiltonian H(k) at a single k-point.
 :func:`diagonalize_single_k`
-    (Legacy) Diagonalize a Hermitian Hamiltonian at one k-point.
+    Diagonalize H(k) at a single k-point.
 :func:`diagonalize_tb`
-    (Legacy) Diagonalize a ``TBModel`` at all k-points (vmapped).
+    Diagonalize a TB model at all k-points.
+:func:`eigenvector_orbital_weights`
+    Compute orbital weights from eigenvectors.
 :func:`make_1d_chain_model`
-    (Legacy) Create a one-orbital 1D chain ``TBModel``.
+    Create a 1D chain tight-binding model.
 :func:`make_graphene_model`
-    (Legacy) Create a two-orbital honeycomb graphene ``TBModel``.
-
+    Create a graphene pz tight-binding model.
+:func:`orbital_coefficients`
+    Return the raw complex orbital coefficients.
+:func:`vasp_to_diagonalized`
+    Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
 """
 
 from .diagonalize import (

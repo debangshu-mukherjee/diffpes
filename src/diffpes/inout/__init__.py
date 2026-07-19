@@ -4,38 +4,71 @@ Extended Summary
 ----------------
 Provides parsers for VASP output files (POSCAR, EIGENVAL, KPOINTS,
 DOSCAR, PROCAR, CHGCAR) that return PyTree data structures suitable
-for ARPES simulations.
+for ARPES simulations, along with HDF5 persistence, parser-adjacent
+workflow helpers, and plotting utilities.
+
+The submodules are organized as follows:
+
+- :mod:`chgcar`
+    VASP CHGCAR file parser.
+- :mod:`doscar`
+    VASP DOSCAR file parser.
+- :mod:`eigenval`
+    VASP EIGENVAL file parser.
+- :mod:`hdf5`
+    HDF5 serializer and deserializer for diffpes PyTrees.
+- :mod:`helpers`
+    Parser-adjacent workflow helpers for assembling
+    simulation-ready arrays.
+- :mod:`kpoints`
+    VASP KPOINTS file parser.
+- :mod:`plotting`
+    Plotting utilities for ARPES spectra.
+- :mod:`poscar`
+    VASP POSCAR file parser.
+- :mod:`procar`
+    VASP PROCAR file parser.
 
 Routine Listings
 ----------------
+:func:`aggregate_atoms`
+    Sum orbital projections over a set of atoms.
 :func:`apply_kpath_ticks`
-    Annotate a plot axis with KPathInfo symmetry labels.
+    Apply symmetry-point ticks/labels from KPathInfo to an axis.
+:func:`check_consistency`
+    Check dimension agreement across parsed VASP files.
+:func:`list_band_scatter_presets`
+    Return supported preset names for projected band scatter
+    plots.
 :func:`load_from_h5`
     Load PyTrees from an HDF5 file.
 :func:`plot_arpes_spectrum`
-    Plot an ARPES map from an ArpesSpectrum PyTree.
+    Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 :func:`plot_arpes_with_kpath`
-    Plot an ARPES map and apply KPathInfo axis annotations.
+    Plot ARPES spectrum and annotate k-axis using KPathInfo.
 :func:`plot_band_scatter_preset`
-    Plot projected bands with size-weighted scatter markers.
+    Plot projected bands as marker-size-weighted scatter points.
 :func:`plot_band_scatter_with_kpath`
-    Plot projected-band scatter and annotate with KPathInfo.
-:func:`list_band_scatter_presets`
-    Return supported preset names for band-scatter plotting.
-:func:`read_doscar`
-    Parse VASP DOSCAR into DensityOfStates.
+    Plot projected band scatter and annotate x-axis with k-path
+    labels.
 :func:`read_chgcar`
-    Parse VASP CHGCAR into VolumetricData.
+    Parse a VASP CHGCAR file.
+:func:`read_doscar`
+    Parse a VASP DOSCAR file.
 :func:`read_eigenval`
-    Parse VASP EIGENVAL into BandStructure.
+    Parse a VASP EIGENVAL file.
 :func:`read_kpoints`
-    Parse VASP KPOINTS into KPathInfo.
+    Parse a VASP KPOINTS file.
 :func:`read_poscar`
-    Parse VASP POSCAR into CrystalGeometry.
+    Parse a VASP POSCAR/CONTCAR file.
 :func:`read_procar`
-    Parse VASP PROCAR into OrbitalProjection.
+    Parse a VASP PROCAR file.
+:func:`reduce_orbitals`
+    Reduce 9 orbital channels to s/p/d totals.
 :func:`save_to_h5`
     Save one or more named PyTrees to an HDF5 file.
+:func:`select_atoms`
+    Extract orbital projections for a subset of atoms.
 
 Notes
 -----
@@ -72,10 +105,10 @@ __all__: list[str] = [
     "check_consistency",
     "list_band_scatter_presets",
     "load_from_h5",
-    "plot_band_scatter_preset",
-    "plot_band_scatter_with_kpath",
     "plot_arpes_spectrum",
     "plot_arpes_with_kpath",
+    "plot_band_scatter_preset",
+    "plot_band_scatter_with_kpath",
     "read_chgcar",
     "read_doscar",
     "read_eigenval",

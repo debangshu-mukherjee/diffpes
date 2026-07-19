@@ -19,12 +19,12 @@ the polarization vector.
 
 Routine Listings
 ----------------
-:func:`dipole_matrix_element_single`
-    Compute dipole matrix element for a single orbital (n, l, m).
-:func:`dipole_intensity_orbital`
-    Compute |M|^2 for one orbital.
 :func:`dipole_intensities_all_orbitals`
     Compute |M|^2 for all orbitals in the basis.
+:func:`dipole_intensity_orbital`
+    Compute |M|^2 for one orbital.
+:func:`dipole_matrix_element_single`
+    Compute dipole matrix element for a single orbital (n, l, m).
 """
 
 import jax.numpy as jnp

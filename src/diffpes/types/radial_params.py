@@ -11,11 +11,11 @@ Routine Listings
 :class:`OrbitalBasis`
     PyTree for orbital quantum number metadata.
 :class:`SlaterParams`
-    PyTree for differentiable Slater radial parameters.
+    PyTree for Slater radial wavefunction parameters.
 :func:`make_orbital_basis`
-    Factory for OrbitalBasis.
+    Create a validated ``OrbitalBasis`` instance.
 :func:`make_slater_params`
-    Factory for SlaterParams.
+    Create a validated ``SlaterParams`` instance.
 
 Notes
 -----

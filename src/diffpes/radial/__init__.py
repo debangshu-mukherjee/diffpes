@@ -13,20 +13,25 @@ integral
 
 evaluated on a fixed radial grid via composite trapezoidal quadrature.
 
+The submodules are organized as follows:
+
+- :mod:`bessel`
+    Spherical Bessel functions in JAX.
+- :mod:`integrate`
+    Radial-integral evaluation utilities.
+- :mod:`wavefunctions`
+    Atomic radial wavefunction models in JAX.
+
 Routine Listings
 ----------------
-:func:`spherical_bessel_jl`
-    Spherical Bessel function :math:`j_l(x)` via stable upward
-    recurrence with a small-argument limit.
-:func:`radial_integral`
-    Fixed-grid trapezoidal evaluation of the dipole radial integral
-    :math:`B^{l'}(k)`.
-:func:`slater_radial`
-    Normalized Slater-type radial function
-    :math:`R(r) = N\, r^{n-1} e^{-\zeta r}`.
 :func:`hydrogenic_radial`
-    Normalized hydrogenic radial function :math:`R_{n,l}(r)` using
-    associated Laguerre polynomials.
+    Evaluate normalized hydrogenic radial function.
+:func:`radial_integral`
+    Evaluate dipole radial integral on a fixed radial grid.
+:func:`slater_radial`
+    Evaluate normalized Slater-type radial function.
+:func:`spherical_bessel_jl`
+    Evaluate spherical Bessel function :math:`j_l(x)`.
 
 Notes
 -----

@@ -24,11 +24,10 @@ Routine Listings
     Helper to build a minimal ArpesSpectrum for plotting tests.
 """
 
-import pytest
-
 import chex
 import jax.numpy as jnp
 import matplotlib
+import pytest
 
 matplotlib.use("Agg")
 
@@ -38,9 +37,9 @@ from diffpes.inout import (
     apply_kpath_ticks,
     list_band_scatter_presets,
     plot_arpes_spectrum,
+    plot_arpes_with_kpath,
     plot_band_scatter_preset,
     plot_band_scatter_with_kpath,
-    plot_arpes_with_kpath,
 )
 from diffpes.types import (
     ArpesSpectrum,
@@ -404,7 +403,9 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
     def _make_bands_1d(self, nk=4, nb=2):
         """Build BandStructure with 1D eigenvalues (bypassing factory)."""
         return BandStructure(
-            eigenvalues=jnp.zeros(nk * nb, dtype=jnp.float64),  # 1D -> wrong ndim
+            eigenvalues=jnp.zeros(
+                nk * nb, dtype=jnp.float64
+            ),  # 1D -> wrong ndim
             kpoints=jnp.zeros((nk, 3), dtype=jnp.float64),
             kpoint_weights=jnp.zeros(nk, dtype=jnp.float64),
             fermi_energy=jnp.float64(0.0),
@@ -414,8 +415,8 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         """Build OrbitalProjection with spin and OAM attached."""
         proj = jnp.ones((nk, nb, na, 9), dtype=jnp.float64) * 0.1
         spin = jnp.zeros((nk, nb, na, 6), dtype=jnp.float64)
-        spin = spin.at[..., 0].set(0.3)   # spin_x_up non-zero
-        spin = spin.at[..., 4].set(0.2)   # spin_z_up non-zero
+        spin = spin.at[..., 0].set(0.3)  # spin_x_up non-zero
+        spin = spin.at[..., 4].set(0.2)  # spin_z_up non-zero
         oam = jnp.ones((nk, nb, na, 3), dtype=jnp.float64) * 0.05
         return make_orbital_projection(projections=proj, spin=spin, oam=oam)
 
@@ -430,9 +431,7 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         proj = jnp.ones((4, 2, 1, 9), dtype=jnp.float64) * 0.1
         orb = make_orbital_projection(projections=proj)
         with pytest.raises(ValueError, match="shape"):
-            plot_band_scatter_preset(
-                bands=bands, orb_proj=orb, preset="p"
-            )
+            plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="p")
 
     def test_subset_atom_axis_with_indices(self):
         """Passing atom_indices calls ``_subset_atom_axis`` (lines 463-464).
@@ -594,9 +593,7 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         proj = jnp.ones((nk, nb, 1, 9), dtype=jnp.float64) * 0.1
         orb = make_orbital_projection(projections=proj)  # oam=None
         with pytest.raises(ValueError, match="requires OAM data"):
-            plot_band_scatter_preset(
-                bands=bands, orb_proj=orb, preset="oam_p"
-            )
+            plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="oam_p")
 
     def test_unknown_preset_raises(self):
         """Unknown preset string raises ValueError (lines 562-564).
@@ -630,9 +627,9 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         nk = 4
         nb_bands = 2
         nb_proj = 3  # different number of bands
-        eigen = jnp.linspace(-1.0, 0.5, nk * nb_bands, dtype=jnp.float64).reshape(
-            nk, nb_bands
-        )
+        eigen = jnp.linspace(
+            -1.0, 0.5, nk * nb_bands, dtype=jnp.float64
+        ).reshape(nk, nb_bands)
         bands = make_band_structure(
             eigenvalues=eigen,
             kpoints=jnp.zeros((nk, 3), dtype=jnp.float64),
@@ -640,9 +637,7 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         proj = jnp.ones((nk, nb_proj, 1, 9), dtype=jnp.float64) * 0.1
         orb = make_orbital_projection(projections=proj)
         with pytest.raises(ValueError, match="Preset weights must have shape"):
-            plot_band_scatter_preset(
-                bands=bands, orb_proj=orb, preset="p"
-            )
+            plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="p")
 
     def test_uses_provided_ax(self):
         """When ax is provided, ``fig = ax.figure`` is used (line 667).

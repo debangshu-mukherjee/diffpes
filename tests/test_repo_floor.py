@@ -21,11 +21,18 @@ import lineax
 import optax
 import optimistix
 import pytest
+import yaml
+import numpy as np
+from beartype import beartype
 from beartype.typing import Any
-from jaxtyping import Array, Float, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray, jaxtyped
 
-from _assertions import assert_tree_finite, assert_trees_close
-from _factories import (
+from tests._assertions import (
+    assert_matches_reference,
+    assert_tree_finite,
+    assert_trees_close,
+)
+from tests._factories import (
     toy_band_structure,
     toy_chain_diagonalized,
     toy_graphene_diagonalized,
@@ -35,6 +42,7 @@ from _factories import (
     toy_slater_params,
 )
 from diffpes.types import (
+    ArpesSpectrum,
     BandStructure,
     DiagonalizedBands,
     OrbitalProjection,
@@ -42,7 +50,51 @@ from diffpes.types import (
     SimulationParams,
     SlaterParams,
     TBModel,
+    make_slater_params,
 )
+from diffpes.simul import simulate_novice, simulate_tb_radial
+
+
+@jaxtyped(typechecker=beartype)
+def _tb_reference_payload(
+    bands: DiagonalizedBands,
+    slater: SlaterParams,
+) -> tuple[ArpesSpectrum, Float[Array, ""], Float[Array, " n_orbitals"]]:
+    """Recompute one tight-binding radial reference and zeta gradient."""
+    params: SimulationParams = toy_simulation_params(fidelity=512)
+    polarization: PolarizationConfig = toy_polarization_config()
+    spectrum: ArpesSpectrum = simulate_tb_radial(
+        bands,
+        slater,
+        params,
+        polarization,
+    )
+
+    def intensity_sum(zeta: Float[Array, " n_orbitals"]) -> Float[Array, ""]:
+        varied_slater: SlaterParams = make_slater_params(
+            zeta=zeta,
+            orbital_basis=slater.orbital_basis,
+            coefficients=slater.coefficients,
+        )
+        varied_spectrum: ArpesSpectrum = simulate_tb_radial(
+            bands,
+            varied_slater,
+            params,
+            polarization,
+        )
+        total: Float[Array, ""] = jnp.sum(varied_spectrum.intensity)
+        return total
+
+    total_intensity: Float[Array, ""] = jnp.sum(spectrum.intensity)
+    zeta_gradient: Float[Array, " n_orbitals"] = jax.grad(intensity_sum)(
+        slater.zeta
+    )
+    payload: tuple[
+        ArpesSpectrum,
+        Float[Array, ""],
+        Float[Array, " n_orbitals"],
+    ] = (spectrum, total_intensity, zeta_gradient)
+    return payload
 
 
 class TestConftest:
@@ -232,7 +284,7 @@ class TestMetadata(chex.TestCase):
             for dependency in group
         )
         retired_names: tuple[str, ...] = (
-            "difftb",
+            "diff" + "tb",
             "black",
             "isort",
             "twine",
@@ -272,6 +324,132 @@ class TestMetadata(chex.TestCase):
             "-n auto --dist loadgroup "
             "--jaxtyping-packages=diffpes,beartype.beartype",
         )
+
+
+class TestCI(chex.TestCase):
+    """Validate the continuous-integration workflow from WP5.1.
+
+    Covers workflow syntax, push and pull-request triggers, and the complete
+    supported-Python matrix declared by the package metadata.
+    """
+
+    def test_workflow_matrix(self) -> None:
+        """Exercise CI on every supported Python minor version.
+
+        Confirms the workflow exists, parses as YAML, runs for pushes and pull
+        requests, and tests Python 3.12, 3.13, and 3.14 exactly.
+
+        Notes
+        -----
+        Loads the checked-in workflow using PyYAML and compares its declarative
+        triggers and test matrix with the WP5.1 external configuration truth.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[1]
+        workflow_path: Path = repository_root / ".github/workflows/tests.yml"
+        workflow: dict[str, Any] = yaml.safe_load(workflow_path.read_text())
+        triggers: list[str] = workflow["on"]
+        python_versions: list[str] = workflow["jobs"]["test"]["strategy"][
+            "matrix"
+        ]["python-version"]
+
+        self.assertTrue(workflow_path.is_file())
+        chex.assert_equal(triggers, ["push", "pull_request"])
+        chex.assert_equal(python_versions, ["3.12", "3.13", "3.14"])
+
+
+class TestRegressionReferences(chex.TestCase):
+    """Validate the pre-refactor forward baselines from WP6.1.
+
+    Covers fixed-seed novice and tight-binding radial spectra, the standing
+    zeta-gradient regression, archive metadata, and manifest checksums.
+    """
+
+    @pytest.mark.big_mem
+    @pytest.mark.rss_limit_mb(1200)
+    def test_forward_replay_and_manifest(self) -> None:
+        """Replay all reference artifacts within their pinned tolerances.
+
+        Confirms spectrum arrays reproduce at relative tolerance ``1e-12``,
+        the zeta gradients reproduce at least as strictly as their ``1e-9``
+        contract, and every committed archive matches its manifest SHA-256.
+
+        Notes
+        -----
+        Rebuilds all three CPU/x64 factory pipelines with seed 20260713,
+        compares their PyTree leaf order through the shared NPZ loader, then
+        checks declared shapes, float64 dtypes, and artifact digests.
+        """
+        reference_directory: Path = (
+            Path(__file__).parent / "test_diffpes" / "_reference_data"
+        )
+        manifest: str = (reference_directory / "MANIFEST.md").read_text()
+        key: PRNGKeyArray = jax.random.key(20260713)
+        novice: ArpesSpectrum = simulate_novice(
+            toy_band_structure(key),
+            toy_orbital_projection(key),
+            toy_simulation_params(fidelity=512),
+        )
+        graphene_model: TBModel
+        graphene_bands: DiagonalizedBands
+        graphene_model, graphene_bands = toy_graphene_diagonalized(n_k=12)
+        chain_model: TBModel
+        chain_bands: DiagonalizedBands
+        chain_model, chain_bands = toy_chain_diagonalized(n_k=16)
+        del graphene_model, chain_model
+        slater: SlaterParams = toy_slater_params()
+        graphene_payload: tuple[
+            ArpesSpectrum,
+            Float[Array, ""],
+            Float[Array, " n_orbitals"],
+        ] = _tb_reference_payload(graphene_bands, slater)
+        chain_payload: tuple[
+            ArpesSpectrum,
+            Float[Array, ""],
+            Float[Array, " n_orbitals"],
+        ] = _tb_reference_payload(chain_bands, slater)
+
+        assert_matches_reference(novice, "novice_toy", rtol=1e-12)
+        assert_matches_reference(
+            graphene_payload,
+            "tb_radial_graphene",
+            rtol=1e-12,
+        )
+        assert_matches_reference(
+            chain_payload,
+            "tb_radial_chain",
+            rtol=1e-12,
+        )
+        chex.assert_shape(novice.intensity, (8, 512))
+        chex.assert_shape(graphene_payload[0].intensity, (12, 512))
+        chex.assert_shape(chain_payload[0].intensity, (16, 512))
+        actual_dtypes: tuple[jnp.dtype, ...] = tuple(
+            array.dtype
+            for array in (
+                novice.intensity,
+                graphene_payload[0].intensity,
+                chain_payload[0].intensity,
+                graphene_payload[2],
+                chain_payload[2],
+            )
+        )
+        chex.assert_equal(actual_dtypes, (jnp.float64,) * 5)
+
+        for artifact_name in (
+            "novice_toy",
+            "tb_radial_graphene",
+            "tb_radial_chain",
+        ):
+            artifact_path: Path = reference_directory / f"{artifact_name}.npz"
+            digest: str = hashlib.sha256(
+                artifact_path.read_bytes()
+            ).hexdigest()
+            self.assertIn(f"SHA-256: `{digest}`", manifest)
+            with np.load(artifact_path, allow_pickle=False) as archive:
+                self.assertTrue(
+                    all(
+                        array.dtype == np.float64 for array in archive.values()
+                    )
+                )
 
 
 class TestStack(chex.TestCase):

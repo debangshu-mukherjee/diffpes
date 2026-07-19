@@ -9,11 +9,19 @@ publication-style ARPES intensity maps.
 Routine Listings
 ----------------
 :func:`apply_kpath_ticks`
-    Apply symmetry-point tick labels from KPathInfo.
+    Apply symmetry-point ticks/labels from KPathInfo to an axis.
+:func:`list_band_scatter_presets`
+    Return supported preset names for projected band scatter
+    plots.
 :func:`plot_arpes_spectrum`
-    Plot an ARPES intensity map from an ArpesSpectrum.
+    Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 :func:`plot_arpes_with_kpath`
-    Plot spectrum and annotate the k-axis with symmetry labels.
+    Plot ARPES spectrum and annotate k-axis using KPathInfo.
+:func:`plot_band_scatter_preset`
+    Plot projected bands as marker-size-weighted scatter points.
+:func:`plot_band_scatter_with_kpath`
+    Plot projected band scatter and annotate x-axis with k-path
+    labels.
 
 Notes
 -----
@@ -642,8 +650,7 @@ def plot_band_scatter_preset(  # noqa: PLR0913
     weights, signed = _weights_from_preset(orb_proj, preset, atom_indices)
     if weights.shape != eigenvalues.shape:
         msg = (
-            "Preset weights must have shape matching "
-            "bands.eigenvalues (K, B)."
+            "Preset weights must have shape matching bands.eigenvalues (K, B)."
         )
         raise ValueError(msg)
 
@@ -758,8 +765,8 @@ def plot_band_scatter_with_kpath(  # noqa: PLR0913
 __all__: list[str] = [
     "apply_kpath_ticks",
     "list_band_scatter_presets",
-    "plot_band_scatter_preset",
-    "plot_band_scatter_with_kpath",
     "plot_arpes_spectrum",
     "plot_arpes_with_kpath",
+    "plot_band_scatter_preset",
+    "plot_band_scatter_with_kpath",
 ]

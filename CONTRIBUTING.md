@@ -322,6 +322,39 @@ Each module starts with a one-line summary, an `Extended Summary`, a
 `- :mod:`name`` entries with a one-line description) — when you add a new
 submodule, add it to that listing in the same change.
 
+```python
+# src/diffpes/radial/__init__.py
+"""Differentiable radial primitives for photoemission matrix elements.
+
+Extended Summary
+----------------
+This subpackage provides the radial building blocks of the matrix-element
+engine: spherical Bessel functions, bound and continuum radial
+wavefunctions, and the quadrature that contracts them into radial
+integrals.
+
+The submodules are organized as follows:
+
+- :mod:`bessel`
+    Spherical Bessel functions in JAX.
+- :mod:`integrate`
+    Radial quadrature for matrix-element integrals.
+- :mod:`wavefunctions`
+    Bound and continuum radial wavefunctions.
+
+Routine Listings
+----------------
+:func:`radial_integral`
+    Contract radial wavefunctions against the final state.
+:func:`spherical_bessel_jl`
+    Evaluate spherical Bessel function j_l(x).
+"""
+```
+
+The one-line description under each `Routine Listings` entry is the
+**verbatim** summary line of that symbol's own docstring; the `- :mod:`
+description is the verbatim summary line of that submodule's docstring.
+
 Use the correct Sphinx role in `Routine Listings`: `:func:` for functions,
 `:class:` for classes/PyTrees, `:obj:` for type aliases and constants, and
 `:mod:` for submodules.
@@ -680,7 +713,35 @@ The codebase carries **no compatibility layer**. When an API changes:
 ### Versioning
 
 `[project].version` in `pyproject.toml` is the **single source of truth** for
-the package version (CalVer, e.g. `2026.03.01`).
+the package version (CalVer, e.g. `2026.06.01`; note PEP 440 normalizes it to
+`2026.6.1` in built artifacts).
+
+### Building and Releasing
+
+Packaging is **uv end-to-end**: the build backend is `uv_build` (see
+`[build-system]` in `pyproject.toml`) and releases go out with `uv publish` —
+no `setuptools`, `build`, or `twine` anywhere.
+
+```bash
+# Build the sdist and wheel into dist/
+uv build
+
+# Sanity-check the artifacts
+python -m zipfile -l dist/diffpes-*.whl
+
+# Publish to PyPI (uses a PyPI API token)
+UV_PUBLISH_TOKEN=<pypi-token> uv publish
+```
+
+Release checklist:
+
+1. Bump `[project].version` (CalVer) and update `CHANGELOG.md` in the same
+   commit.
+2. Run the full wall (`ruff check src/ tests/`, `pydoclint src/`, `ty check`,
+   `pytest`) at the release commit.
+3. `uv build` from a clean tree; verify the wheel contains the full
+   `diffpes/` package and the metadata carries `License-Expression: MIT`.
+4. Tag the release commit (`v<version>`), then `uv publish`.
 
 ## Getting Help
 

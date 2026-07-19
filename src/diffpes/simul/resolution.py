@@ -11,7 +11,7 @@ JAX-differentiable.
 Routine Listings
 ----------------
 :func:`apply_momentum_broadening`
-    Convolve an intensity map with a Gaussian kernel in k-space.
+    Convolve I(k, E) with a Gaussian in k-space.
 
 Notes
 -----

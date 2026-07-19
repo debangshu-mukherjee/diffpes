@@ -14,14 +14,14 @@ parsed from VASP CHGCAR files. Two variants are provided:
 
 Routine Listings
 ----------------
-:class:`VolumetricData`
-    PyTree for charge density with optional scalar magnetization.
 :class:`SOCVolumetricData`
-    PyTree for charge density with vector magnetization (SOC).
-:func:`make_volumetric_data`
-    Factory for VolumetricData.
+    PyTree for volumetric data from SOC CHGCAR files.
+:class:`VolumetricData`
+    PyTree for volumetric grid data from CHGCAR.
 :func:`make_soc_volumetric_data`
-    Factory for SOCVolumetricData.
+    Create a validated ``SOCVolumetricData`` instance.
+:func:`make_volumetric_data`
+    Create a validated ``VolumetricData`` instance.
 
 Notes
 -----

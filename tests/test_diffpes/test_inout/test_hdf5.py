@@ -716,7 +716,10 @@ class TestVolumetricAuxEncoding:
         ``_decode_volumetric_aux``, and asserts the round-trip produces
         equal ``grid_shape`` and ``symbols``.
         """
-        from diffpes.inout.hdf5 import _decode_volumetric_aux, _encode_volumetric_aux
+        from diffpes.inout.hdf5 import (
+            _decode_volumetric_aux,
+            _encode_volumetric_aux,
+        )
 
         aux = ((8, 8, 8), ("Fe", "Co"))
         encoded = _encode_volumetric_aux(aux)

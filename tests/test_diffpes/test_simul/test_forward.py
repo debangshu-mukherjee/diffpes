@@ -392,9 +392,9 @@ class TestSimulateTBRadial:
             return jnp.sum(spec.intensity)
 
         grad = jax.grad(loss)(model.hopping_params)
-        assert jnp.all(
-            jnp.isfinite(grad)
-        ), f"Gradient w.r.t. hopping is {grad}"
+        assert jnp.all(jnp.isfinite(grad)), (
+            f"Gradient w.r.t. hopping is {grad}"
+        )
 
     def test_graphene_runs(self):
         """Verify that a graphene model with two pz orbitals runs end-to-end.

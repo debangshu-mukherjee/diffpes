@@ -11,7 +11,7 @@ For SOC calculations (4 grid blocks), returns an
 Routine Listings
 ----------------
 :func:`read_chgcar`
-    Parse a VASP CHGCAR file into VolumetricData or SOCVolumetricData.
+    Parse a VASP CHGCAR file.
 """
 
 from pathlib import Path

@@ -10,7 +10,7 @@ line-mode segment endpoints).
 Routine Listings
 ----------------
 :func:`read_kpoints`
-    Parse a VASP KPOINTS file into KPathInfo.
+    Parse a VASP KPOINTS file.
 """
 
 import re

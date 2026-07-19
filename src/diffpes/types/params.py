@@ -11,11 +11,11 @@ Routine Listings
 :class:`PolarizationConfig`
     PyTree for photon polarization geometry.
 :class:`SimulationParams`
-    PyTree for core simulation parameters.
+    PyTree for ARPES simulation parameters.
 :func:`make_polarization_config`
-    Factory for PolarizationConfig.
+    Create a validated PolarizationConfig instance.
 :func:`make_simulation_params`
-    Factory for SimulationParams.
+    Create a validated SimulationParams instance.
 
 Notes
 -----

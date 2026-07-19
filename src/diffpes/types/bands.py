@@ -11,15 +11,23 @@ Routine Listings
 :class:`ArpesSpectrum`
     PyTree for ARPES simulation output.
 :class:`BandStructure`
-    PyTree for eigenvalues and k-point data.
+    PyTree for electronic band structure.
 :class:`OrbitalProjection`
     PyTree for orbital-resolved band projections.
+:class:`SpinBandStructure`
+    PyTree for spin-resolved electronic band structure.
+:class:`SpinOrbitalProjection`
+    PyTree for orbital projections with mandatory spin data.
 :func:`make_arpes_spectrum`
-    Factory for ArpesSpectrum.
+    Create a validated ``ArpesSpectrum`` instance.
 :func:`make_band_structure`
-    Factory for BandStructure with validation.
+    Create a validated ``BandStructure`` instance.
 :func:`make_orbital_projection`
-    Factory for OrbitalProjection with validation.
+    Create a validated ``OrbitalProjection`` instance.
+:func:`make_spin_band_structure`
+    Create a validated ``SpinBandStructure`` instance.
+:func:`make_spin_orbital_projection`
+    Create a validated ``SpinOrbitalProjection`` instance.
 
 Notes
 -----

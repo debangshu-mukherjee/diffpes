@@ -10,8 +10,7 @@ the ``return_mode`` parameter.
 Routine Listings
 ----------------
 :func:`read_doscar`
-    Parse a VASP DOSCAR file into a DensityOfStates or
-    FullDensityOfStates.
+    Parse a VASP DOSCAR file.
 
 Notes
 -----

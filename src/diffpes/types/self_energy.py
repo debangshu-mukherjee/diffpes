@@ -8,9 +8,9 @@ Defines the PyTree type for energy-dependent self-energy
 Routine Listings
 ----------------
 :class:`SelfEnergyConfig`
-    PyTree for energy-dependent self-energy.
+    PyTree for energy-dependent self-energy (lifetime broadening).
 :func:`make_self_energy_config`
-    Factory for SelfEnergyConfig.
+    Create a validated ``SelfEnergyConfig`` instance.
 
 Notes
 -----

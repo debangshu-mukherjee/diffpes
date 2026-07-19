@@ -51,8 +51,8 @@ from diffpes.types import (
     make_crystal_geometry,
     make_density_of_states,
     make_kpath_info,
-    make_orbital_projection,
     make_orbital_basis,
+    make_orbital_projection,
     make_polarization_config,
     make_simulation_params,
 )

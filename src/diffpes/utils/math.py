@@ -9,9 +9,9 @@ throughout the ARPES simulation pipeline.
 Routine Listings
 ----------------
 :func:`faddeeva`
-    Faddeeva function via Taylor series expansion.
+    Evaluate the Faddeeva function w(z) = exp(-z^2) erfc(-iz).
 :func:`zscore_normalize`
-    Z-score (zero-mean, unit-variance) normalization.
+    Apply z-score normalization (zero-mean, unit-variance).
 
 Notes
 -----

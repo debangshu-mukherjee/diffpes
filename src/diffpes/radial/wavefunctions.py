@@ -7,10 +7,10 @@ for use in differentiable ARPES matrix-element calculations.
 
 Routine Listings
 ----------------
-:func:`slater_radial`
-    Evaluate normalized Slater-type radial function.
 :func:`hydrogenic_radial`
     Evaluate normalized hydrogenic radial function.
+:func:`slater_radial`
+    Evaluate normalized Slater-type radial function.
 """
 
 import math

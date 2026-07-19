@@ -97,9 +97,9 @@ class TestDipoleMatrixElementSingle:
         M = dipole_matrix_element_single(
             k_vec, r_grid, R_vals, 0, 0, z_polarized
         )
-        assert (
-            jnp.abs(M) > 1e-6
-        ), f"Expected nonzero, got |M|={float(jnp.abs(M))}"
+        assert jnp.abs(M) > 1e-6, (
+            f"Expected nonzero, got |M|={float(jnp.abs(M))}"
+        )
 
     def test_finite_output(self, r_grid, z_polarized):
         """Verify the matrix element is numerically finite for a p-orbital.

@@ -92,7 +92,7 @@ def orbital_coefficients(
     Callers can write::
 
         weights = eigenvector_orbital_weights(evecs)
-        coeffs  = orbital_coefficients(evecs)
+        coeffs = orbital_coefficients(evecs)
 
     making it immediately obvious which downstream code path uses
     magnitudes only and which requires full phase information.

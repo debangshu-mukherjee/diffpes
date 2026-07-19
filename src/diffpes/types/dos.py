@@ -1,16 +1,21 @@
-"""Density of states data structure.
+"""Density of states data structures.
 
 Extended Summary
 ----------------
-Defines the :class:`DensityOfStates` PyTree for storing total
-and projected density of states from VASP DOSCAR files.
+Defines the :class:`DensityOfStates` and :class:`FullDensityOfStates`
+PyTrees for storing total and projected density of states from
+VASP DOSCAR files.
 
 Routine Listings
 ----------------
 :class:`DensityOfStates`
-    PyTree for density of states data.
+    PyTree for density of states.
+:class:`FullDensityOfStates`
+    PyTree for complete density of states with spin and PDOS.
 :func:`make_density_of_states`
-    Factory function for DensityOfStates.
+    Create a validated DensityOfStates instance.
+:func:`make_full_density_of_states`
+    Create a validated ``FullDensityOfStates`` instance.
 
 Notes
 -----

@@ -26,14 +26,12 @@ Routine Listings
     Tests for read_procar.
 """
 
+import io
+import tempfile
 from pathlib import Path
 
 import chex
 import jax.numpy as jnp
-
-import io
-import tempfile
-
 import pytest
 
 from diffpes.inout import (
@@ -904,7 +902,9 @@ class TestReadEigenvalErrors(chex.TestCase):
         content = _EIGENVAL_HEADER + "  0.0  0.0\n"
         path = _write_tmpfile(content)
         try:
-            with pytest.raises(ValueError, match="Invalid EIGENVAL k-point line"):
+            with pytest.raises(
+                ValueError, match="Invalid EIGENVAL k-point line"
+            ):
                 read_eigenval(path, fermi_energy=0.0)
         finally:
             self._cleanup(path)
@@ -1039,13 +1039,7 @@ class TestReadKpointsErrors(chex.TestCase):
         Writes an Explicit KPOINTS where a k-point line has only 2 values.
         Asserts ``ValueError`` matching ``"at least 3 coordinates"``.
         """
-        content = (
-            "Too few coords\n"
-            "2\n"
-            "Cartesian\n"
-            "  0.0  0.0\n"
-            "  0.5  0.0  0.0\n"
-        )
+        content = "Too few coords\n2\nCartesian\n  0.0  0.0\n  0.5  0.0  0.0\n"
         path = _write_kpoints_tmpfile(content)
         try:
             with pytest.raises(ValueError, match="at least 3 coordinates"):
@@ -1059,13 +1053,7 @@ class TestReadKpointsErrors(chex.TestCase):
         Writes an Explicit KPOINTS where k-point lines have only 3
         columns (no weight). Asserts that all weights equal 1.0.
         """
-        content = (
-            "No weight\n"
-            "2\n"
-            "Cartesian\n"
-            "  0.0  0.0  0.0\n"
-            "  0.5  0.0  0.0\n"
-        )
+        content = "No weight\n2\nCartesian\n  0.0  0.0  0.0\n  0.5  0.0  0.0\n"
         path = _write_kpoints_tmpfile(content)
         try:
             kpath = read_kpoints(path)

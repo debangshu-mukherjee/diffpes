@@ -12,11 +12,11 @@ Routine Listings
 :class:`DiagonalizedBands`
     PyTree for diagonalized electronic structure.
 :class:`TBModel`
-    PyTree for tight-binding model parameters.
+    PyTree for tight-binding model parameters (legacy).
 :func:`make_diagonalized_bands`
-    Factory for DiagonalizedBands.
+    Create a validated ``DiagonalizedBands`` instance.
 :func:`make_tb_model`
-    Factory for TBModel.
+    Create a validated ``TBModel`` instance.
 
 Notes
 -----

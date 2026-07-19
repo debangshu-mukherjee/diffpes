@@ -1,4 +1,4 @@
-"""Energy-dependent self-energy evaluation for ARPES simulations.
+r"""Energy-dependent self-energy evaluation for ARPES simulations.
 
 Extended Summary
 ----------------
@@ -23,8 +23,7 @@ parameters to experimental linewidths.
 Routine Listings
 ----------------
 :func:`evaluate_self_energy`
-    Evaluate the energy-dependent Lorentzian broadening from
-    a ``SelfEnergyConfig``.
+    Evaluate the imaginary self-energy :math:`\Gamma(E)`.
 
 Notes
 -----

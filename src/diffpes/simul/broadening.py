@@ -9,11 +9,11 @@ and Fermi-Dirac thermal occupation functions.
 Routine Listings
 ----------------
 :func:`fermi_dirac`
-    Fermi-Dirac thermal distribution function.
+    Compute Fermi-Dirac distribution value.
 :func:`gaussian`
-    Normalized Gaussian broadening profile.
+    Compute normalized Gaussian broadening profile.
 :func:`voigt`
-    Normalized Voigt profile via the Faddeeva function.
+    Compute normalized Voigt profile via pseudo-Voigt approximation.
 
 Notes
 -----

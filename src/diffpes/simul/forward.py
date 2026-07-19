@@ -23,7 +23,7 @@ energy-dependent self-energy and momentum broadening are supported.
 Routine Listings
 ----------------
 :func:`simulate_tb_radial`
-    End-to-end differentiable ARPES forward model.
+    Run the end-to-end differentiable ARPES forward model.
 
 Notes
 -----
@@ -162,7 +162,7 @@ def simulate_tb_radial(  # noqa: PLR0915
     r_grid: Optional[Float[Array, " R"]] = None,
     dk: Optional[ScalarFloat] = None,
 ) -> ArpesSpectrum:
-    r"""End-to-end differentiable ARPES forward model.
+    r"""Run the end-to-end differentiable ARPES forward model.
 
     Computes dipole matrix elements from first principles using
     radial integrals, Gaunt coefficients, and real spherical

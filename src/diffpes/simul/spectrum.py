@@ -2,7 +2,7 @@
 
 Extended Summary
 ----------------
-Provides five simulation functions of increasing physical
+Provides six simulation functions of increasing physical
 sophistication, from basic Voigt convolution (novice) to full
 polarization-dependent dipole matrix element calculations
 (expert) and spin-orbit (soc). All functions are vectorized with
@@ -11,17 +11,17 @@ polarization-dependent dipole matrix element calculations
 Routine Listings
 ----------------
 :func:`simulate_advanced`
-    Gaussian with Yeh-Lindau and polarization selection rules.
+    Simulate ARPES with Gaussian broadening and polarization rules.
 :func:`simulate_basic`
-    Gaussian broadening with heuristic orbital weights.
+    Simulate ARPES spectrum with Gaussian broadening and heuristic weights.
 :func:`simulate_basicplus`
-    Gaussian broadening with Yeh-Lindau cross-sections.
+    Simulate ARPES with Gaussian broadening and Yeh-Lindau cross-sections.
 :func:`simulate_expert`
-    Voigt with Yeh-Lindau, polarization, and dipole elements.
+    Simulate ARPES with Voigt broadening and dipole matrix elements.
 :func:`simulate_novice`
-    Voigt broadening with uniform orbital weights.
+    Simulate ARPES spectrum with Voigt broadening and uniform weights.
 :func:`simulate_soc`
-    Expert model plus spin-orbit (S·k_photon) correction.
+    Simulate ARPES with spin-orbit coupling (spin-dependent intensity).
 
 Notes
 -----

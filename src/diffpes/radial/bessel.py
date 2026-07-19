@@ -10,7 +10,7 @@ the origin.
 Routine Listings
 ----------------
 :func:`spherical_bessel_jl`
-    Evaluate spherical Bessel function j_l(x).
+    Evaluate spherical Bessel function :math:`j_l(x)`.
 """
 
 import math

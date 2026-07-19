@@ -9,21 +9,21 @@ used internally by diffpes.
 Routine Listings
 ----------------
 :func:`make_expanded_simulation_params`
-    Build expanded-input simulation parameters from eigenbands.
+    Build simulation parameters with auto-derived energy window.
 :func:`simulate_advanced_expanded`
-    Advanced-level simulation with expanded inputs.
+    Run advanced-level ARPES simulation from plain arrays.
 :func:`simulate_basic_expanded`
-    Basic-level simulation with expanded inputs.
+    Run basic-level ARPES simulation from plain arrays.
 :func:`simulate_basicplus_expanded`
-    Basicplus-level simulation with expanded inputs.
+    Run basicplus-level ARPES simulation from plain arrays.
 :func:`simulate_expanded`
-    Dispatch an expanded simulation by complexity level.
+    Dispatch an expanded-input simulation by complexity level.
 :func:`simulate_expert_expanded`
-    Expert-level simulation with expanded inputs.
+    Run expert-level ARPES simulation from plain arrays.
 :func:`simulate_novice_expanded`
-    Novice-level simulation with expanded inputs.
+    Run novice-level ARPES simulation from plain arrays.
 :func:`simulate_soc_expanded`
-    SOC-level simulation with expanded inputs (requires surface_spin).
+    Run SOC (spin-orbit coupling) ARPES simulation from plain arrays.
 
 Notes
 -----
@@ -1009,13 +1009,11 @@ def simulate_expanded(  # noqa: PLR0913
 
 __all__: list[str] = [
     "make_expanded_simulation_params",
-    "_build_polarization",
-    "_build_inputs",
     "simulate_advanced_expanded",
     "simulate_basic_expanded",
     "simulate_basicplus_expanded",
-    "simulate_novice_expanded",
-    "simulate_expert_expanded",
-    "simulate_soc_expanded",
     "simulate_expanded",
+    "simulate_expert_expanded",
+    "simulate_novice_expanded",
+    "simulate_soc_expanded",
 ]

@@ -10,8 +10,7 @@ returns a :class:`~diffpes.types.BandStructure` or
 Routine Listings
 ----------------
 :func:`read_eigenval`
-    Parse a VASP EIGENVAL file into a BandStructure or
-    SpinBandStructure.
+    Parse a VASP EIGENVAL file.
 
 Notes
 -----

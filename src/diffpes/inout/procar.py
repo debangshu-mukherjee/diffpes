@@ -10,7 +10,7 @@ non-spin, spin-polarized (ISPIN=2), and SOC layouts.
 Routine Listings
 ----------------
 :func:`read_procar`
-    Parse a VASP PROCAR file into an OrbitalProjection.
+    Parse a VASP PROCAR file.
 
 Notes
 -----

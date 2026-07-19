@@ -4,7 +4,6 @@ from pathlib import Path
 
 import chex
 import jax.numpy as jnp
-
 import pytest
 
 from diffpes.simul import (

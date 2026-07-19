@@ -13,9 +13,11 @@ Routine Listings
 :func:`build_polarization_vectors`
     Construct s- and p-polarization basis vectors.
 :func:`dipole_matrix_elements`
-    Compute |e dot d_orbital|^2 for all 9 orbitals.
+    Compute dipole matrix elements for all 9 orbitals.
+:obj:`ORBITAL_DIRS_NORMALIZED`
+    Unit-normalized orbital direction vectors in VASP ordering.
 :func:`photon_wavevector`
-    Unit photon propagation vector from incidence angles.
+    Build the unit photon wavevector from incidence angles.
 
 Notes
 -----
@@ -435,9 +437,9 @@ def dipole_matrix_elements(
 
 
 __all__: list[str] = [
-    "ORBITAL_DIRS_NORMALIZED",
     "build_efield",
     "build_polarization_vectors",
     "dipole_matrix_elements",
+    "ORBITAL_DIRS_NORMALIZED",
     "photon_wavevector",
 ]

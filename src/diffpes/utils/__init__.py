@@ -8,12 +8,17 @@ via a 64-term Taylor series and is used by the Voigt broadening profile.
 Z-score normalization is provided for preprocessing spectra before
 comparison with experiment.
 
+The submodules are organized as follows:
+
+- :mod:`math`
+    Mathematical utility functions for ARPES simulations.
+
 Routine Listings
 ----------------
 :func:`faddeeva`
-    Faddeeva function w(z) = exp(-z^2) erfc(-iz) via Taylor series.
+    Evaluate the Faddeeva function w(z) = exp(-z^2) erfc(-iz).
 :func:`zscore_normalize`
-    Z-score (zero-mean, unit-variance) normalization over all elements.
+    Apply z-score normalization (zero-mean, unit-variance).
 
 Notes
 -----

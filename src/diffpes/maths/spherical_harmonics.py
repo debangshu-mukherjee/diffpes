@@ -24,7 +24,7 @@ where :math:`N_l^m = \sqrt{\frac{2l+1}{4\pi} \frac{(l-m)!}{(l+m)!}}`.
 Routine Listings
 ----------------
 :func:`real_spherical_harmonic`
-    Evaluate a single real spherical harmonic Y_l^m(theta, phi).
+    Evaluate a single real spherical harmonic.
 :func:`real_spherical_harmonics_all`
     Evaluate all real spherical harmonics up to l_max.
 """

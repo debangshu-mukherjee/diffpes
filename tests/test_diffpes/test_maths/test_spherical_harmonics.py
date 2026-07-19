@@ -159,18 +159,18 @@ class TestRealSphericalHarmonics:
         sin_theta = jnp.sin(theta_grid)
         integrand = y00 * y10  # shape (n_theta, n_phi)
         integral = jnp.sum(integrand * sin_theta[:, None] * w[:, None] * dphi)
-        assert (
-            abs(float(integral)) < 0.01
-        ), f"Orthogonality failed: {float(integral)}"
+        assert abs(float(integral)) < 0.01, (
+            f"Orthogonality failed: {float(integral)}"
+        )
 
         # Self-overlap of Y_0^0
         integrand_self = y00 * y00
         integral_self = jnp.sum(
             integrand_self * sin_theta[:, None] * w[:, None] * dphi
         )
-        assert (
-            abs(float(integral_self) - 1.0) < 0.01
-        ), f"Normalization failed: {float(integral_self)}"
+        assert abs(float(integral_self) - 1.0) < 0.01, (
+            f"Normalization failed: {float(integral_self)}"
+        )
 
     def test_jit_compatible(self):
         """Verify ``real_spherical_harmonic`` is JAX-JIT-compatible.
@@ -276,7 +276,7 @@ class TestRealSphericalHarmonicsAll:
         for l in range(3):
             for m in range(-l, l + 1):
                 val_single = real_spherical_harmonic(l, m, theta, phi)
-                assert jnp.allclose(
-                    vals_all[idx], val_single, atol=1e-12
-                ), f"Mismatch at l={l}, m={m}: {vals_all[idx]} vs {val_single}"
+                assert jnp.allclose(vals_all[idx], val_single, atol=1e-12), (
+                    f"Mismatch at l={l}, m={m}: {vals_all[idx]} vs {val_single}"
+                )
                 idx += 1

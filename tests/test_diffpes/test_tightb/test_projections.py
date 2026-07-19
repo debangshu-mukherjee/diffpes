@@ -39,13 +39,9 @@ class TestEigenvectorOrbitalWeights:
         squared input to within 1e-12.
         """
         # Shape: (K=1, B=2, O=2)
-        evecs = jnp.array(
-            [[[0.6, 0.8], [0.8, -0.6]]], dtype=jnp.complex128
-        )
+        evecs = jnp.array([[[0.6, 0.8], [0.8, -0.6]]], dtype=jnp.complex128)
         weights = eigenvector_orbital_weights(evecs)
-        expected = jnp.array(
-            [[[0.36, 0.64], [0.64, 0.36]]], dtype=jnp.float64
-        )
+        expected = jnp.array([[[0.36, 0.64], [0.64, 0.36]]], dtype=jnp.float64)
         assert jnp.allclose(weights, expected, atol=1e-12)
 
     def test_complex_eigenvectors_give_modulus_squared(self):
@@ -88,7 +84,7 @@ class TestOrbitalCoefficients:
         Constructs a complex eigenvector array and asserts that the
         output is identical to the input (element-wise equality).
         """
-        c = (0.5 + 0.3j)
+        c = 0.5 + 0.3j
         evecs = jnp.array([[[c, 0.0], [0.0, c]]], dtype=jnp.complex128)
         out = orbital_coefficients(evecs)
         assert jnp.allclose(out, evecs, atol=1e-15)

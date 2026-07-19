@@ -4,23 +4,30 @@ Extended Summary
 ----------------
 A comprehensive toolkit for Angle-Resolved PhotoEmission
 Spectroscopy (ARPES) simulations using JAX for automatic
-differentiation and GPU acceleration. Supports five levels
-of physical sophistication from basic Gaussian convolution
-to full polarization-dependent dipole matrix element
-calculations.
+differentiation and GPU acceleration. The package is built
+around a bidirectional thesis: the same differentiable physics
+that maps electronic structure forward to ARPES spectra also
+supports gradient-based inverse recovery of band-structure
+parameters from measured spectra. Supports six levels of
+physical sophistication from basic Gaussian convolution to full
+polarization-dependent dipole matrix element calculations.
 
 Routine Listings
 ----------------
 :mod:`inout`
-    VASP file parsers (POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR).
+    VASP file parsers for ARPES simulation input.
+:mod:`maths`
+    Angular matrix elements for dipole photoemission.
 :mod:`radial`
-    Differentiable radial primitives (Bessel, wavefunctions, integrals).
+    Differentiable radial primitives for ARPES matrix elements.
 :mod:`simul`
-    ARPES simulation functions at five complexity levels.
+    ARPES simulation functions at six complexity levels.
+:mod:`tightb`
+    Provide native tight-binding tools and ARPES-side adapters.
 :mod:`types`
-    PyTree data structures and factory functions.
+    Type definitions and factory functions for diffpes.
 :mod:`utils`
-    Mathematical utilities (Faddeeva function, normalization).
+    Utility functions for ARPES simulations.
 
 Examples
 --------
@@ -34,11 +41,21 @@ Notes
 -----
 All computations are JAX-compatible and support automatic
 differentiation for gradient-based optimization of ARPES
-simulation parameters.
+simulation parameters. 64-bit precision is enabled at import,
+and XLA CPU threading flags are set before the JAX import so
+CPU execution uses multi-threaded kernels.
 """
 
+import collections.abc
 import os
 from importlib.metadata import version
+
+if not hasattr(collections.abc, "ByteString"):
+    setattr(  # noqa: B010 -- Python 3.14 compatibility for beartype 0.22.9.
+        collections.abc,
+        "ByteString",
+        collections.abc.Buffer,
+    )
 
 os.environ.setdefault(
     "XLA_FLAGS",
@@ -54,7 +71,6 @@ from . import inout, maths, radial, simul, tightb, types, utils  # noqa: E402
 __version__: str = version("diffpes")
 
 __all__: list[str] = [
-    "__version__",
     "inout",
     "maths",
     "radial",

@@ -1,5 +1,12 @@
 # diffpes
 
+[![tests](https://github.com/debangshu-mukherjee/DiffPES/actions/workflows/tests.yml/badge.svg)](https://github.com/debangshu-mukherjee/DiffPES/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/debangshu-mukherjee/DiffPES/graph/badge.svg)](https://codecov.io/gh/debangshu-mukherjee/DiffPES)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19037631.svg)](https://doi.org/10.5281/zenodo.19037631)
+[![Ruff](https://img.shields.io/badge/lint%20and%20format-ruff-D7FF64?logo=ruff&logoColor=1D1D1D)](https://github.com/astral-sh/ruff)
+[![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
+[![jax_badge](https://tinyurl.com/mucknrvu)](https://docs.jax.dev/)
+
 JAX-based ARPES simulation toolkit with Python-native APIs.
 
 ## Expanded-input workflows

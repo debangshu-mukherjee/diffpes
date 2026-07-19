@@ -19,9 +19,9 @@ The table is computed once at module load time using pure Python
 
 Routine Listings
 ----------------
-:data:`GAUNT_TABLE`
+:obj:`GAUNT_TABLE`
     Module-level precomputed Gaunt coefficient table for l_max=4.
-:data:`L_MAX`
+:obj:`L_MAX`
     Maximum angular momentum supported by the precomputed table.
 :func:`build_gaunt_table`
     Build the dipole Gaunt coefficient lookup table.

@@ -9,7 +9,7 @@ contributions.
 Routine Listings
 ----------------
 :func:`compute_oam`
-    Compute OAM_z from orbital projections.
+    Compute orbital angular momentum z-component.
 
 Notes
 -----

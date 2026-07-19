@@ -9,16 +9,16 @@ running ARPES simulations by level, and optional post-processing
 
 Routine Listings
 ----------------
-:class:`WorkflowContext`
-    Bundle of parsed VASP inputs for simulation workflows.
 :func:`load_vasp_context`
-    Read EIGENVAL/PROCAR and optional DOSCAR/KPOINTS into a context.
+    Load a simulation-ready context from VASP output files.
 :func:`prepare_projection`
-    Select atoms and optionally attach OAM to orbital projections.
-:func:`simulate_context`
-    Run a level-dispatched ARPES simulation from a workflow context.
+    Prepare orbital projections for simulation.
 :func:`run_vasp_workflow`
-    End-to-end convenience wrapper: load, prepare, simulate.
+    Run an end-to-end VASP-to-ARPES workflow in one call.
+:func:`simulate_context`
+    Run a level-dispatched simulation from a loaded workflow context.
+:class:`WorkflowContext`
+    Container for parsed VASP inputs used by workflow helpers.
 """
 
 from pathlib import Path
@@ -419,9 +419,9 @@ def run_vasp_workflow(  # noqa: PLR0913
 
 
 __all__: list[str] = [
-    "WorkflowContext",
     "load_vasp_context",
     "prepare_projection",
     "run_vasp_workflow",
     "simulate_context",
+    "WorkflowContext",
 ]

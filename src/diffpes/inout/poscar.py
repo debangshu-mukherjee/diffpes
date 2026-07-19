@@ -9,7 +9,7 @@ vectors, atomic coordinates, element symbols, and atom counts.
 Routine Listings
 ----------------
 :func:`read_poscar`
-    Parse a VASP POSCAR file into a CrystalGeometry.
+    Parse a VASP POSCAR/CONTCAR file.
 
 Notes
 -----

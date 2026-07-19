@@ -9,9 +9,9 @@ heuristic models for different photon energies.
 Routine Listings
 ----------------
 :func:`heuristic_weights`
-    Energy-dependent heuristic orbital weights.
+    Compute heuristic orbital weights based on photon energy.
 :func:`yeh_lindau_weights`
-    Interpolated Yeh-Lindau cross-section weights.
+    Compute Yeh-Lindau cross-section weights per orbital.
 
 Notes
 -----
