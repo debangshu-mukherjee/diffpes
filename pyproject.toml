@@ -15,7 +15,7 @@ keywords = [
     "Differentiable Programming",
 ]
 readme = "README.md"
-requires-python = ">3.12, <3.15"
+requires-python = ">=3.12,<3.15"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -40,7 +40,9 @@ dependencies = [
     "jupyter>=1.1.1",
     "ipykernel>=7.2.0",
     "h5py>=3.15.1",
-    "difftb",
+    "equinox>=0.13.8",
+    "optimistix>=0.1.0",
+    "optax>=0.2.8",
 ]
 
 [tool.setuptools]
@@ -99,9 +101,6 @@ dev_cuda = [
 all = [
     "diffpes[docs,test,dev,notebooks,cuda]",
 ]
-
-[tool.uv.sources]
-difftb = { path = "../DiffTB", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.10.4,<0.11.0"]
