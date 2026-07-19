@@ -14,6 +14,10 @@ and the project uses calendar versioning.
   decision adopted on 2026-07-13.
 - Added Hypothesis and psutil to the test environment for property-based
   verification and runtime memory guards.
+- Added a shared pytest runtime foundation with x64 enforcement, deterministic
+  random keys, JAX cache cleanup, RSS leak limits, and xdist memory grouping.
+- Added typed deterministic toy factories, strict numerical tree assertions,
+  and an NPZ reference-comparison scaffold for the test suite.
 
 ### Removed
 

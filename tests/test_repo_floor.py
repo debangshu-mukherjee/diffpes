@@ -5,6 +5,7 @@ installed, DiffPES enables JAX 64-bit precision before numerical work, and
 Equinox modules retain their structure through JAX PyTree operations.
 """
 
+import hashlib
 import re
 import tomllib
 from pathlib import Path
@@ -19,8 +20,180 @@ import jax.numpy as jnp
 import lineax
 import optax
 import optimistix
+import pytest
 from beartype.typing import Any
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, PRNGKeyArray
+
+from _assertions import assert_tree_finite, assert_trees_close
+from _factories import (
+    toy_band_structure,
+    toy_chain_diagonalized,
+    toy_graphene_diagonalized,
+    toy_orbital_projection,
+    toy_polarization_config,
+    toy_simulation_params,
+    toy_slater_params,
+)
+from diffpes.types import (
+    BandStructure,
+    DiagonalizedBands,
+    OrbitalProjection,
+    PolarizationConfig,
+    SimulationParams,
+    SlaterParams,
+    TBModel,
+)
+
+
+class TestConftest:
+    """Validate the shared pytest numerical and resource contracts.
+
+    Covers the x64 session invariant, stable node-derived random keys, and the
+    RSS leak guard's failure behavior in an isolated pytest subprocess.
+    """
+
+    def test_x64_and_rng_key(
+        self,
+        request: pytest.FixtureRequest,
+        rng_key: PRNGKeyArray,
+    ) -> None:
+        """Keep x64 precision and random keys stable across workers.
+
+        Confirms the default scalar dtype is float64 and independently derives
+        the expected SHA-256 seed for this node ID to verify the fixture key.
+
+        Notes
+        -----
+        Hashes the fully qualified pytest node ID, converts its first four
+        bytes to an integer, and compares the resulting typed JAX key exactly.
+        """
+        precision_probe: Float[Array, ""] = jnp.zeros(())
+        digest: bytes = hashlib.sha256(request.node.nodeid.encode()).digest()
+        expected_seed: int = int.from_bytes(digest[:4], byteorder="big")
+        expected_key: PRNGKeyArray = jax.random.key(expected_seed)
+
+        chex.assert_equal(precision_probe.dtype, jnp.float64)
+        chex.assert_trees_all_equal(rng_key, expected_key)
+
+    def test_rss_leak_guard_trips(self, pytester: pytest.Pytester) -> None:
+        """Reject a retained allocation larger than its marked RSS limit.
+
+        Confirms the real plugin reports a teardown error when a test retains
+        more than 100 MiB rather than merely simulating the guard arithmetic.
+
+        Notes
+        -----
+        Copies the repository conftest into an isolated pytest subprocess,
+        touches a retained 160 MiB byte array page-by-page, and requires the
+        guard's measured-RSS diagnostic and teardown error.
+        """
+        conftest_path: Path = Path(__file__).with_name("conftest.py")
+        pytester.makeconftest(conftest_path.read_text())
+        pytester.makepyfile(
+            """
+            import pytest
+
+            _RETAINED = []
+
+            @pytest.mark.rss_limit_mb(100)
+            def test_retained_allocation():
+                allocation = bytearray(160 * 1024 * 1024)
+                for offset in range(0, len(allocation), 4096):
+                    allocation[offset] = 1
+                _RETAINED.append(allocation)
+            """
+        )
+        result: Any = pytester.runpytest_subprocess(
+            "-q",
+            "-n",
+            "0",
+        )
+
+        result.assert_outcomes(passed=1, errors=1)
+        result.stdout.fnmatch_lines(["*retained*MiB RSS*limit is 100.0 MiB*"])
+
+
+class TestHelpers:
+    """Validate deterministic shared factories and assertion wrappers.
+
+    Covers every WP3.2 factory's declared carrier, shape, finite leaves, and
+    fixed-seed reproducibility using the shared strict assertion functions.
+    """
+
+    def test_factories_and_assertions(self, rng_key: PRNGKeyArray) -> None:
+        """Build finite, correctly shaped, reproducible toy carriers.
+
+        Confirms all seven factories return their declared production types,
+        random factories repeat bit-for-bit for one key, and analytic
+        tight-binding paths expose the requested number of k-points.
+
+        Notes
+        -----
+        Builds reduced-size carriers, checks dimensions with Chex, verifies
+        every leaf is finite, and compares repeated random trees at zero
+        relative and absolute tolerance.
+        """
+        bands: BandStructure = toy_band_structure(rng_key, n_k=5, n_bands=3)
+        repeated_bands: BandStructure = toy_band_structure(
+            rng_key,
+            n_k=5,
+            n_bands=3,
+        )
+        projections: OrbitalProjection = toy_orbital_projection(
+            rng_key,
+            n_k=5,
+            n_bands=3,
+            n_atoms=2,
+        )
+        repeated_projections: OrbitalProjection = toy_orbital_projection(
+            rng_key,
+            n_k=5,
+            n_bands=3,
+            n_atoms=2,
+        )
+        simulation: SimulationParams = toy_simulation_params(fidelity=64)
+        polarization: PolarizationConfig = toy_polarization_config()
+        graphene_model: TBModel
+        graphene_bands: DiagonalizedBands
+        graphene_model, graphene_bands = toy_graphene_diagonalized(n_k=6)
+        chain_model: TBModel
+        chain_bands: DiagonalizedBands
+        chain_model, chain_bands = toy_chain_diagonalized(n_k=7)
+        slater: SlaterParams = toy_slater_params()
+        all_carriers: tuple[object, ...] = (
+            bands,
+            projections,
+            simulation,
+            polarization,
+            graphene_model,
+            graphene_bands,
+            chain_model,
+            chain_bands,
+            slater,
+        )
+
+        assert isinstance(bands, BandStructure)
+        assert isinstance(projections, OrbitalProjection)
+        assert isinstance(simulation, SimulationParams)
+        assert isinstance(polarization, PolarizationConfig)
+        assert isinstance(graphene_model, TBModel)
+        assert isinstance(graphene_bands, DiagonalizedBands)
+        assert isinstance(chain_model, TBModel)
+        assert isinstance(chain_bands, DiagonalizedBands)
+        assert isinstance(slater, SlaterParams)
+        chex.assert_shape(bands.eigenvalues, (5, 3))
+        chex.assert_shape(projections.projections, (5, 3, 2, 9))
+        chex.assert_shape(graphene_bands.kpoints, (6, 3))
+        chex.assert_shape(chain_bands.kpoints, (7, 3))
+        chex.assert_shape(slater.zeta, (2,))
+        assert_tree_finite(all_carriers)
+        assert_trees_close(bands, repeated_bands, rtol=0.0, atol=0.0)
+        assert_trees_close(
+            projections,
+            repeated_projections,
+            rtol=0.0,
+            atol=0.0,
+        )
 
 
 class TestMetadata(chex.TestCase):

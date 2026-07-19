@@ -25,7 +25,7 @@ from diffpes.types import ScalarFloat
 
 def _associated_laguerre(
     order: int,
-    alpha: ScalarFloat,
+    alpha: int | ScalarFloat,
     x: Float[Array, " ..."],
 ) -> Float[Array, " ..."]:
     r"""Evaluate associated Laguerre polynomial.
@@ -71,7 +71,7 @@ def _associated_laguerre(
     ----------
     order : int
         Polynomial order (n >= 0).
-    alpha : ScalarFloat
+    alpha : int | ScalarFloat
         Generalization parameter (alpha >= 0). For hydrogenic
         wavefunctions, alpha = 2*l + 1.
     x : Float[Array, " ..."]

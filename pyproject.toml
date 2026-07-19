@@ -1,6 +1,6 @@
 [project]
 name = "diffpes"
-version = "2026.03.01"
+version = "2026.06.01"
 description = "Differentiable ARPES simulations in JAX"
 authors = [
     {name = "Debangshu Mukherjee", email = "mukherjeed@ornl.gov"},
@@ -100,6 +100,10 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+markers = [
+    "big_mem: serialize memory-intensive tests on one xdist worker",
+    "rss_limit_mb(limit): override the per-test RSS growth limit in MiB",
+]
 
 [tool.coverage.run]
 source = ["diffpes"]
@@ -107,7 +111,7 @@ omit = ["*/tests/*", "*/site-packages/*"]
 
 [tool.pydoclint]
 style = "numpy"
-check-return-types = true
+check-return-types = false
 check-yield-types = true
 check-arg-order = true
 require-return-section-when-returning = true

@@ -587,7 +587,7 @@ wheels = [
 
 [[package]]
 name = "diffpes"
-version = "2026.3.1"
+version = "2026.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "beartype" },

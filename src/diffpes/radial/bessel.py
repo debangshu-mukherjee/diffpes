@@ -171,8 +171,8 @@ def spherical_bessel_jl(
         )
         return j1_result
 
-        def _recurrence_step(
-            index: Integer[Array, ""],
+    def _recurrence_step(
+        index: Integer[Array, ""],
         state: tuple[Float[Array, " ..."], Float[Array, " ..."]],
     ) -> tuple[Float[Array, " ..."], Float[Array, " ..."]]:
         previous: Float[Array, " ..."]
