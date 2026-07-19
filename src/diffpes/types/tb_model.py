@@ -43,11 +43,10 @@ class DiagonalizedBands(NamedTuple):
     Extended Summary
     ----------------
     The common interface between VASP-derived and TB-derived inputs
-    for the forward simulator ``simulate_tb_radial``. The companion
-    DiffTB project (``../DiffTB``) produces this PyTree by
-    diagonalizing a tight-binding Hamiltonian at each k-point; the
-    VASP adapter ``vasp_to_diagonalized`` constructs it from VASP
-    eigenvectors.
+    for the forward simulator ``simulate_tb_radial``. The native
+    ``diffpes.tightb.diagonalize_tb`` producer constructs this PyTree
+    from a ``TBModel``; the VASP adapter ``vasp_to_diagonalized``
+    constructs it from VASP eigenvectors.
 
     By unifying both data sources into a single PyTree type, the
     differentiable forward simulator can accept inputs from either
@@ -204,12 +203,9 @@ class TBModel(NamedTuple):
     Extended Summary
     ----------------
     Minimal Slater-Koster tight-binding model retained for testing
-    the differentiable forward simulator. For production TB
-    workflows, use DiffTB (``../DiffTB``) to construct and
-    diagonalize tight-binding models, then pass the resulting
-    ``DiagonalizedBands`` to DiffPES. The Hamiltonian is constructed
-    at each k-point by Fourier-transforming the real-space hopping
-    matrix:
+    the differentiable forward simulator and extended by the native
+    tight-binding plan series. The Hamiltonian is constructed at each
+    k-point by Fourier-transforming the real-space hopping matrix:
 
         H_{ij}(k) = sum_R t_{ij,R} * exp(i k . R)
 

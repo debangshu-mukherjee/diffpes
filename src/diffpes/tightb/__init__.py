@@ -1,18 +1,18 @@
-r"""Legacy tight-binding shim and ARPES-side adapters.
+r"""Provide native tight-binding tools and ARPES-side adapters.
 
 Extended Summary
 ----------------
-Tight-binding Hamiltonian construction and diagonalization are
-owned by the companion project **DiffTB** (``../DiffTB``).
-DiffPES is purely an ARPES calculator that consumes
-``DiagonalizedBands`` from any electronic-structure source.
+The native tight-binding layer of DiffPES provides model construction,
+Slater–Koster coupling, spin–orbit coupling, slabs, and degeneracy-safe
+diagonalization as the plan series is implemented. It also consumes
+``DiagonalizedBands`` from other electronic-structure sources.
 
 This module retains:
 
 - **ARPES-side adapters** that stay here permanently:
   ``vasp_to_diagonalized``, ``eigenvector_orbital_weights``,
   ``orbital_coefficients``.
-- **Legacy test fixtures** (no new development):
+- **Current fixtures, superseded by plan 04**:
   ``build_hamiltonian_k``, ``diagonalize_single_k``,
   ``diagonalize_tb``, ``make_1d_chain_model``,
   ``make_graphene_model``.
@@ -38,10 +38,6 @@ Routine Listings
 :func:`make_graphene_model`
     (Legacy) Create a two-orbital honeycomb graphene ``TBModel``.
 
-Notes
------
-For production tight-binding workflows, use DiffTB to produce
-``DiagonalizedBands`` and pass them to ``simulate_tb_radial``.
 """
 
 from .diagonalize import (
