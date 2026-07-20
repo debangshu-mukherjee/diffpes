@@ -98,8 +98,8 @@ class SelfEnergyConfig(eqx.Module):
 def make_self_energy_config(
     gamma: ScalarFloat = 0.1,
     mode: str = "constant",
-    coefficients: Optional[Float[Array, " P"]] = None,
-    energy_nodes: Optional[Float[Array, " P"]] = None,
+    coefficients: Optional[Float[Array, " Pc"]] = None,
+    energy_nodes: Optional[Float[Array, " Pn"]] = None,
 ) -> SelfEnergyConfig:
     """Create a validated ``SelfEnergyConfig`` instance.
 
@@ -159,7 +159,11 @@ def make_self_energy_config(
     ------
     ValueError
         If ``mode`` is not one of the three supported strings, or if
-        ``mode == "tabulated"`` and ``energy_nodes`` is ``None``.
+        ``energy_nodes`` is present for a non-tabulated mode, absent for
+        tabulated mode, or has a different length from ``coefficients``.
+    EquinoxRuntimeError
+        If coefficients are non-finite or tabulated energy nodes are
+        non-finite or not strictly increasing.
 
     See Also
     --------
@@ -182,14 +186,31 @@ def make_self_energy_config(
     if mode == "tabulated" and nodes_arr is None:
         msg: str = "energy_nodes required for tabulated mode"
         raise ValueError(msg)
+    if mode != "tabulated" and nodes_arr is not None:
+        msg = "energy_nodes are only valid for tabulated mode"
+        raise ValueError(msg)
+    if nodes_arr is not None and nodes_arr.shape[0] != coeff_arr.shape[0]:
+        msg = "energy_nodes and coefficients must have the same length"
+        raise ValueError(msg)
 
     def validate_and_create() -> SelfEnergyConfig:
-        nonlocal coeff_arr
+        nonlocal coeff_arr, nodes_arr
         coeff_arr = eqx.error_if(
             coeff_arr,
             ~(jnp.all(jnp.isfinite(coeff_arr))),
             "make_self_energy_config: coefficients finite",
         )
+        if nodes_arr is not None:
+            nodes_arr = eqx.error_if(
+                nodes_arr,
+                ~(jnp.all(jnp.isfinite(nodes_arr))),
+                "make_self_energy_config: energy nodes finite",
+            )
+            nodes_arr = eqx.error_if(
+                nodes_arr,
+                ~(jnp.all(jnp.diff(nodes_arr) > 0.0)),
+                "make_self_energy_config: energy nodes strictly increasing",
+            )
         return SelfEnergyConfig(
             coefficients=coeff_arr,
             energy_nodes=nodes_arr,

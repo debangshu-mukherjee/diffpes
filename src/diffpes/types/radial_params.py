@@ -203,7 +203,9 @@ def make_orbital_basis(
     ValueError
         If ``n_values``, ``l_values``, and ``m_values`` do not all
         have the same length, or if ``labels`` has a mismatched
-        length.
+        length; if any principal quantum number is less than one; if
+        any angular quantum number is outside ``0 <= l < n``; or if
+        any magnetic quantum number is outside ``-l <= m <= l``.
 
     See Also
     --------
@@ -218,6 +220,21 @@ def make_orbital_basis(
     if len(labels) != n_orbitals:
         msg: str = "labels must have the same length as quantum numbers"
         raise ValueError(msg)
+    if any(n < 1 for n in n_values):
+        msg = "n_values must all be at least 1"
+        raise ValueError(msg)
+    if any(
+        angular < 0 or angular >= principal
+        for principal, angular in zip(n_values, l_values, strict=True)
+    ):
+        msg = "l_values must satisfy 0 <= l < n"
+        raise ValueError(msg)
+    if any(
+        abs(magnetic) > angular
+        for angular, magnetic in zip(l_values, m_values, strict=True)
+    ):
+        msg = "m_values must satisfy abs(m) <= l"
+        raise ValueError(msg)
     basis: OrbitalBasis = OrbitalBasis(
         n_values=n_values,
         l_values=l_values,
@@ -229,9 +246,9 @@ def make_orbital_basis(
 
 @jaxtyped(typechecker=beartype)
 def make_slater_params(
-    zeta: Float[Array, " O"],
+    zeta: Float[Array, " Oz"],
     orbital_basis: OrbitalBasis,
-    coefficients: Optional[Float[Array, "O C"]] = None,
+    coefficients: Optional[Float[Array, "Oc C"]] = None,
 ) -> SlaterParams:
     """Create a validated ``SlaterParams`` instance.
 
@@ -282,7 +299,11 @@ def make_slater_params(
     ------
     ValueError
         If the length of ``zeta`` does not match the number of
-        orbitals in ``orbital_basis``.
+        orbitals in ``orbital_basis``, or if the first coefficient
+        dimension does not match that orbital count.
+    EquinoxRuntimeError
+        If ``zeta`` is non-finite or non-positive, or if
+        ``coefficients`` contains a non-finite value.
 
     See Also
     --------
@@ -300,6 +321,9 @@ def make_slater_params(
         )
     else:
         coeff_arr = jnp.asarray(coefficients, dtype=jnp.float64)
+    if coeff_arr.shape[0] != n_orbitals:
+        msg = "coefficients first dimension must match orbital_basis size"
+        raise ValueError(msg)
 
     def validate_and_create() -> SlaterParams:
         nonlocal zeta_arr
@@ -313,9 +337,14 @@ def make_slater_params(
             ~(jnp.all(zeta_arr > 0.0)),
             "make_slater_params: zeta positive",
         )
+        coeff_arr_checked: Float[Array, "O C"] = eqx.error_if(
+            coeff_arr,
+            ~(jnp.all(jnp.isfinite(coeff_arr))),
+            "make_slater_params: coefficients finite",
+        )
         return SlaterParams(
             zeta=zeta_arr,
-            coefficients=coeff_arr,
+            coefficients=coeff_arr_checked,
             orbital_basis=orbital_basis,
         )
 

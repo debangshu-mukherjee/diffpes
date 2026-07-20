@@ -20,6 +20,9 @@ and the project uses calendar versioning.
   `diffpes.types`, and converted the context PyTree to an Equinox module.
 - Normalized the project, repository links, documentation, and release
   surfaces to the lowercase `diffpes` name.
+- Activated the two-tier factory validation wall: structural violations now
+  raise `ValueError`, while traced value violations use value-threaded
+  `equinox.error_if` checks that survive JIT compilation.
 
 ### Added
 

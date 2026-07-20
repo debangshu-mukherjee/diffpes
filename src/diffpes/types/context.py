@@ -81,9 +81,20 @@ def make_workflow_context(
 
     Returns
     -------
-    WorkflowContext
+    context : WorkflowContext
         Immutable Equinox container holding the supplied inputs.
+
+    Raises
+    ------
+    ValueError
+        If the k-point or band dimensions disagree between ``bands`` and
+        ``orb_proj``.
     """
+    if bands.eigenvalues.shape[:2] != orb_proj.projections.shape[:2]:
+        msg: str = (
+            "bands and orb_proj must agree on k-point and band dimensions"
+        )
+        raise ValueError(msg)
     context: WorkflowContext = WorkflowContext(
         bands=bands,
         orb_proj=orb_proj,

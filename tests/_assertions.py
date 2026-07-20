@@ -4,20 +4,91 @@ Extended Summary
 ----------------
 Wraps Chex's PyTree assertions with the strict defaults used throughout the
 test suite and loads behavioral regression arrays from the reference-data
-directory established by WP6.1.
+directory established by WP6.1. It also provides the shared eager/JIT
+rejection contract used by factory validation tests.
+
+Routine Listings
+----------------
+:func:`assert_rejects`
+    Assert invalid inputs are rejected eagerly and under JIT.
+:func:`assert_matches_reference`
+    Compare a numerical tree with a stored regression artifact.
+:func:`assert_tree_finite`
+    Assert every numerical leaf is finite.
+:func:`assert_trees_close`
+    Compare corresponding numerical leaves with strict tolerances.
 """
 
+import re
 from pathlib import Path
 
 import chex
+import equinox as eqx
 import jax
 import numpy as np
 from beartype import beartype
+from beartype.typing import Any, Callable
 from jaxtyping import PyTree, jaxtyped
 
 _REFERENCE_DIRECTORY: Path = (
     Path(__file__).parent / "test_diffpes" / "_reference_data"
 )
+
+
+def _assert_rejection(
+    fn: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    match: str,
+) -> None:
+    """Assert one callable invocation raises the expected validation error."""
+    try:
+        fn(*args, **kwargs)
+    except (ValueError, RuntimeError) as error:
+        if re.search(match, str(error)) is None:
+            message: str = (
+                f"error message {str(error)!r} does not match {match!r}"
+            )
+            raise AssertionError(message) from error
+    else:
+        message = "DID NOT RAISE ValueError or RuntimeError"
+        raise AssertionError(message)
+
+
+@jaxtyped(typechecker=beartype)
+def assert_rejects(
+    fn: Callable[..., Any],
+    *args: Any,
+    match: str,
+    under_jit: bool = True,
+    **kwargs: Any,
+) -> None:
+    """Assert a factory rejects the same invalid input eagerly and under JIT.
+
+    Parameters
+    ----------
+    fn : Callable[..., Any]
+        Factory or other validation callable expected to reject its inputs.
+    *args : Any
+        Positional arguments forwarded to ``fn``.
+    match : str
+        Regular expression that must match the eager and JIT error messages.
+    under_jit : bool, optional
+        Whether to repeat the assertion through :func:`equinox.filter_jit`.
+        Default is ``True``.
+    **kwargs : Any
+        Keyword arguments forwarded to ``fn``.
+
+    Raises
+    ------
+    AssertionError
+        If the callable accepts the invalid input or its error message does
+        not match ``match`` in either requested execution mode.
+    """
+    _assert_rejection(fn, args, kwargs, match)
+    if under_jit:
+        jitted_fn: Callable[..., Any] = eqx.filter_jit(fn)
+        _assert_rejection(jitted_fn, args, kwargs, match)
 
 
 @jaxtyped(typechecker=beartype)

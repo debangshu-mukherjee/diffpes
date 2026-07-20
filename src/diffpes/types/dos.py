@@ -71,8 +71,8 @@ class DensityOfStates(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_density_of_states(
-    energy: Float[Array, " E"],
-    total_dos: Float[Array, " E"],
+    energy: Float[Array, " Ee"],
+    total_dos: Float[Array, " Ed"],
     fermi_energy: ScalarNumeric = 0.0,
 ) -> DensityOfStates:
     """Create a validated DensityOfStates instance.
@@ -104,6 +104,14 @@ def make_density_of_states(
     dos : DensityOfStates
         Validated density of states instance.
 
+    Raises
+    ------
+    ValueError
+        If the energy and DOS channel lengths disagree.
+    EquinoxRuntimeError
+        If the energy axis is not strictly increasing or DOS values are
+        non-finite.
+
     See Also
     --------
     DensityOfStates : The PyTree class constructed by this factory.
@@ -112,27 +120,22 @@ def make_density_of_states(
     dos_arr: Float[Array, " E"] = jnp.asarray(total_dos, dtype=jnp.float64)
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
+    if energy_arr.shape[0] != dos_arr.shape[0]:
+        raise ValueError(
+            "make_density_of_states: energy and total_dos lengths disagree"
+        )
+
     def validate_and_create() -> DensityOfStates:
         nonlocal dos_arr, energy_arr, fermi_arr
         energy_arr = eqx.error_if(
             energy_arr,
-            ~(jnp.all(jnp.isfinite(energy_arr))),
-            "make_density_of_states: energy finite",
+            ~(jnp.all(jnp.diff(energy_arr) > 0.0)),
+            "make_density_of_states: energy strictly increasing",
         )
         dos_arr = eqx.error_if(
             dos_arr,
             ~(jnp.all(jnp.isfinite(dos_arr))),
             "make_density_of_states: dos finite",
-        )
-        dos_arr = eqx.error_if(
-            dos_arr,
-            ~(jnp.all(dos_arr >= 0.0)),
-            "make_density_of_states: dos non negative",
-        )
-        fermi_arr = eqx.error_if(
-            fermi_arr,
-            ~(jnp.isfinite(fermi_arr)),
-            "make_density_of_states: fermi energy finite",
         )
         return DensityOfStates(
             energy=energy_arr,
@@ -225,13 +228,13 @@ class FullDensityOfStates(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_full_density_of_states(
-    energy: Float[Array, " E"],
-    total_dos_up: Float[Array, " E"],
-    integrated_dos_up: Float[Array, " E"],
+    energy: Float[Array, " Ee"],
+    total_dos_up: Float[Array, " Eu"],
+    integrated_dos_up: Float[Array, " Eiu"],
     fermi_energy: ScalarNumeric = 0.0,
-    total_dos_down: Optional[Float[Array, " E"]] = None,
-    integrated_dos_down: Optional[Float[Array, " E"]] = None,
-    pdos: Optional[Float[Array, "A E C"]] = None,
+    total_dos_down: Optional[Float[Array, " Ed"]] = None,
+    integrated_dos_down: Optional[Float[Array, " Eid"]] = None,
+    pdos: Optional[Float[Array, "A Ep C"]] = None,
     natoms: int = 0,
 ) -> FullDensityOfStates:
     """Create a validated ``FullDensityOfStates`` instance.
@@ -295,6 +298,15 @@ def make_full_density_of_states(
         Validated full density of states with all non-None arrays
         in ``float64``.
 
+    Raises
+    ------
+    ValueError
+        If a total, integrated, or projected DOS channel disagrees with the
+        energy-axis length.
+    EquinoxRuntimeError
+        If the energy axis is not strictly increasing or any DOS channel
+        contains non-finite values.
+
     See Also
     --------
     make_density_of_states : Factory for the simplified variant.
@@ -317,33 +329,73 @@ def make_full_density_of_states(
     if pdos is not None:
         pdos_arr = jnp.asarray(pdos, dtype=jnp.float64)
 
+    nenergy: int = energy_arr.shape[0]
+    if up_arr.shape[0] != nenergy:
+        raise ValueError(
+            "make_full_density_of_states: energy and total_dos_up "
+            "lengths disagree"
+        )
+    if int_up_arr.shape[0] != nenergy:
+        raise ValueError(
+            "make_full_density_of_states: energy and integrated_dos_up "
+            "lengths disagree"
+        )
+    if down_arr is not None and down_arr.shape[0] != nenergy:
+        raise ValueError(
+            "make_full_density_of_states: energy and total_dos_down "
+            "lengths disagree"
+        )
+    if int_down_arr is not None and int_down_arr.shape[0] != nenergy:
+        raise ValueError(
+            "make_full_density_of_states: energy and integrated_dos_down "
+            "lengths disagree"
+        )
+    if pdos_arr is not None and pdos_arr.shape[1] != nenergy:
+        raise ValueError(
+            "make_full_density_of_states: energy and pdos E axes disagree"
+        )
+
     def validate_and_create() -> FullDensityOfStates:
-        nonlocal energy_arr, fermi_arr, int_up_arr, up_arr
+        nonlocal \
+            down_arr, \
+            energy_arr, \
+            int_down_arr, \
+            int_up_arr, \
+            pdos_arr, \
+            up_arr
         energy_arr = eqx.error_if(
             energy_arr,
-            ~(jnp.all(jnp.isfinite(energy_arr))),
-            "make_full_density_of_states: energy finite",
+            ~(jnp.all(jnp.diff(energy_arr) > 0.0)),
+            "make_full_density_of_states: energy strictly increasing",
         )
         up_arr = eqx.error_if(
             up_arr,
             ~(jnp.all(jnp.isfinite(up_arr))),
             "make_full_density_of_states: dos up finite",
         )
-        up_arr = eqx.error_if(
-            up_arr,
-            ~(jnp.all(up_arr >= 0.0)),
-            "make_full_density_of_states: dos up non negative",
-        )
         int_up_arr = eqx.error_if(
             int_up_arr,
             ~(jnp.all(jnp.isfinite(int_up_arr))),
             "make_full_density_of_states: integrated dos up finite",
         )
-        fermi_arr = eqx.error_if(
-            fermi_arr,
-            ~(jnp.isfinite(fermi_arr)),
-            "make_full_density_of_states: fermi energy finite",
-        )
+        if down_arr is not None:
+            down_arr = eqx.error_if(
+                down_arr,
+                ~(jnp.all(jnp.isfinite(down_arr))),
+                "make_full_density_of_states: dos down finite",
+            )
+        if int_down_arr is not None:
+            int_down_arr = eqx.error_if(
+                int_down_arr,
+                ~(jnp.all(jnp.isfinite(int_down_arr))),
+                "make_full_density_of_states: integrated dos down finite",
+            )
+        if pdos_arr is not None:
+            pdos_arr = eqx.error_if(
+                pdos_arr,
+                ~(jnp.all(jnp.isfinite(pdos_arr))),
+                "make_full_density_of_states: pdos finite",
+            )
         return FullDensityOfStates(
             energy=energy_arr,
             total_dos_up=up_arr,

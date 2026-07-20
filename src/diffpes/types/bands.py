@@ -43,6 +43,8 @@ from beartype.typing import Optional, Union
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
+from .orbital_constants import _N_ORBITALS
+from .vasp_constants import _N_SPIN_COMPONENTS
 
 
 class BandStructure(eqx.Module):
@@ -131,9 +133,9 @@ class SpinOrbitalProjection(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_spin_orbital_projection(
-    projections: Float[Array, "K B A 9"],
-    spin: Float[Array, "K B A 6"],
-    oam: Optional[Float[Array, "K B A 3"]] = None,
+    projections: Float[Array, "Kp Bp Ap Op"],
+    spin: Float[Array, "Ks Bs As Ss"],
+    oam: Optional[Float[Array, "Ko Bo Ao 3"]] = None,
 ) -> SpinOrbitalProjection:
     """Create a validated ``SpinOrbitalProjection`` instance.
 
@@ -180,6 +182,16 @@ def make_spin_orbital_projection(
     soc_proj : SpinOrbitalProjection
         Validated instance with all non-None arrays in ``float64``.
 
+    Raises
+    ------
+    ValueError
+        If the projection, spin, and optional OAM axes disagree, the
+        projection orbital axis does not contain 9 columns, or the spin
+        component axis does not contain 6 columns.
+    EquinoxRuntimeError
+        If projection values are non-finite or negative, or spin values are
+        non-finite.
+
     See Also
     --------
     make_orbital_projection : Factory for the optional-spin variant.
@@ -193,6 +205,24 @@ def make_spin_orbital_projection(
     oam_arr: Optional[Float[Array, "K B A 3"]] = None
     if oam is not None:
         oam_arr = jnp.asarray(oam, dtype=jnp.float64)
+
+    if proj_arr.shape[:3] != spin_arr.shape[:3]:
+        raise ValueError(
+            "make_spin_orbital_projection: projections and spin axes disagree"
+        )
+    if proj_arr.shape[3] != _N_ORBITALS:
+        raise ValueError(
+            "make_spin_orbital_projection: projections must have "
+            f"{_N_ORBITALS} orbital columns"
+        )
+    if spin_arr.shape[3] != _N_SPIN_COMPONENTS:
+        raise ValueError(
+            "make_spin_orbital_projection: spin must have 6 component columns"
+        )
+    if oam_arr is not None and proj_arr.shape[:3] != oam_arr.shape[:3]:
+        raise ValueError(
+            "make_spin_orbital_projection: projections and oam axes disagree"
+        )
 
     def validate_and_create() -> SpinOrbitalProjection:
         nonlocal proj_arr, spin_arr
@@ -278,10 +308,10 @@ class SpinBandStructure(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_spin_band_structure(
-    eigenvalues_up: Float[Array, "K B"],
-    eigenvalues_down: Float[Array, "K B"],
-    kpoints: Float[Array, "K 3"],
-    kpoint_weights: Union[Float[Array, " K"], None] = None,
+    eigenvalues_up: Float[Array, "Ku Bu"],
+    eigenvalues_down: Float[Array, "Kd Bd"],
+    kpoints: Float[Array, "Kk 3"],
+    kpoint_weights: Union[Float[Array, " Kw"], None] = None,
     fermi_energy: ScalarNumeric = 0.0,
 ) -> SpinBandStructure:
     """Create a validated ``SpinBandStructure`` instance.
@@ -338,6 +368,15 @@ def make_spin_band_structure(
         Validated spin-resolved band structure with all arrays in
         ``float64``.
 
+    Raises
+    ------
+    ValueError
+        If the spin channels disagree on their k-point or band counts, or
+        the k-point and weight counts disagree with the eigenvalues.
+    EquinoxRuntimeError
+        If eigenvalues or k-points are non-finite, or weights are non-finite
+        or negative.
+
     See Also
     --------
     make_band_structure : Factory for single-spin-channel data.
@@ -357,6 +396,21 @@ def make_spin_band_structure(
         weights_arr = jnp.asarray(kpoint_weights, dtype=jnp.float64)
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
+    if up_arr.shape != down_arr.shape:
+        raise ValueError(
+            "make_spin_band_structure: spin channels disagree on K/B axes"
+        )
+    if kpts_arr.shape[0] != nkpts:
+        raise ValueError(
+            "make_spin_band_structure: eigenvalues and kpoints disagree "
+            "on K axis"
+        )
+    if weights_arr.shape[0] != nkpts:
+        raise ValueError(
+            "make_spin_band_structure: eigenvalues and weights disagree "
+            "on K axis"
+        )
+
     def validate_and_create() -> SpinBandStructure:
         nonlocal down_arr, kpts_arr, up_arr, weights_arr
         up_arr = eqx.error_if(
@@ -373,6 +427,11 @@ def make_spin_band_structure(
             kpts_arr,
             ~(jnp.all(jnp.isfinite(kpts_arr))),
             "make_spin_band_structure: kpoints finite",
+        )
+        weights_arr = eqx.error_if(
+            weights_arr,
+            ~(jnp.all(jnp.isfinite(weights_arr))),
+            "make_spin_band_structure: weights finite",
         )
         weights_arr = eqx.error_if(
             weights_arr,
@@ -428,9 +487,9 @@ class ArpesSpectrum(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_band_structure(
-    eigenvalues: Float[Array, "K B"],
-    kpoints: Float[Array, "K 3"],
-    kpoint_weights: Union[Float[Array, " K"], None] = None,
+    eigenvalues: Float[Array, "Ke B"],
+    kpoints: Float[Array, "Kk 3"],
+    kpoint_weights: Union[Float[Array, " Kw"], None] = None,
     fermi_energy: ScalarNumeric = 0.0,
 ) -> BandStructure:
     """Create a validated ``BandStructure`` instance.
@@ -481,6 +540,15 @@ def make_band_structure(
     bands : BandStructure
         Validated band structure instance with all arrays in
         ``float64``.
+
+    Raises
+    ------
+    ValueError
+        If eigenvalues, k-points, and weights disagree on their k-point
+        count.
+    EquinoxRuntimeError
+        If eigenvalues or k-points are non-finite, or weights are non-finite
+        or negative.
     """
     eigenvalues_arr: Float[Array, "K B"] = jnp.asarray(
         eigenvalues, dtype=jnp.float64
@@ -493,6 +561,15 @@ def make_band_structure(
         weights_arr = jnp.asarray(kpoint_weights, dtype=jnp.float64)
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
+    if kpoints_arr.shape[0] != nkpts:
+        raise ValueError(
+            "make_band_structure: eigenvalues and kpoints disagree on K axis"
+        )
+    if weights_arr.shape[0] != nkpts:
+        raise ValueError(
+            "make_band_structure: eigenvalues and weights disagree on K axis"
+        )
+
     def validate_and_create() -> BandStructure:
         nonlocal eigenvalues_arr, kpoints_arr, weights_arr
         eigenvalues_arr = eqx.error_if(
@@ -504,6 +581,11 @@ def make_band_structure(
             kpoints_arr,
             ~(jnp.all(jnp.isfinite(kpoints_arr))),
             "make_band_structure: kpoints finite",
+        )
+        weights_arr = eqx.error_if(
+            weights_arr,
+            ~(jnp.all(jnp.isfinite(weights_arr))),
+            "make_band_structure: weights finite",
         )
         weights_arr = eqx.error_if(
             weights_arr,
@@ -523,9 +605,9 @@ def make_band_structure(
 
 @jaxtyped(typechecker=beartype)
 def make_orbital_projection(
-    projections: Float[Array, "K B A 9"],
-    spin: Optional[Float[Array, "K B A 6"]] = None,
-    oam: Optional[Float[Array, "K B A 3"]] = None,
+    projections: Float[Array, "Kp Bp Ap Op"],
+    spin: Optional[Float[Array, "Ks Bs As 6"]] = None,
+    oam: Optional[Float[Array, "Ko Bo Ao 3"]] = None,
 ) -> OrbitalProjection:
     """Create a validated ``OrbitalProjection`` instance.
 
@@ -570,6 +652,15 @@ def make_orbital_projection(
     orb_proj : OrbitalProjection
         Validated orbital projection instance with all non-None
         arrays in ``float64``.
+
+    Raises
+    ------
+    ValueError
+        If optional channel axes disagree with the projection axes or the
+        projection orbital axis does not contain 9 columns.
+    EquinoxRuntimeError
+        If projections are non-finite or negative, or a present spin channel
+        is non-finite.
     """
     proj_arr: Float[Array, "K B A 9"] = jnp.asarray(
         projections, dtype=jnp.float64
@@ -581,8 +672,22 @@ def make_orbital_projection(
     if oam is not None:
         oam_arr = jnp.asarray(oam, dtype=jnp.float64)
 
+    if proj_arr.shape[3] != _N_ORBITALS:
+        raise ValueError(
+            "make_orbital_projection: projections must have "
+            f"{_N_ORBITALS} orbital columns"
+        )
+    if spin_arr is not None and proj_arr.shape[:3] != spin_arr.shape[:3]:
+        raise ValueError(
+            "make_orbital_projection: projections and spin axes disagree"
+        )
+    if oam_arr is not None and proj_arr.shape[:3] != oam_arr.shape[:3]:
+        raise ValueError(
+            "make_orbital_projection: projections and oam axes disagree"
+        )
+
     def validate_and_create() -> OrbitalProjection:
-        nonlocal proj_arr
+        nonlocal proj_arr, spin_arr
         proj_arr = eqx.error_if(
             proj_arr,
             ~(jnp.all(jnp.isfinite(proj_arr))),
@@ -593,6 +698,12 @@ def make_orbital_projection(
             ~(jnp.all(proj_arr >= 0.0)),
             "make_orbital_projection: projections non negative",
         )
+        if spin_arr is not None:
+            spin_arr = eqx.error_if(
+                spin_arr,
+                ~(jnp.all(jnp.isfinite(spin_arr))),
+                "make_orbital_projection: spin finite",
+            )
         return OrbitalProjection(
             projections=proj_arr,
             spin=spin_arr,
@@ -605,8 +716,8 @@ def make_orbital_projection(
 
 @jaxtyped(typechecker=beartype)
 def make_arpes_spectrum(
-    intensity: Float[Array, "K E"],
-    energy_axis: Float[Array, " E"],
+    intensity: Float[Array, "K Ei"],
+    energy_axis: Float[Array, " Ea"],
 ) -> ArpesSpectrum:
     """Create a validated ``ArpesSpectrum`` instance.
 
@@ -645,6 +756,14 @@ def make_arpes_spectrum(
     spectrum : ArpesSpectrum
         Validated ARPES spectrum instance with all arrays in
         ``float64``.
+
+    Raises
+    ------
+    ValueError
+        If the intensity energy-axis length does not match ``energy_axis``.
+    EquinoxRuntimeError
+        If intensity is non-finite or the energy axis is not strictly
+        increasing.
     """
     intensity_arr: Float[Array, "K E"] = jnp.asarray(
         intensity, dtype=jnp.float64
@@ -652,6 +771,11 @@ def make_arpes_spectrum(
     energy_arr: Float[Array, " E"] = jnp.asarray(
         energy_axis, dtype=jnp.float64
     )
+
+    if intensity_arr.shape[1] != energy_arr.shape[0]:
+        raise ValueError(
+            "make_arpes_spectrum: intensity and energy_axis disagree on E axis"
+        )
 
     def validate_and_create() -> ArpesSpectrum:
         nonlocal energy_arr, intensity_arr
@@ -662,8 +786,8 @@ def make_arpes_spectrum(
         )
         energy_arr = eqx.error_if(
             energy_arr,
-            ~(jnp.all(jnp.isfinite(energy_arr))),
-            "make_arpes_spectrum: energy axis finite",
+            ~(jnp.all(jnp.diff(energy_arr) > 0.0)),
+            "make_arpes_spectrum: energy axis strictly increasing",
         )
         return ArpesSpectrum(
             intensity=intensity_arr,

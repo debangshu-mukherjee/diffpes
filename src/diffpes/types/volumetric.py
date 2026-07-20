@@ -117,8 +117,8 @@ class VolumetricData(eqx.Module):
 def make_volumetric_data(
     lattice: Float[Array, "3 3"],
     coords: Float[Array, "N 3"],
-    charge: Float[Array, "Nx Ny Nz"],
-    magnetization: Optional[Float[Array, "Nx Ny Nz"]] = None,
+    charge: Float[Array, "Cx Cy Cz"],
+    magnetization: Optional[Float[Array, "Mx My Mz"]] = None,
     grid_shape: tuple[int, int, int] = (1, 1, 1),
     symbols: tuple[str, ...] = (),
     atom_counts: Optional[Int[Array, " S"]] = None,
@@ -176,6 +176,15 @@ def make_volumetric_data(
     vol : VolumetricData
         Validated volumetric data with ``float64``/``int32`` arrays.
 
+    Raises
+    ------
+    ValueError
+        If ``grid_shape`` does not match ``charge`` or the optional
+        ``magnetization`` grid.
+    EquinoxRuntimeError
+        If the lattice or any volumetric grid contains a non-finite
+        value.
+
     See Also
     --------
     VolumetricData : The PyTree class constructed by this factory.
@@ -194,9 +203,15 @@ def make_volumetric_data(
         counts_arr: Int[Array, " S"] = jnp.zeros(0, dtype=jnp.int32)
     else:
         counts_arr = jnp.asarray(atom_counts, dtype=jnp.int32)
+    if charge_arr.shape != grid_shape:
+        msg: str = "grid_shape must match charge shape"
+        raise ValueError(msg)
+    if mag_arr is not None and mag_arr.shape != grid_shape:
+        msg = "grid_shape must match magnetization shape"
+        raise ValueError(msg)
 
     def validate_and_create() -> VolumetricData:
-        nonlocal charge_arr, lattice_arr
+        nonlocal charge_arr, lattice_arr, mag_arr
         lattice_arr = eqx.error_if(
             lattice_arr,
             ~(jnp.all(jnp.isfinite(lattice_arr))),
@@ -207,6 +222,12 @@ def make_volumetric_data(
             ~(jnp.all(jnp.isfinite(charge_arr))),
             "make_volumetric_data: charge finite",
         )
+        if mag_arr is not None:
+            mag_arr = eqx.error_if(
+                mag_arr,
+                ~(jnp.all(jnp.isfinite(mag_arr))),
+                "make_volumetric_data: magnetization finite",
+            )
         return VolumetricData(
             lattice=lattice_arr,
             coords=coords_arr,
@@ -299,9 +320,9 @@ class SOCVolumetricData(eqx.Module):
 def make_soc_volumetric_data(
     lattice: Float[Array, "3 3"],
     coords: Float[Array, "N 3"],
-    charge: Float[Array, "Nx Ny Nz"],
-    magnetization: Float[Array, "Nx Ny Nz"],
-    magnetization_vector: Float[Array, "Nx Ny Nz 3"],
+    charge: Float[Array, "Cx Cy Cz"],
+    magnetization: Float[Array, "Mx My Mz"],
+    magnetization_vector: Float[Array, "Vx Vy Vz 3"],
     grid_shape: tuple[int, int, int] = (1, 1, 1),
     symbols: tuple[str, ...] = (),
     atom_counts: Optional[Int[Array, " S"]] = None,
@@ -363,6 +384,15 @@ def make_soc_volumetric_data(
         Validated SOC volumetric data with ``float64``/``int32``
         arrays.
 
+    Raises
+    ------
+    ValueError
+        If ``grid_shape`` does not match the charge, scalar
+        magnetization, or vector-magnetization grids.
+    EquinoxRuntimeError
+        If the lattice or any volumetric grid contains a non-finite
+        value.
+
     See Also
     --------
     SOCVolumetricData : The PyTree class constructed by this factory.
@@ -378,9 +408,25 @@ def make_soc_volumetric_data(
     soc_charge_arr: Float[Array, "Nx Ny Nz"] = jnp.asarray(
         charge, dtype=jnp.float64
     )
+    soc_mag_arr: Float[Array, "Nx Ny Nz"] = jnp.asarray(
+        magnetization, dtype=jnp.float64
+    )
+    soc_mag_vector_arr: Float[Array, "Nx Ny Nz 3"] = jnp.asarray(
+        magnetization_vector, dtype=jnp.float64
+    )
+    if soc_charge_arr.shape != grid_shape:
+        msg: str = "grid_shape must match charge shape"
+        raise ValueError(msg)
+    if soc_mag_arr.shape != grid_shape:
+        msg = "grid_shape must match magnetization shape"
+        raise ValueError(msg)
+    if soc_mag_vector_arr.shape[:3] != grid_shape:
+        msg = "grid_shape must match magnetization_vector spatial shape"
+        raise ValueError(msg)
 
     def validate_and_create() -> SOCVolumetricData:
-        nonlocal soc_charge_arr, soc_lattice_arr
+        nonlocal soc_charge_arr, soc_lattice_arr, soc_mag_arr
+        nonlocal soc_mag_vector_arr
         soc_lattice_arr = eqx.error_if(
             soc_lattice_arr,
             ~(jnp.all(jnp.isfinite(soc_lattice_arr))),
@@ -391,14 +437,22 @@ def make_soc_volumetric_data(
             ~(jnp.all(jnp.isfinite(soc_charge_arr))),
             "make_soc_volumetric_data: charge finite",
         )
+        soc_mag_arr = eqx.error_if(
+            soc_mag_arr,
+            ~(jnp.all(jnp.isfinite(soc_mag_arr))),
+            "make_soc_volumetric_data: magnetization finite",
+        )
+        soc_mag_vector_arr = eqx.error_if(
+            soc_mag_vector_arr,
+            ~(jnp.all(jnp.isfinite(soc_mag_vector_arr))),
+            "make_soc_volumetric_data: magnetization vector finite",
+        )
         return SOCVolumetricData(
             lattice=soc_lattice_arr,
             coords=jnp.asarray(coords, dtype=jnp.float64),
             charge=soc_charge_arr,
-            magnetization=jnp.asarray(magnetization, dtype=jnp.float64),
-            magnetization_vector=jnp.asarray(
-                magnetization_vector, dtype=jnp.float64
-            ),
+            magnetization=soc_mag_arr,
+            magnetization_vector=soc_mag_vector_arr,
             grid_shape=grid_shape,
             symbols=symbols,
             atom_counts=counts_arr,

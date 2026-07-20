@@ -129,9 +129,9 @@ class TBModel(eqx.Module):
 
 @jaxtyped(typechecker=beartype)
 def make_diagonalized_bands(
-    eigenvalues: Float[Array, "K B"],
-    eigenvectors: Complex[Array, "K B O"],
-    kpoints: Float[Array, "K 3"],
+    eigenvalues: Float[Array, "Ke Be"],
+    eigenvectors: Complex[Array, "Kv Bv O"],
+    kpoints: Float[Array, "Kk 3"],
     fermi_energy: ScalarNumeric = 0.0,
 ) -> DiagonalizedBands:
     """Create a validated ``DiagonalizedBands`` instance.
@@ -181,6 +181,14 @@ def make_diagonalized_bands(
         Validated instance with ``float64`` eigenvalues/kpoints
         and ``complex128`` eigenvectors.
 
+    Raises
+    ------
+    ValueError
+        If the k-point or band dimensions disagree across the arrays.
+    EquinoxRuntimeError
+        If eigenvalues, eigenvectors, k-points, or the Fermi energy
+        contain a non-finite value.
+
     See Also
     --------
     DiagonalizedBands : The PyTree class constructed by this factory.
@@ -191,9 +199,15 @@ def make_diagonalized_bands(
     )
     kpt_arr: Float[Array, "K 3"] = jnp.asarray(kpoints, dtype=jnp.float64)
     ef_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
+    if eig_arr.shape != vec_arr.shape[:2]:
+        msg: str = "eigenvalues and eigenvectors must agree on K and B"
+        raise ValueError(msg)
+    if eig_arr.shape[0] != kpt_arr.shape[0]:
+        msg = "eigenvalues and kpoints must agree on K"
+        raise ValueError(msg)
 
     def validate_and_create() -> DiagonalizedBands:
-        nonlocal ef_arr, eig_arr, kpt_arr
+        nonlocal ef_arr, eig_arr, kpt_arr, vec_arr
         eig_arr = eqx.error_if(
             eig_arr,
             ~(jnp.all(jnp.isfinite(eig_arr))),
@@ -203,6 +217,11 @@ def make_diagonalized_bands(
             kpt_arr,
             ~(jnp.all(jnp.isfinite(kpt_arr))),
             "make_diagonalized_bands: kpoints finite",
+        )
+        vec_arr = eqx.error_if(
+            vec_arr,
+            ~(jnp.all(jnp.isfinite(vec_arr))),
+            "make_diagonalized_bands: eigenvectors finite",
         )
         ef_arr = eqx.error_if(
             ef_arr,
@@ -279,6 +298,16 @@ def make_tb_model(
         Validated tight-binding model with ``float64`` arrays and
         static structural metadata.
 
+    Raises
+    ------
+    ValueError
+        If the hopping parameter count does not match the connectivity,
+        an orbital index lies outside ``[0, n_orbitals)``, or the orbital
+        basis size differs from ``n_orbitals``.
+    EquinoxRuntimeError
+        If hoppings or lattice vectors are non-finite, or if the lattice
+        is degenerate.
+
     See Also
     --------
     TBModel : The PyTree class constructed by this factory.
@@ -290,6 +319,19 @@ def make_tb_model(
     lat_arr: Float[Array, "3 3"] = jnp.asarray(
         lattice_vectors, dtype=jnp.float64
     )
+    if hop_arr.shape[0] != len(hopping_indices):
+        msg: str = "hopping_params and hopping_indices must have equal length"
+        raise ValueError(msg)
+    if len(orbital_basis.n_values) != n_orbitals:
+        msg = "orbital_basis size must match n_orbitals"
+        raise ValueError(msg)
+    if any(
+        index < 0 or index >= n_orbitals
+        for hopping in hopping_indices
+        for index in hopping[:2]
+    ):
+        msg = "hopping orbital indices must be in [0, n_orbitals)"
+        raise ValueError(msg)
 
     def validate_and_create() -> TBModel:
         nonlocal hop_arr, lat_arr
@@ -302,6 +344,11 @@ def make_tb_model(
             lat_arr,
             ~(jnp.all(jnp.isfinite(lat_arr))),
             "make_tb_model: lattice finite",
+        )
+        lat_arr = eqx.error_if(
+            lat_arr,
+            jnp.linalg.det(lat_arr) == 0.0,
+            "make_tb_model: lattice non-degenerate",
         )
         return TBModel(
             hopping_params=hop_arr,

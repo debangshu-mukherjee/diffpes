@@ -45,12 +45,33 @@ from diffpes.inout import (
 from diffpes.types import (
     ArpesSpectrum,
     BandStructure,
+    KPathInfo,
     make_arpes_spectrum,
     make_band_structure,
     make_kpath_info,
     make_orbital_projection,
     make_spin_orbital_projection,
 )
+
+
+def _unvalidated_kpath(
+    label_indices: list[int], labels: tuple[str, ...]
+) -> KPathInfo:
+    """Build malformed legacy k-path metadata for plotting edge tests."""
+    return KPathInfo(
+        num_kpoints=jnp.asarray(60, dtype=jnp.int32),
+        label_indices=jnp.asarray(label_indices, dtype=jnp.int32),
+        points_per_segment=jnp.asarray(0, dtype=jnp.int32),
+        segments=jnp.asarray(0, dtype=jnp.int32),
+        kpoints=None,
+        weights=None,
+        grid=None,
+        shift=None,
+        mode="Line-mode",
+        labels=labels,
+        comment="",
+        coordinate_mode="",
+    )
 
 
 def _make_spectrum(nk=20, ne=120):
@@ -212,6 +233,7 @@ class TestApplyKpathTicks(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=60,
             label_indices=[0, 19, 39, 59],
+            segments=3,
             labels=("G", "M", "K", "G"),
         )
         apply_kpath_ticks(ax, kpath)
@@ -228,11 +250,7 @@ class TestApplyKpathTicks(chex.TestCase):
         is exercised and no index error occurs.
         """
         fig, ax = plt.subplots()
-        kpath = make_kpath_info(
-            num_kpoints=60,
-            label_indices=[0, 19, 39, 59],
-            labels=("G", "M"),
-        )
+        kpath = _unvalidated_kpath([0, 19, 39, 59], ("G", "M"))
         apply_kpath_ticks(ax, kpath)
         labels = [tick.get_text() for tick in ax.get_xticklabels()]
         chex.assert_equal(labels, ["G", "M"])
@@ -247,11 +265,7 @@ class TestApplyKpathTicks(chex.TestCase):
         setting) is taken without error.
         """
         fig, ax = plt.subplots()
-        kpath = make_kpath_info(
-            num_kpoints=20,
-            label_indices=[],
-            labels=(),
-        )
+        kpath = _unvalidated_kpath([], ())
         out = apply_kpath_ticks(ax, kpath)
         chex.assert_equal(out is ax, True)
         plt.close(fig)
@@ -278,6 +292,7 @@ class TestPlotArpesWithKpath(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=20,
             label_indices=[0, 9, 19],
+            segments=2,
             labels=("G", "M", "K"),
         )
         fig, ax, image = plot_arpes_with_kpath(
@@ -372,6 +387,7 @@ class TestPlotBandScatter(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=10,
             label_indices=[0, 4, 9],
+            segments=2,
             labels=("G", "M", "K"),
         )
         fig, ax, scatter = plot_band_scatter_with_kpath(

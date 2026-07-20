@@ -25,9 +25,13 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Union
+from jax.core import Tracer
 from jaxtyping import Array, Float, Int, jaxtyped
 
 from .aliases import ScalarNumeric
+
+_MAX_LATTICE_CONDITION_NUMBER: float = 1e12
+_MIN_SCALED_SINGULAR_VALUE: float = 1e-12
 
 
 class CrystalGeometry(eqx.Module):
@@ -179,6 +183,18 @@ def make_crystal_geometry(
         Validated crystal geometry instance with the reciprocal
         lattice pre-computed.
 
+    Raises
+    ------
+    ValueError
+        If a non-empty symbol tuple differs from the number of species,
+        or if the atom counts do not sum to the number of positions. Empty
+        symbols remain valid for VASP 4 files without a species line.
+    EquinoxRuntimeError
+        If coordinates or lattice entries are non-finite, if the
+        lattice is not right-handed, or if its scaled smallest
+        singular value or condition number violates the named
+        numerical stability limits.
+
     See Also
     --------
     CrystalGeometry : The PyTree class constructed by this factory.
@@ -188,24 +204,57 @@ def make_crystal_geometry(
     lattice_arr: Float[Array, "3 3"] = jnp.asarray(lattice, dtype=jnp.float64)
     coords_arr: Float[Array, "N 3"] = jnp.asarray(coords, dtype=jnp.float64)
     counts_arr: Int[Array, " S"] = jnp.asarray(atom_counts, dtype=jnp.int32)
-    reciprocal: Float[Array, "3 3"] = _compute_reciprocal_lattice(lattice_arr)
+
+    if symbols and len(symbols) != counts_arr.shape[0]:
+        msg = "make_crystal_geometry: symbols and atom_counts must agree"
+        raise ValueError(msg)
+    if (
+        not isinstance(counts_arr, Tracer)
+        and int(jnp.sum(counts_arr)) != coords_arr.shape[0]
+    ):
+        msg = "make_crystal_geometry: atom_counts must sum to positions"
+        raise ValueError(msg)
 
     def validate_and_create() -> CrystalGeometry:
-        nonlocal coords_arr, lattice_arr
+        nonlocal coords_arr, counts_arr, lattice_arr
+        counts_arr = eqx.error_if(
+            counts_arr,
+            jnp.sum(counts_arr) != coords_arr.shape[0],
+            "make_crystal_geometry: atom_counts must sum to positions",
+        )
         lattice_arr = eqx.error_if(
             lattice_arr,
             ~(jnp.all(jnp.isfinite(lattice_arr))),
             "make_crystal_geometry: lattice finite",
         )
+        determinant: Float[Array, " "] = jnp.linalg.det(lattice_arr)
         lattice_arr = eqx.error_if(
             lattice_arr,
-            ~(jnp.abs(jnp.linalg.det(lattice_arr)) > 1e-10),
-            "make_crystal_geometry: lattice nondegenerate",
+            ~(determinant > 0.0),
+            "make_crystal_geometry: lattice must be right-handed",
+        )
+        singular_values: Float[Array, " 3"] = jnp.linalg.svdvals(lattice_arr)
+        largest: Float[Array, " "] = singular_values[0]
+        smallest: Float[Array, " "] = singular_values[-1]
+        scaled_smallest: Float[Array, " "] = smallest / largest
+        lattice_arr = eqx.error_if(
+            lattice_arr,
+            scaled_smallest < _MIN_SCALED_SINGULAR_VALUE,
+            "make_crystal_geometry: scaled singular value below limit",
+        )
+        condition_number: Float[Array, " "] = largest / smallest
+        lattice_arr = eqx.error_if(
+            lattice_arr,
+            condition_number > _MAX_LATTICE_CONDITION_NUMBER,
+            "make_crystal_geometry: lattice condition number exceeds limit",
         )
         coords_arr = eqx.error_if(
             coords_arr,
             ~(jnp.all(jnp.isfinite(coords_arr))),
             "make_crystal_geometry: coords finite",
+        )
+        reciprocal: Float[Array, "3 3"] = _compute_reciprocal_lattice(
+            lattice_arr
         )
         return CrystalGeometry(
             lattice=lattice_arr,

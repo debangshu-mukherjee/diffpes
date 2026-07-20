@@ -19,7 +19,10 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional, Union
+from jax.core import Tracer
 from jaxtyping import Array, Float, Int, jaxtyped
+
+_KPATH_MODES: tuple[str, ...] = ("Automatic", "Line-mode", "Explicit")
 
 
 class KPathInfo(eqx.Module):
@@ -182,14 +185,40 @@ def make_kpath_info(  # noqa: PLR0913
     kpath : KPathInfo
         Validated k-path info instance.
 
+    Raises
+    ------
+    ValueError
+        If ``mode`` is unsupported, or if line mode has no label index,
+        mismatched labels and label indices, or fewer than one segment.
+    EquinoxRuntimeError
+        If a traced line-mode segment count is less than one, or if a
+        supplied segment array contains non-finite values.
+
     See Also
     --------
     KPathInfo : The PyTree class constructed by this factory.
     """
+    if mode not in _KPATH_MODES:
+        msg = f"make_kpath_info: mode must be one of {_KPATH_MODES}"
+        raise ValueError(msg)
+    if mode == "Line-mode" and len(label_indices) < 1:
+        msg = "make_kpath_info: at least one label index is required"
+        raise ValueError(msg)
+    if mode == "Line-mode" and labels and len(labels) != len(label_indices):
+        msg = "make_kpath_info: labels and label_indices must agree"
+        raise ValueError(msg)
+
     nkpts_arr: Int[Array, " "] = jnp.asarray(num_kpoints, dtype=jnp.int32)
     indices_arr: Int[Array, " L"] = jnp.asarray(label_indices, dtype=jnp.int32)
     pps_arr: Int[Array, " "] = jnp.asarray(points_per_segment, dtype=jnp.int32)
     segments_arr: Int[Array, " "] = jnp.asarray(segments, dtype=jnp.int32)
+    if (
+        mode == "Line-mode"
+        and not isinstance(segments_arr, Tracer)
+        and int(segments_arr) < 1
+    ):
+        msg = "make_kpath_info: line mode requires at least one segment"
+        raise ValueError(msg)
     kpoints_arr: Optional[Float[Array, "K 3"]] = None
     if kpoints is not None:
         kpoints_arr = jnp.asarray(kpoints, dtype=jnp.float64)
@@ -204,12 +233,36 @@ def make_kpath_info(  # noqa: PLR0913
         shift_arr = jnp.asarray(shift, dtype=jnp.float64)
 
     def validate_and_create() -> KPathInfo:
-        nonlocal nkpts_arr
+        nonlocal kpoints_arr, nkpts_arr, segments_arr, shift_arr, weights_arr
         nkpts_arr = eqx.error_if(
             nkpts_arr,
             ~(nkpts_arr >= 0),
             "make_kpath_info: num kpoints non negative",
         )
+        if mode == "Line-mode":
+            segments_arr = eqx.error_if(
+                segments_arr,
+                segments_arr < 1,
+                "make_kpath_info: line mode requires at least one segment",
+            )
+        if kpoints_arr is not None:
+            kpoints_arr = eqx.error_if(
+                kpoints_arr,
+                ~jnp.all(jnp.isfinite(kpoints_arr)),
+                "make_kpath_info: kpoints must be finite",
+            )
+        if weights_arr is not None:
+            weights_arr = eqx.error_if(
+                weights_arr,
+                ~jnp.all(jnp.isfinite(weights_arr)),
+                "make_kpath_info: weights must be finite",
+            )
+        if shift_arr is not None:
+            shift_arr = eqx.error_if(
+                shift_arr,
+                ~jnp.all(jnp.isfinite(shift_arr)),
+                "make_kpath_info: shift must be finite",
+            )
         return KPathInfo(
             num_kpoints=nkpts_arr,
             label_indices=indices_arr,

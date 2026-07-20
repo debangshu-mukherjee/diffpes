@@ -387,6 +387,7 @@ class TestKPathInfo(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=100,
             label_indices=[0, 49, 99],
+            segments=2,
             mode="Line-mode",
             labels=("G", "M", "K"),
         )

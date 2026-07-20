@@ -33,6 +33,16 @@ from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarFloat, ScalarNumeric
 
+_POLARIZATION_TYPES: tuple[str, ...] = (
+    "LVP",
+    "LHP",
+    "RCP",
+    "LCP",
+    "LAP",
+    "unpolarized",
+)
+_MIN_FIDELITY: int = 2
+
 
 class SimulationParams(eqx.Module):
     """PyTree for ARPES simulation parameters.
@@ -201,10 +211,23 @@ def make_simulation_params(
     params : SimulationParams
         Validated simulation parameters.
 
+    Raises
+    ------
+    ValueError
+        If ``fidelity`` is less than two.
+    EquinoxRuntimeError
+        If an energy bound or physical scalar is non-finite, if
+        ``energy_min >= energy_max``, or if any broadening width,
+        temperature, or photon energy is not positive.
+
     See Also
     --------
     SimulationParams : The PyTree class constructed by this factory.
     """
+    if fidelity < _MIN_FIDELITY:
+        msg = "make_simulation_params: fidelity must be at least 2"
+        raise ValueError(msg)
+
     emin_arr: Float[Array, " "] = jnp.asarray(energy_min, dtype=jnp.float64)
     emax_arr: Float[Array, " "] = jnp.asarray(energy_max, dtype=jnp.float64)
     sigma_arr: Float[Array, " "] = jnp.asarray(sigma, dtype=jnp.float64)
@@ -213,31 +236,61 @@ def make_simulation_params(
     pe_arr: Float[Array, " "] = jnp.asarray(photon_energy, dtype=jnp.float64)
 
     def validate_and_create() -> SimulationParams:
-        nonlocal emin_arr, gamma_arr, pe_arr, sigma_arr, temp_arr
+        nonlocal emax_arr, emin_arr, gamma_arr, pe_arr, sigma_arr, temp_arr
+        emin_arr = eqx.error_if(
+            emin_arr,
+            ~jnp.isfinite(emin_arr),
+            "make_simulation_params: energy_min must be finite",
+        )
+        emax_arr = eqx.error_if(
+            emax_arr,
+            ~jnp.isfinite(emax_arr),
+            "make_simulation_params: energy_max must be finite",
+        )
         emin_arr = eqx.error_if(
             emin_arr,
             ~(emin_arr < emax_arr),
-            "make_simulation_params: energy window",
+            "make_simulation_params: energy_min must be less than energy_max",
+        )
+        sigma_arr = eqx.error_if(
+            sigma_arr,
+            ~jnp.isfinite(sigma_arr),
+            "make_simulation_params: sigma must be finite",
         )
         sigma_arr = eqx.error_if(
             sigma_arr,
             ~(sigma_arr > 0.0),
-            "make_simulation_params: sigma positive",
+            "make_simulation_params: sigma must be positive",
+        )
+        gamma_arr = eqx.error_if(
+            gamma_arr,
+            ~jnp.isfinite(gamma_arr),
+            "make_simulation_params: gamma must be finite",
         )
         gamma_arr = eqx.error_if(
             gamma_arr,
             ~(gamma_arr > 0.0),
-            "make_simulation_params: gamma positive",
+            "make_simulation_params: gamma must be positive",
+        )
+        temp_arr = eqx.error_if(
+            temp_arr,
+            ~jnp.isfinite(temp_arr),
+            "make_simulation_params: temperature must be finite",
         )
         temp_arr = eqx.error_if(
             temp_arr,
             ~(temp_arr > 0.0),
-            "make_simulation_params: temperature positive",
+            "make_simulation_params: temperature must be positive",
+        )
+        pe_arr = eqx.error_if(
+            pe_arr,
+            ~jnp.isfinite(pe_arr),
+            "make_simulation_params: photon_energy must be finite",
         )
         pe_arr = eqx.error_if(
             pe_arr,
             ~(pe_arr > 0.0),
-            "make_simulation_params: photon energy positive",
+            "make_simulation_params: photon_energy must be positive",
         )
         return SimulationParams(
             energy_min=emin_arr,
@@ -304,11 +357,26 @@ def make_polarization_config(
     config : PolarizationConfig
         Validated polarization configuration.
 
+    Raises
+    ------
+    ValueError
+        If ``polarization_type`` is not one of ``LVP``, ``LHP``,
+        ``RCP``, ``LCP``, ``LAP``, or ``unpolarized``.
+    EquinoxRuntimeError
+        If any angular parameter is non-finite.
+
     See Also
     --------
     PolarizationConfig : The PyTree class constructed by this
         factory.
     """
+    if polarization_type not in _POLARIZATION_TYPES:
+        msg = (
+            "make_polarization_config: polarization_type must be one of "
+            f"{_POLARIZATION_TYPES}"
+        )
+        raise ValueError(msg)
+
     theta_arr: Float[Array, " "] = jnp.asarray(theta, dtype=jnp.float64)
     phi_arr: Float[Array, " "] = jnp.asarray(phi, dtype=jnp.float64)
     pol_arr: Float[Array, " "] = jnp.asarray(

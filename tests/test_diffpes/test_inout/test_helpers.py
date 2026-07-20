@@ -281,6 +281,7 @@ class TestCheckConsistency(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=10,
             label_indices=[0, 9],
+            segments=1,
             mode="Line-mode",
         )
         check_consistency(bands, orb, kpath)
@@ -304,6 +305,7 @@ class TestCheckConsistency(chex.TestCase):
         kpath = make_kpath_info(
             num_kpoints=5,
             label_indices=[0, 4],
+            segments=1,
             mode="Line-mode",
         )
         with pytest.raises(ValueError, match="K-point count mismatch"):
