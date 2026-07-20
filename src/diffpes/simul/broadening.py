@@ -25,8 +25,7 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
-from diffpes.types import ScalarFloat
-from diffpes.types.constants import KB_EV_PER_K as _KB
+from diffpes.types import KB_EV_PER_K, ScalarFloat
 
 
 @jaxtyped(typechecker=beartype)
@@ -260,12 +259,12 @@ def fermi_dirac(
 
     Notes
     -----
-    Uses the Boltzmann constant kB = 8.617333e-5 eV/K, stored in
-    the module-level constant ``_KB``.
+    Uses the Boltzmann constant kB = 8.617333e-5 eV/K, imported as
+    :obj:`~diffpes.types.KB_EV_PER_K`.
     """
-    kt: Float[Array, " "] = jnp.asarray(_KB, dtype=jnp.float64) * jnp.asarray(
-        temperature, dtype=jnp.float64
-    )
+    kt: Float[Array, " "] = jnp.asarray(
+        KB_EV_PER_K, dtype=jnp.float64
+    ) * jnp.asarray(temperature, dtype=jnp.float64)
     safe_kt: Float[Array, " "] = jnp.where(kt > 0.0, kt, jnp.float64(1e-10))
     exponent: Float[Array, " "] = (
         jnp.asarray(energy, dtype=jnp.float64)

@@ -207,7 +207,7 @@ def main() -> None:
         artifact_path: Path = _REFERENCE_DIRECTORY / f"{artifact_name}.npz"
         _write_deterministic_npz(artifact_path, first_arrays)
     manifest_path: Path = _REFERENCE_DIRECTORY / "MANIFEST.md"
-    manifest_path.write_text(_manifest(first_payloads) + "\n")
+    manifest_path.write_text(_manifest(first_payloads).rstrip() + "\n")
 
 
 if __name__ == "__main__":

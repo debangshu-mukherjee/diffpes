@@ -48,19 +48,17 @@ from jaxtyping import Array, Complex, Float, jaxtyped
 from diffpes.maths.dipole import dipole_matrix_element_single
 from diffpes.radial import slater_radial
 from diffpes.types import (
+    HBAR_C_EV_A,
+    ME_EV,
     ArpesSpectrum,
     DiagonalizedBands,
     OrbitalBasis,
     PolarizationConfig,
+    ScalarFloat,
     SelfEnergyConfig,
     SimulationParams,
     SlaterParams,
     make_arpes_spectrum,
-)
-from diffpes.types.aliases import ScalarFloat
-from diffpes.types.constants import (
-    HBAR_C_EV_A,
-    ME_EV,
 )
 
 from .broadening import fermi_dirac, voigt

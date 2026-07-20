@@ -9,6 +9,8 @@ and the project uses calendar versioning.
 
 ### Changed
 
+- Scoped the Plan 01 pre-commit Ruff hooks to their source, test, and project
+  metadata floor, and enabled manual CI dispatch for gate verification.
 - Replaced every registered `NamedTuple` carrier with a types-owned
   `equinox.Module`, moved all carrier factories to `diffpes.types`, and
   updated HDF5 serialization for explicit array and static fields.

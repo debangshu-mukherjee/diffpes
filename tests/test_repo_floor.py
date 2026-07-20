@@ -354,7 +354,10 @@ class TestCI(chex.TestCase):
         ]["python-version"]
 
         self.assertTrue(workflow_path.is_file())
-        chex.assert_equal(triggers, ["push", "pull_request"])
+        chex.assert_equal(
+            triggers,
+            ["push", "pull_request", "workflow_dispatch"],
+        )
         chex.assert_equal(python_versions, ["3.12", "3.13", "3.14"])
 
     def test_pypi_release_workflow(self) -> None:

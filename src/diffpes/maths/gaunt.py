@@ -37,7 +37,8 @@ import numpy as np
 from jaxtyping import Array, Float
 from numpy import ndarray as NDArray  # noqa: N812
 
-from diffpes.types.constants import _GAUNT_IMAG_TOL, L_MAX
+from diffpes.types import L_MAX
+from diffpes.types.constants import _GAUNT_IMAG_TOL
 
 
 def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
