@@ -35,6 +35,7 @@ from diffpes.radial import radial_integral, slater_radial
 from diffpes.types import SlaterParams
 
 from .gaunt import GAUNT_TABLE, L_MAX
+from .safe import safe_arccos, safe_arctan2, safe_divide, safe_norm
 from .spherical_harmonics import real_spherical_harmonic
 
 
@@ -142,16 +143,10 @@ def dipole_matrix_element_single(
     selection rule :math:`m' = m + q` with :math:`|q| \le 1` means
     at most three q values contribute.
 
-    Numerical stability techniques:
-
-    - **Gradient-safe norm**: :math:`|k|` is computed as
-      :math:`\sqrt{k \cdot k + \epsilon}` with :math:`\epsilon = 10^{-30}`
-      to avoid NaN gradients when :math:`k = 0`.
-    - **Safe polar angle**: :math:`\cos\theta` is clipped to
-      :math:`[-1 + 10^{-7}, 1 - 10^{-7}]` to prevent singularities in
-      ``arccos`` gradients at the poles.
-    - **Safe azimuthal angle**: a small offset is added to the x-component
-      in ``arctan2`` to avoid indeterminate gradients at the origin.
+    Numerical stability routes the wavevector norm, normalization, polar
+    angle, and azimuthal angle through the named safe-math primitives. Their
+    guard conventions select zero subgradients at the zero vector and at the
+    angular coordinate singularities without perturbing non-singular values.
 
     Parameters
     ----------
@@ -182,15 +177,10 @@ def dipole_matrix_element_single(
     for JIT compilation but means different orbitals trace distinct
     XLA programs.
     """
-    # Gradient-safe norm: eps prevents NaN grad at k_vec=0
-    k_mag: Float[Array, ""] = jnp.sqrt(jnp.dot(k_vec, k_vec) + 1e-30)
-    k_hat: Float[Array, " 3"] = k_vec / k_mag
-
-    # Convert k_hat to spherical angles (safe for grad at poles/origin)
-    theta_k: Float[Array, ""] = jnp.arccos(
-        jnp.clip(k_hat[2], -1.0 + 1e-7, 1.0 - 1e-7)
-    )
-    phi_k: Float[Array, ""] = jnp.arctan2(k_hat[1], k_hat[0] + 1e-30)
+    k_mag: Float[Array, ""] = safe_norm(k_vec)
+    k_hat: Float[Array, " 3"] = safe_divide(k_vec, k_mag)
+    theta_k: Float[Array, ""] = safe_arccos(k_hat[2])
+    phi_k: Float[Array, ""] = safe_arctan2(k_hat[1], k_hat[0])
 
     # Polarization in spherical dipole components
     e_sph: Complex[Array, " 3"] = _cartesian_to_spherical_dipole(efield)

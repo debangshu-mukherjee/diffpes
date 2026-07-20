@@ -23,6 +23,7 @@ from beartype import beartype
 from beartype.typing import Literal
 from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
+from diffpes.maths import safe_divide, safe_norm, safe_sqrt
 from diffpes.types import (
     BandStructure,
     DiagonalizedBands,
@@ -31,7 +32,6 @@ from diffpes.types import (
     TBModel,
     make_diagonalized_bands,
 )
-from diffpes.types.constants import _NORM_EPS
 from diffpes.types.vasp_constants import _PHASE_LOSS_MESSAGE
 
 from .hamiltonian import build_hamiltonian_k
@@ -228,8 +228,8 @@ def vasp_to_diagonalized(
     **Normalization.** After taking the square root, each eigenvector
     (per k-point and band) is normalized so that
     ``sum_orb |c_{k,b,orb}|^2 = 1``.  A safe-division guard
-    (threshold ``1e-12``) prevents NaN gradients when all projections
-    are zero (e.g. core states with no s/p/d weight).
+    selects a zero vector with a zero gradient when all projections are
+    zero (e.g. core states with no s/p/d weight).
 
     Parameters
     ----------
@@ -240,7 +240,7 @@ def vasp_to_diagonalized(
     orbital_basis : OrbitalBasis
         Quantum number metadata defining which VASP orbital
         indices to use.
-    phase_loss : {"warn", "ignore", "error"}, optional
+    phase_loss : Literal["warn", "ignore", "error"]
         Policy for handling lost phase information:
         - ``"warn"`` (default): emit a runtime warning.
         - ``"ignore"``: proceed silently.
@@ -250,6 +250,12 @@ def vasp_to_diagonalized(
     -------
     diag : DiagonalizedBands
         Approximate diagonalized bands.
+
+    Raises
+    ------
+    ValueError
+        If ``phase_loss`` is invalid, is ``"error"``, or the orbital basis
+        contains a channel outside the VASP nine-orbital set.
 
     Notes
     -----
@@ -309,16 +315,12 @@ def vasp_to_diagonalized(
     # proj_summed shape: (K, B, 9), select columns -> (K, B, n_orbs)
     idx_arr: Int[Array, " N"] = jnp.array(orbital_indices)
     approx_c2: Float[Array, "K B N"] = proj_summed[:, :, idx_arr]
-    approx_c: Float[Array, "K B N"] = jnp.sqrt(jnp.maximum(approx_c2, 0.0))
+    approx_c: Float[Array, "K B N"] = safe_sqrt(approx_c2)
 
     # Normalize eigenvectors per (k, band) so they sum to 1
-    norm: Float[Array, "K B 1"] = jnp.sqrt(
-        jnp.sum(approx_c**2, axis=-1, keepdims=True)
-    )
-    safe_norm: Float[Array, "K B 1"] = jnp.where(norm > _NORM_EPS, norm, 1.0)
-    eigenvectors: Complex[Array, "K B N"] = (approx_c / safe_norm).astype(
-        jnp.complex128
-    )
+    norm: Float[Array, "K B 1"] = safe_norm(approx_c, axis=-1, keepdims=True)
+    normalized: Float[Array, "K B N"] = safe_divide(approx_c, norm)
+    eigenvectors: Complex[Array, "K B N"] = normalized.astype(jnp.complex128)
 
     diag: DiagonalizedBands = make_diagonalized_bands(
         eigenvalues=bands.eigenvalues,

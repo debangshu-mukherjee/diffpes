@@ -25,8 +25,9 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
+from diffpes.maths import safe_divide
 from diffpes.types import ScalarFloat
-from diffpes.types.constants import _EPS, _MIN_SUM
+from diffpes.types.constants import _EPS
 
 
 @jaxtyped(typechecker=beartype)
@@ -104,15 +105,13 @@ def apply_momentum_broadening(
     usage scales as ``O(K^2)``.
     """
     dk_arr: Float[Array, ""] = jnp.asarray(dk, dtype=jnp.float64)
-    safe_dk: Float[Array, ""] = jnp.where(dk_arr > _EPS, dk_arr, _EPS)
+    safe_dk: Float[Array, ""] = jnp.maximum(dk_arr, _EPS)
     k_i: Float[Array, " K 1"] = k_distances[:, jnp.newaxis]
     k_j: Float[Array, " 1 K"] = k_distances[jnp.newaxis, :]
-    kernel: Float[Array, " K K"] = jnp.exp(-0.5 * ((k_i - k_j) / safe_dk) ** 2)
+    scaled_distances: Float[Array, " K K"] = safe_divide(k_i - k_j, safe_dk)
+    kernel: Float[Array, " K K"] = jnp.exp(-0.5 * scaled_distances**2)
     row_sum: Float[Array, " K 1"] = jnp.sum(kernel, axis=1, keepdims=True)
-    safe_sum: Float[Array, " K 1"] = jnp.where(
-        row_sum > _MIN_SUM, row_sum, 1.0
-    )
-    kernel: Float[Array, " K K"] = kernel / safe_sum
+    kernel = safe_divide(kernel, row_sum)
     broadened: Float[Array, " K E"] = kernel @ intensity
     return broadened
 

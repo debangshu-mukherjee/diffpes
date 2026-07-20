@@ -1,0 +1,434 @@
+"""Validate named gradient-safe elementary operations.
+
+Extended Summary
+----------------
+These tests compare all seven safe-math helpers with NumPy away from their
+guards, check forward- and reverse-mode derivatives against central finite
+differences, and pin each documented guard value and subgradient. Property
+tests cover broadcasting and sign symmetry on generated finite inputs.
+"""
+
+import chex
+import jax
+import jax.numpy as jnp
+import numpy as np
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from jaxtyping import Array, Float
+
+from diffpes.maths import (
+    safe_arccos,
+    safe_arctan2,
+    safe_divide,
+    safe_log,
+    safe_norm,
+    safe_power,
+    safe_sqrt,
+)
+from tests._gradients import assert_grad_matches_fd
+
+
+class TestSafeDivide:
+    """Validate :func:`~diffpes.maths.safe_divide`.
+
+    Covers ordinary broadcast division, both autodiff modes, and the finite
+    fallback with zero operand subgradients at a zero denominator.
+
+    :see: :func:`~diffpes.maths.safe_divide`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match division and pin zero-denominator guard behavior.
+
+        Extended Summary
+        ----------------
+        Ordinary values must match NumPy to ``rtol=1e-15`` and derivatives
+        must pass the smooth program-wide gradient harness. At a zero divisor,
+        the configured fallback is returned and operand gradients are exactly
+        zero with no NaNs.
+
+        Notes
+        -----
+        Uses a length-three numerator and nonzero divisor away from the guard,
+        then differentiates a scalar guarded call with respect to both
+        operands under JIT-backed autodiff.
+        """
+        numerator: Float[Array, " 3"] = jnp.array([1.5, -2.0, 4.0])
+        denominator: Float[Array, " 3"] = jnp.array([0.5, 4.0, -2.0])
+        values: Float[Array, " 3"] = safe_divide(numerator, denominator)
+        expected: Float[Array, " 3"] = jnp.asarray(
+            np.divide(np.asarray(numerator), np.asarray(denominator))
+        )
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(
+                safe_divide(jnp.asarray(value), denominator)
+            ),
+            numerator,
+        )
+
+        guarded: Float[Array, ""] = jax.jit(safe_divide)(
+            jnp.array(3.0), jnp.array(0.0), -7.0
+        )
+        gradients: tuple[Float[Array, ""], Float[Array, ""]] = jax.grad(
+            lambda n, d: safe_divide(n, d, -7.0), argnums=(0, 1)
+        )(jnp.array(3.0), jnp.array(0.0))
+        chex.assert_trees_all_close(guarded, -7.0, rtol=0.0, atol=0.0)
+        chex.assert_trees_all_close(gradients, (0.0, 0.0), rtol=0.0, atol=0.0)
+        chex.assert_tree_all_finite((guarded, gradients))
+
+    @given(
+        values=st.lists(
+            st.floats(
+                min_value=-100.0,
+                max_value=100.0,
+                allow_nan=False,
+                allow_infinity=False,
+            ),
+            min_size=3,
+            max_size=3,
+        ),
+        denominator=st.floats(
+            min_value=0.25,
+            max_value=10.0,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+    )
+    @settings(max_examples=20, deadline=None)
+    def test_broadcasting_and_sign_symmetry(
+        self, values: list[float], denominator: float
+    ) -> None:
+        """Preserve broadcasting and odd symmetry in the numerator.
+
+        Extended Summary
+        ----------------
+        For generated finite vectors and a positive scalar divisor,
+        ``safe_divide`` must broadcast the scalar and obey
+        ``safe_divide(-x, d) = -safe_divide(x, d)`` exactly to floating-point
+        tolerance.
+
+        Notes
+        -----
+        Hypothesis generates twenty three-component vectors and divisors away
+        from zero; Chex checks shape and sign symmetry at ``rtol=1e-15``.
+        """
+        numerator: Float[Array, " 3"] = jnp.asarray(values, dtype=jnp.float64)
+        divisor: Float[Array, ""] = jnp.asarray(denominator, dtype=jnp.float64)
+        positive: Float[Array, " 3"] = safe_divide(numerator, divisor)
+        negative: Float[Array, " 3"] = safe_divide(-numerator, divisor)
+        chex.assert_shape(positive, (3,))
+        chex.assert_trees_all_close(
+            negative, -positive, rtol=1e-15, atol=1e-15
+        )
+
+
+class TestSafeSqrt:
+    """Validate :func:`~diffpes.maths.safe_sqrt`.
+
+    Covers NumPy agreement, both autodiff modes, and the selected zero value
+    and subgradient on non-positive inputs.
+
+    :see: :func:`~diffpes.maths.safe_sqrt`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match square roots and pin the non-positive guard.
+
+        Extended Summary
+        ----------------
+        Positive values must match NumPy to ``rtol=1e-15`` and pass the smooth
+        gradient harness. Zero and negative inputs must both return zero with
+        exact zero gradients and finite traced values.
+
+        Notes
+        -----
+        Evaluates three positive values away from the branch boundary and a
+        JIT-compiled two-value guard probe before differentiating each guard.
+        """
+        x: Float[Array, " 3"] = jnp.array([0.25, 2.0, 9.0])
+        values: Float[Array, " 3"] = safe_sqrt(x)
+        expected: Float[Array, " 3"] = jnp.asarray(np.sqrt(np.asarray(x)))
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(safe_sqrt(jnp.asarray(value))), x
+        )
+
+        guarded_x: Float[Array, " 2"] = jnp.array([0.0, -4.0])
+        guarded: Float[Array, " 2"] = jax.jit(safe_sqrt)(guarded_x)
+        gradients: Float[Array, " 2"] = jax.grad(
+            lambda value: jnp.sum(safe_sqrt(value))
+        )(guarded_x)
+        chex.assert_trees_all_close(guarded, jnp.zeros(2), rtol=0.0, atol=0.0)
+        chex.assert_trees_all_close(
+            gradients, jnp.zeros(2), rtol=0.0, atol=0.0
+        )
+        chex.assert_tree_all_finite((guarded, gradients))
+
+
+class TestSafeNorm:
+    """Validate :func:`~diffpes.maths.safe_norm`.
+
+    Covers Euclidean values, axis handling, sign symmetry, both derivative
+    modes, and the zero-vector subgradient convention.
+
+    :see: :func:`~diffpes.maths.safe_norm`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match Euclidean norms and pin the zero-vector gradient.
+
+        Extended Summary
+        ----------------
+        Batched vector norms must match NumPy to ``rtol=1e-15`` with retained
+        dimensions and pass the gradient harness. An all-zero vector must
+        return zero and have an exactly zero, finite gradient.
+
+        Notes
+        -----
+        Uses two generic three-vectors for the ordinary path and an independent
+        JIT and reverse-mode probe at the origin.
+        """
+        x: Float[Array, "2 3"] = jnp.array([[3.0, 4.0, 1.0], [-2.0, 5.0, 7.0]])
+        values: Float[Array, "2 1"] = safe_norm(x, axis=-1, keepdims=True)
+        expected: Float[Array, "2 1"] = jnp.asarray(
+            np.linalg.norm(np.asarray(x), axis=-1, keepdims=True)
+        )
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(safe_norm(jnp.asarray(value))), x
+        )
+
+        zero: Float[Array, " 3"] = jnp.zeros(3)
+        guarded: Float[Array, ""] = jax.jit(safe_norm)(zero)
+        gradient: Float[Array, " 3"] = jax.grad(safe_norm)(zero)
+        chex.assert_trees_all_close(guarded, 0.0, rtol=0.0, atol=0.0)
+        chex.assert_trees_all_close(gradient, zero, rtol=0.0, atol=0.0)
+        chex.assert_tree_all_finite((guarded, gradient))
+
+    @given(
+        values=st.lists(
+            st.floats(
+                min_value=-100.0,
+                max_value=100.0,
+                allow_nan=False,
+                allow_infinity=False,
+            ),
+            min_size=3,
+            max_size=3,
+        )
+    )
+    @settings(max_examples=20, deadline=None)
+    def test_sign_symmetry(self, values: list[float]) -> None:
+        """Preserve norm symmetry under vector sign reversal.
+
+        Extended Summary
+        ----------------
+        The safe guard must not change the Euclidean invariant
+        ``norm(-x) = norm(x)`` for generated finite three-vectors.
+
+        Notes
+        -----
+        Hypothesis generates twenty vectors across both signs and Chex checks
+        the two scalar norms at ``rtol=1e-15``.
+        """
+        x: Float[Array, " 3"] = jnp.asarray(values, dtype=jnp.float64)
+        positive: Float[Array, ""] = safe_norm(x)
+        negative: Float[Array, ""] = safe_norm(-x)
+        chex.assert_trees_all_close(negative, positive, rtol=1e-15, atol=1e-15)
+
+
+class TestSafeArccos:
+    """Validate :func:`~diffpes.maths.safe_arccos`.
+
+    Covers NumPy agreement, both derivative modes, saturation outside the
+    cosine domain, and zero subgradients at both endpoints.
+
+    :see: :func:`~diffpes.maths.safe_arccos`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match arccos and pin saturated endpoint gradients.
+
+        Extended Summary
+        ----------------
+        Interior values must match NumPy to ``rtol=1e-15`` and pass the smooth
+        gradient harness. Inputs at and beyond ``-1`` and ``1`` must saturate
+        to ``pi`` and zero with exact zero, finite gradients.
+
+        Notes
+        -----
+        Uses three generic interior cosines and a four-value JIT guard probe
+        spanning both endpoints and both out-of-domain sides.
+        """
+        x: Float[Array, " 3"] = jnp.array([-0.6, 0.2, 0.7])
+        values: Float[Array, " 3"] = safe_arccos(x)
+        expected: Float[Array, " 3"] = jnp.asarray(np.arccos(np.asarray(x)))
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(safe_arccos(jnp.asarray(value))), x
+        )
+
+        guarded_x: Float[Array, " 4"] = jnp.array([-2.0, -1.0, 1.0, 2.0])
+        guarded: Float[Array, " 4"] = jax.jit(safe_arccos)(guarded_x)
+        gradient: Float[Array, " 4"] = jax.grad(
+            lambda value: jnp.sum(safe_arccos(value))
+        )(guarded_x)
+        expected_guard: Float[Array, " 4"] = jnp.array(
+            [jnp.pi, jnp.pi, 0.0, 0.0]
+        )
+        chex.assert_trees_all_close(
+            guarded, expected_guard, rtol=0.0, atol=0.0
+        )
+        chex.assert_trees_all_close(gradient, jnp.zeros(4), rtol=0.0, atol=0.0)
+        chex.assert_tree_all_finite((guarded, gradient))
+
+
+class TestSafeArctan2:
+    """Validate :func:`~diffpes.maths.safe_arctan2`.
+
+    Covers NumPy agreement in all quadrants, broadcasting, both derivative
+    modes, and the zero value and coordinate gradients at the origin.
+
+    :see: :func:`~diffpes.maths.safe_arctan2`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match arctan2 and pin the origin convention.
+
+        Extended Summary
+        ----------------
+        Away from the origin, values must match NumPy to ``rtol=1e-15`` and
+        derivatives must pass the gradient harness. At ``(0, 0)``, the value
+        and both coordinate gradients must be exactly zero and finite.
+
+        Notes
+        -----
+        Uses points in three quadrants for ordinary behavior, then runs the
+        scalar origin through JIT and differentiates both arguments.
+        """
+        coordinates: Float[Array, "3 2"] = jnp.array(
+            [[0.5, 1.0], [2.0, -3.0], [-4.0, -2.0]]
+        )
+
+        def summed_angles(value: Float[Array, "3 2"]) -> Float[Array, ""]:
+            value_array: Float[Array, "3 2"] = jnp.asarray(value)
+            result: Float[Array, ""] = jnp.sum(
+                safe_arctan2(value_array[:, 0], value_array[:, 1])
+            )
+            return result
+
+        values: Float[Array, " 3"] = safe_arctan2(
+            coordinates[:, 0], coordinates[:, 1]
+        )
+        expected: Float[Array, " 3"] = jnp.asarray(
+            np.arctan2(
+                np.asarray(coordinates[:, 0]), np.asarray(coordinates[:, 1])
+            )
+        )
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(summed_angles, coordinates)
+
+        guarded: Float[Array, ""] = jax.jit(safe_arctan2)(
+            jnp.array(0.0), jnp.array(0.0)
+        )
+        gradients: tuple[Float[Array, ""], Float[Array, ""]] = jax.grad(
+            safe_arctan2, argnums=(0, 1)
+        )(jnp.array(0.0), jnp.array(0.0))
+        chex.assert_trees_all_close(guarded, 0.0, rtol=0.0, atol=0.0)
+        chex.assert_trees_all_close(gradients, (0.0, 0.0), rtol=0.0, atol=0.0)
+        chex.assert_tree_all_finite((guarded, gradients))
+
+
+class TestSafeLog:
+    """Validate :func:`~diffpes.maths.safe_log`.
+
+    Covers NumPy agreement, both derivative modes, and the finite floor value
+    with a zero input subgradient at and below the floor.
+
+    :see: :func:`~diffpes.maths.safe_log`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match logarithms and pin floor-clamped gradients.
+
+        Extended Summary
+        ----------------
+        Positive values above the floor must match NumPy to ``rtol=1e-15``
+        and pass the gradient harness. Inputs at and below a ``1e-3`` floor
+        must return ``log(1e-3)`` with exact zero, finite gradients.
+
+        Notes
+        -----
+        Uses three ordinary positive values and a three-value JIT probe
+        containing the floor, zero, and a negative input.
+        """
+        x: Float[Array, " 3"] = jnp.array([0.25, 2.0, 10.0])
+        values: Float[Array, " 3"] = safe_log(x)
+        expected: Float[Array, " 3"] = jnp.asarray(np.log(np.asarray(x)))
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(safe_log(jnp.asarray(value))), x
+        )
+
+        guarded_x: Float[Array, " 3"] = jnp.array([1e-3, 0.0, -2.0])
+        guarded: Float[Array, " 3"] = jax.jit(
+            lambda value: safe_log(value, 1e-3)
+        )(guarded_x)
+        gradient: Float[Array, " 3"] = jax.grad(
+            lambda value: jnp.sum(safe_log(value, 1e-3))
+        )(guarded_x)
+        expected_guard: Float[Array, " 3"] = jnp.full(3, jnp.log(1e-3))
+        chex.assert_trees_all_close(
+            guarded, expected_guard, rtol=0.0, atol=0.0
+        )
+        chex.assert_trees_all_close(gradient, jnp.zeros(3), rtol=0.0, atol=0.0)
+        chex.assert_tree_all_finite((guarded, gradient))
+
+
+class TestSafePower:
+    """Validate :func:`~diffpes.maths.safe_power`.
+
+    Covers fractional powers, both derivative modes, and the zero value and
+    base/exponent subgradients on non-positive bases.
+
+    :see: :func:`~diffpes.maths.safe_power`
+    """
+
+    def test_values_gradients_and_guard(self) -> None:
+        """Match fractional powers and pin non-positive gradients.
+
+        Extended Summary
+        ----------------
+        Positive fractional powers must match NumPy to ``rtol=1e-15`` and
+        pass the gradient harness. Zero and negative bases must return zero
+        with exact zero gradients for both the base and exponent.
+
+        Notes
+        -----
+        Uses exponent ``1.7`` on three positive bases, then evaluates and
+        differentiates a two-base guarded sum under JIT-compatible primitives.
+        """
+        exponent: Float[Array, ""] = jnp.array(1.7)
+        x: Float[Array, " 3"] = jnp.array([0.25, 2.0, 7.0])
+        values: Float[Array, " 3"] = safe_power(x, exponent)
+        expected: Float[Array, " 3"] = jnp.asarray(
+            np.power(np.asarray(x), float(exponent))
+        )
+        chex.assert_trees_all_close(values, expected, rtol=1e-15, atol=1e-15)
+        assert_grad_matches_fd(
+            lambda value: jnp.sum(safe_power(jnp.asarray(value), exponent)),
+            x,
+        )
+
+        guarded_x: Float[Array, " 2"] = jnp.array([0.0, -3.0])
+        guarded: Float[Array, " 2"] = jax.jit(safe_power)(guarded_x, exponent)
+        gradients: tuple[Float[Array, " 2"], Float[Array, ""]] = jax.grad(
+            lambda bases, power: jnp.sum(safe_power(bases, power)),
+            argnums=(0, 1),
+        )(guarded_x, exponent)
+        chex.assert_trees_all_close(guarded, jnp.zeros(2), rtol=0.0, atol=0.0)
+        chex.assert_trees_all_close(
+            gradients, (jnp.zeros(2), jnp.array(0.0)), rtol=0.0, atol=0.0
+        )
+        chex.assert_tree_all_finite((guarded, gradients))

@@ -13,7 +13,9 @@ and the project uses calendar versioning.
   metadata floor, and enabled manual CI dispatch for gate verification.
 - Replaced every registered `NamedTuple` carrier with a types-owned
   `equinox.Module`, moved all carrier factories to `diffpes.types`, and
-  updated HDF5 serialization for explicit array and static fields.
+  updated HDF5 serialization for introspected array, nested-module, optional,
+  and static fields. Carrier construction is now keyword-only; use
+  `equinox.tree_at` instead of `NamedTuple._replace` for immutable updates.
 - Consolidated declarative constants, orbital conventions, parser schemas,
   and lookup tables under `diffpes.types`.
 - Moved the workflow context and its projection and DOS aliases into
@@ -23,6 +25,8 @@ and the project uses calendar versioning.
 - Activated the two-tier factory validation wall: structural violations now
   raise `ValueError`, while traced value violations use value-threaded
   `equinox.error_if` checks that survive JIT compilation.
+- Widened `read_eigenval(..., fermi_energy=...)` to `ScalarFloat` and kept
+  workflow Fermi energies as traced scalar leaves instead of host floats.
 
 ### Added
 
@@ -44,8 +48,10 @@ and the project uses calendar versioning.
   `uv run pre-commit install`.
 - Added deterministic pre-refactor novice and tight-binding radial regression
   references, including standing zeta-gradient baselines and provenance.
-- Added deterministic pre-refactor novice and tight-binding radial regression
-  references, including standing zeta-gradient baselines and provenance.
+- Added seven named gradient-safe math primitives with explicit guarded-set
+  value and subgradient conventions.
+- Added `pack_complex` and `unpack_complex` as the real-PyTree optimizer and
+  complex-physics boundary, with a pinned JAX Wirtinger convention test.
 
 ### Removed
 
@@ -65,6 +71,12 @@ and the project uses calendar versioning.
   extending Ruff and runtime type-checking coverage to the test suite.
 - Corrected real-to-complex Gaunt transformation coefficients to satisfy their
   complex-valued runtime type contract.
+- Replaced the overflow-prone reciprocal-exponential Fermi-Dirac expression
+  with a stable sigmoid, keeping values and gradients finite through the
+  realistic-spectrum audit range.
+- Made the Thompson-Cox-Hastings pseudo-Voigt implementation gradient-safe on
+  both positive-width boundary rays and reject the undefined zero-width
+  intersection eagerly and under JIT.
 
 ## [2026.03.01] - 2026-07-13
 

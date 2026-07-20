@@ -45,7 +45,12 @@ from beartype import beartype
 from beartype.typing import Optional
 from jaxtyping import Array, Complex, Float, jaxtyped
 
-from diffpes.maths.dipole import dipole_matrix_element_single
+from diffpes.maths import (
+    dipole_matrix_element_single,
+    safe_divide,
+    safe_norm,
+    safe_sqrt,
+)
 from diffpes.radial import slater_radial
 from diffpes.types import (
     HBAR_C_EV_A,
@@ -103,13 +108,12 @@ def _ekin_to_k_magnitude(
        sign convention does not matter.
 
     2. **Guard against negative kinetic energy**:
-       ``safe_ekin = max(e_kin, 0)``
-       Negative kinetic energy is unphysical (the photon cannot eject
-       this electron); clamping to zero yields ``|k| = 0`` for such
-       bands, which is correct and gradient-safe.
+       ``safe_sqrt`` returns zero for a non-positive radicand. Negative
+       kinetic energy is unphysical (the photon cannot eject this electron),
+       so this yields ``|k| = 0`` with a zero selected subgradient.
 
     3. **Convert to wavevector magnitude**:
-       ``k_mag = sqrt(2 * m_e * safe_ekin) / (hbar * c)``
+       ``k_mag = safe_sqrt(2 * m_e * e_kin) / (hbar * c)``
        Using natural units with ``ME_EV = 0.511e6 eV/c^2`` and
        ``HBAR_C_EV_A = 1973.27 eV*Angstrom``, the result is
        directly in inverse Angstroms. The approximate relation is
@@ -135,13 +139,13 @@ def _ekin_to_k_magnitude(
     Uses physical constants defined at module level:
     ``ME_EV`` (electron mass in eV/c^2) and ``HBAR_C_EV_A``
     (hbar*c in eV*Angstrom). The function is JAX-traceable and
-    supports ``jax.grad`` through the ``jnp.maximum`` guard.
+    supports ``jax.grad`` through the named square-root guard.
     """
     e_kin: Float[Array, " "] = (
         photon_energy - work_function - jnp.abs(binding_energy)
     )
-    safe_ekin: Float[Array, " "] = jnp.maximum(e_kin, 0.0)
-    k_mag: Float[Array, " "] = jnp.sqrt(2.0 * ME_EV * safe_ekin) / HBAR_C_EV_A
+    radicand: Float[Array, " "] = 2.0 * ME_EV * e_kin
+    k_mag: Float[Array, " "] = safe_sqrt(radicand) / HBAR_C_EV_A
     return k_mag
 
 
@@ -252,14 +256,14 @@ def simulate_tb_radial(  # noqa: PLR0915
         and ``polarization_angle``.
     work_function : ScalarFloat, optional
         Material work function in eV. Default is 4.5.
-    self_energy : SelfEnergyConfig, optional
+    self_energy : Optional[SelfEnergyConfig]
         Energy-dependent self-energy model for the Lorentzian
         broadening. If ``None``, the constant ``params.gamma`` is
         used for all energies.
-    r_grid : Float[Array, " R"], optional
+    r_grid : Optional[Float[Array, " R"]]
         Radial integration grid in Bohr. Default is 10000 points
         linearly spaced on ``[1e-6, 50.0]``.
-    dk : ScalarFloat, optional
+    dk : Optional[ScalarFloat]
         Momentum broadening width in inverse Angstroms. If ``None``,
         no k-space convolution is applied.
 
@@ -280,11 +284,11 @@ def simulate_tb_radial(  # noqa: PLR0915
 
     Notes
     -----
-    The inner function ``_single_k_band`` adds a small epsilon
-    (1e-30) inside the k-vector norm to avoid NaN gradients at the
-    Gamma point (k = 0). The Python-level ``for`` loop over orbitals
-    is unrolled by the JAX tracer and does not affect runtime
-    performance after JIT compilation.
+    The inner function ``_single_k_band`` uses :func:`safe_norm` and
+    :func:`safe_divide` to select a zero direction and zero gradient at the
+    Gamma point. The Python-level ``for`` loop over orbitals is unrolled by
+    the JAX tracer and does not affect runtime performance after JIT
+    compilation.
     """
     # Energy axis
     energy_axis: Float[Array, " E"] = jnp.linspace(
@@ -350,8 +354,8 @@ def simulate_tb_radial(  # noqa: PLR0915
             Converts the crystal k-vector to the photoelectron
             wavevector using free-electron kinematics, then sums the
             orbital-weighted dipole matrix elements and returns the
-            squared modulus. A small epsilon (1e-30) is added to the
-            k-vector norm to ensure gradient safety at the Gamma point.
+            squared modulus. Named safe norm and division primitives select
+            a zero direction and gradient at the Gamma point.
 
             Parameters
             ----------
@@ -371,12 +375,9 @@ def simulate_tb_radial(  # noqa: PLR0915
             k_mag: Float[Array, " "] = _ekin_to_k_magnitude(
                 params.photon_energy, W, eigenval
             )
-            # Use crystal k-direction, scale to photoelectron magnitude
-            # Gradient-safe norm: eps avoids NaN grad at Gamma point (k=0)
-            k_norm: Float[Array, " "] = jnp.sqrt(
-                jnp.dot(k_crystal, k_crystal) + 1e-30
-            )
-            k_hat: Float[Array, " 3"] = k_crystal / k_norm
+            # Preserve the existing fractional-k direction convention.
+            k_norm: Float[Array, " "] = safe_norm(k_crystal)
+            k_hat: Float[Array, " 3"] = safe_divide(k_crystal, k_norm)
             k_vec: Float[Array, " 3"] = k_hat * k_mag
 
             # Compute total M = sum_o c_{k,b,o} * M_o

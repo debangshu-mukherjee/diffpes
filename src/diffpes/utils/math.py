@@ -4,12 +4,17 @@ Extended Summary
 ----------------
 Provides JAX-compatible implementations of the Faddeeva function
 (complex error function) and data normalization routines used
-throughout the ARPES simulation pipeline.
+throughout the ARPES simulation pipeline. Complex parameter packing
+provides the sanctioned optimizer boundary for complex-valued physics.
 
 Routine Listings
 ----------------
 :func:`faddeeva`
     Evaluate the Faddeeva function w(z) = exp(-z^2) erfc(-iz).
+:func:`pack_complex`
+    Pack complex parameters as stacked real values.
+:func:`unpack_complex`
+    Unpack stacked real parameters into complex values.
 :func:`zscore_normalize`
     Apply z-score normalization (zero-mean, unit-variance).
 
@@ -27,6 +32,7 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
+from diffpes.maths import safe_divide
 from diffpes.types.constants import _N_TAYLOR
 
 
@@ -186,6 +192,80 @@ def faddeeva(
 
 
 @jaxtyped(typechecker=beartype)
+def pack_complex(
+    z: Complex[Array, " ..."],
+) -> Float[Array, " ... 2"]:
+    """Pack complex parameters as stacked real values.
+
+    Complex parameters cross the optimizer and Fisher-information boundary as
+    stacked reals, while values remain complex inside the physics pipeline.
+    This function is the sanctioned complex-to-real crossing point.
+
+    :see: :class:`~.test_math.TestPackComplex`
+
+    Parameters
+    ----------
+    z : Complex[Array, " ..."]
+        Complex-valued physics parameters of arbitrary shape.
+
+    Returns
+    -------
+    packed : Float[Array, " ... 2"]
+        Real-valued parameters with real and imaginary components in the final
+        axis, in that order.
+
+    Notes
+    -----
+    The final axis is formed exactly as
+    ``jnp.stack([z.real, z.imag], axis=-1)``. This preserves the component
+    dtype and exposes independent real optimizer coordinates.
+
+    See Also
+    --------
+    unpack_complex : Restore complex values inside the physics pipeline.
+    """
+    packed: Float[Array, " ... 2"] = jnp.stack([z.real, z.imag], axis=-1)
+    return packed
+
+
+@jaxtyped(typechecker=beartype)
+def unpack_complex(
+    p: Float[Array, " ... 2"],
+) -> Complex[Array, " ..."]:
+    """Unpack stacked real parameters into complex values.
+
+    Complex parameters cross the optimizer and Fisher-information boundary as
+    stacked reals, while values remain complex inside the physics pipeline.
+    This function is the sanctioned real-to-complex crossing point.
+
+    :see: :class:`~.test_math.TestUnpackComplex`
+
+    Parameters
+    ----------
+    p : Float[Array, " ... 2"]
+        Real-valued optimizer parameters whose final axis stores real and
+        imaginary components, in that order.
+
+    Returns
+    -------
+    unpacked : Complex[Array, " ..."]
+        Complex-valued physics parameters with the packing axis removed.
+
+    Notes
+    -----
+    ``jax.lax.complex`` combines the final-axis components without changing
+    their precision. For a real loss, JAX differentiates the two packed
+    components as ordinary real optimizer coordinates.
+
+    See Also
+    --------
+    pack_complex : Expose complex parameters at the real optimizer boundary.
+    """
+    unpacked: Complex[Array, " ..."] = jax.lax.complex(p[..., 0], p[..., 1])
+    return unpacked
+
+
+@jaxtyped(typechecker=beartype)
 def zscore_normalize(
     data: Float[Array, " ..."],
 ) -> Float[Array, " ..."]:
@@ -211,13 +291,12 @@ def zscore_normalize(
        deviation of the input array using ``jnp.mean`` and ``jnp.std``
        (population std, i.e. ddof=0).
 
-    2. **Guard against zero std** -- if the standard deviation is
-       exactly zero (constant array), replace it with 1.0 via
-       ``jnp.where(std > 0, std, 1.0)`` to avoid division-by-zero.
-       This produces an all-zeros output for constant inputs, which is
-       the mathematically sensible limit. The ``jnp.where`` formulation
-       is gradient-safe: JAX will not propagate gradients through the
-       zero-std branch.
+    2. **Guard against zero std** -- route the centered values and standard
+       deviation through :func:`~diffpes.maths.safe_divide`, selecting its
+       zero fallback for constant inputs. This produces an all-zeros output,
+       the mathematically sensible degenerate value, with a zero selected
+       subgradient rather than an inactive division-by-zero contaminating
+       reverse-mode autodiff.
 
     3. **Normalize** -- compute ``(data - mean) / safe_std`` element-wise
        and return.
@@ -245,12 +324,14 @@ def zscore_normalize(
     """
     mean_val: Float[Array, " "] = jnp.mean(data)
     std_val: Float[Array, " "] = jnp.std(data)
-    safe_std: Float[Array, " "] = jnp.where(std_val > 0.0, std_val, 1.0)
-    normalized: Float[Array, " ..."] = (data - mean_val) / safe_std
+    centered: Float[Array, " ..."] = data - mean_val
+    normalized: Float[Array, " ..."] = safe_divide(centered, std_val)
     return normalized
 
 
 __all__: list[str] = [
     "faddeeva",
+    "pack_complex",
+    "unpack_complex",
     "zscore_normalize",
 ]

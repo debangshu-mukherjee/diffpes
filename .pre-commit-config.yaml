@@ -15,3 +15,9 @@ repos:
         entry: uv run ty check
         language: system
         pass_filenames: false
+      - id: loc-badge
+        name: loc badge (local count, no CI commits)
+        entry: uv run python .github/badges/loc_badge.py
+        language: system
+        pass_filenames: false
+        files: ^src/.*\.py$

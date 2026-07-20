@@ -2,7 +2,7 @@
 
 Extended Summary
 ----------------
-Exercises save_to_h5 and load_from_h5 for all registered PyTree types:
+Exercises save_to_h5 and load_from_h5 for the core registered PyTree types:
 DensityOfStates, BandStructure, CrystalGeometry, KPathInfo,
 SimulationParams, PolarizationConfig, ArpesSpectrum, OrbitalProjection
 (variants with spin/oam), and multi-PyTree save/load. Round-trip tests
@@ -38,15 +38,19 @@ Routine Listings
     Round-trip tests for SimulationParams.
 """
 
+import json
 import tempfile
+from dataclasses import fields
 from pathlib import Path
 
 import chex
 import h5py
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from diffpes.inout import load_from_h5, save_to_h5
+from diffpes.inout.hdf5 import _decode_static, _encode_static
 from diffpes.types import (
     make_arpes_spectrum,
     make_band_structure,
@@ -408,6 +412,47 @@ class TestKPathInfo(chex.TestCase):
         assert loaded.mode == "Line-mode"
         assert loaded.labels == ("G", "M", "K")
 
+    def test_loads_pre_migration_aux_format(self) -> None:
+        """Load K-path metadata written by the NamedTuple-era codec."""
+        kpath = make_kpath_info(
+            num_kpoints=100,
+            label_indices=[0, 49, 99],
+            segments=2,
+            mode="Line-mode",
+            labels=("G", "M", "K"),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path: Path = Path(temporary_directory) / "legacy_kpath.h5"
+            with h5py.File(path, "w") as h5_file:
+                group: h5py.Group = h5_file.create_group("kpath")
+                group.attrs["_pytree_type"] = "KPathInfo"
+                group.attrs["_aux_data_json"] = json.dumps(
+                    [
+                        kpath.mode,
+                        list(kpath.labels),
+                        kpath.comment,
+                        kpath.coordinate_mode,
+                    ]
+                )
+                none_fields: list[str] = []
+                for field in fields(kpath):
+                    if bool(field.metadata.get("static", False)):
+                        continue
+                    value = getattr(kpath, field.name)
+                    if value is None:
+                        none_fields.append(field.name)
+                    else:
+                        group.create_dataset(
+                            field.name, data=np.asarray(value)
+                        )
+                group.attrs["_none_fields"] = json.dumps(none_fields)
+
+            loaded = load_from_h5(path, name="kpath")
+
+        chex.assert_trees_all_equal(loaded.num_kpoints, kpath.num_kpoints)
+        chex.assert_equal(loaded.mode, "Line-mode")
+        chex.assert_equal(loaded.labels, ("G", "M", "K"))
+
 
 class TestCrystalGeometry(chex.TestCase):
     """Round-trip tests for CrystalGeometry HDF5 serialization.
@@ -701,44 +746,20 @@ class TestDatasetFlags(chex.TestCase):
                 )
 
 
-class TestVolumetricAuxEncoding:
-    """Tests for the private volumetric auxiliary data encode/decode helpers.
-
-    Exercises ``_encode_volumetric_aux`` and ``_decode_volumetric_aux``
-    used internally to serialise VolumetricData and SOCVolumetricData
-    PyTree auxiliary data in HDF5 files.
-    """
+class TestStaticMetadataEncoding:
+    """Tests for generic static Equinox metadata encoding."""
 
     def test_encode_and_decode_round_trip(self):
-        """Verify that encode followed by decode recovers the original auxiliary data.
-
-        Constructs a ``(grid_shape, symbols)`` tuple, encodes it via
-        ``_encode_volumetric_aux``, then decodes the result via
-        ``_decode_volumetric_aux``, and asserts the round-trip produces
-        equal ``grid_shape`` and ``symbols``.
-        """
-        from diffpes.inout.hdf5 import (
-            _decode_volumetric_aux,
-            _encode_volumetric_aux,
-        )
-
+        """Preserve nested tuple types through the generic JSON codec."""
         aux = ((8, 8, 8), ("Fe", "Co"))
-        encoded = _encode_volumetric_aux(aux)
-        decoded = _decode_volumetric_aux(encoded)
-        assert decoded[0] == (8, 8, 8)
-        assert decoded[1] == ("Fe", "Co")
+        encoded = _encode_static(aux)
+        decoded = _decode_static(json.loads(json.dumps(encoded)))
+        assert decoded == aux
 
-    def test_encode_returns_json_serializable_list(self):
-        """Verify that _encode_volumetric_aux returns a plain nested list.
-
-        The encoded form must be a list of two lists (grid_shape as ints,
-        symbols as strings) so that it can be stored as a JSON attribute.
-        """
-        from diffpes.inout.hdf5 import _encode_volumetric_aux
-
+    def test_encode_returns_tagged_json_mapping(self):
+        """Encode tuples as JSON-compatible tagged mappings."""
         aux = ((4, 6, 8), ("H", "O"))
-        encoded = _encode_volumetric_aux(aux)
-        assert isinstance(encoded, list)
-        assert len(encoded) == 2
-        assert encoded[0] == [4, 6, 8]
-        assert encoded[1] == ["H", "O"]
+        encoded = _encode_static(aux)
+        assert isinstance(encoded, dict)
+        assert "__tuple__" in encoded
+        json.dumps(encoded)

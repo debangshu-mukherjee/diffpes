@@ -139,6 +139,11 @@ def spherical_bessel_jl(
     values : Float[Array, " ..."]
         ``j_l(x)`` evaluated element-wise with the same shape as ``x``.
 
+    Raises
+    ------
+    ValueError
+        If ``order`` is negative.
+
     Notes
     -----
     The ``order`` parameter is a Python-level integer (not a JAX
@@ -152,6 +157,7 @@ def spherical_bessel_jl(
 
     x_arr: Float[Array, " ..."] = jnp.asarray(x, dtype=jnp.float64)
     small_mask: Float[Array, " ..."] = jnp.abs(x_arr) < _SMALL_ARGUMENT
+    # The series branch carries the nonzero analytic limiting gradient.
     x_safe: Float[Array, " ..."] = jnp.where(small_mask, 1.0, x_arr)
 
     j0_nonzero: Float[Array, " ..."] = jnp.sin(x_safe) / x_safe

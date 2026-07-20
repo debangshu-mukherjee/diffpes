@@ -28,6 +28,7 @@ from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
     BandStructure,
+    ScalarFloat,
     SpinBandStructure,
     make_band_structure,
     make_spin_band_structure,
@@ -44,7 +45,7 @@ from diffpes.types.vasp_constants import (
 
 def read_eigenval(
     filename: str = "EIGENVAL",
-    fermi_energy: float = 0.0,
+    fermi_energy: ScalarFloat = 0.0,
     return_mode: Literal["legacy", "full"] = "legacy",
 ) -> Union[BandStructure, SpinBandStructure]:
     """Parse a VASP EIGENVAL file.
@@ -108,9 +109,9 @@ def read_eigenval(
     ----------
     filename : str, optional
         Path to EIGENVAL file. Default is ``"EIGENVAL"``.
-    fermi_energy : float, optional
+    fermi_energy : ScalarFloat, optional
         Fermi level in eV used to reference the eigenvalues.
-        Default is 0.0.
+        Python scalars and traced scalar arrays are accepted. Default is 0.0.
     return_mode : {"legacy", "full"}, optional
         ``"legacy"`` (default) returns a ``BandStructure`` with only
         spin-up eigenvalues (backward-compatible). ``"full"`` returns

@@ -2,7 +2,7 @@ r"""ARPES simulation functions at six complexity levels.
 
 Extended Summary
 ----------------
-Provides a complete ARPES simulation pipeline from basic Voigt
+Provides a complete ARPES simulation pipeline from basic pseudo-Voigt
 convolution to full polarization-dependent dipole matrix element
 calculations. Also exports broadening functions, cross-section
 models, polarization utilities, and orbital angular momentum.
@@ -77,11 +77,11 @@ Routine Listings
 :func:`simulate_expanded`
     Dispatch an expanded-input simulation by complexity level.
 :func:`simulate_expert`
-    Simulate ARPES with Voigt broadening and dipole matrix elements.
+    Simulate ARPES with pseudo-Voigt broadening and dipole matrix elements.
 :func:`simulate_expert_expanded`
     Run expert-level ARPES simulation from plain arrays.
 :func:`simulate_novice`
-    Simulate ARPES spectrum with Voigt broadening and uniform weights.
+    Simulate ARPES spectrum with pseudo-Voigt broadening and uniform weights.
 :func:`simulate_novice_expanded`
     Run novice-level ARPES simulation from plain arrays.
 :func:`simulate_soc`
@@ -91,7 +91,7 @@ Routine Listings
 :func:`simulate_tb_radial`
     Run the end-to-end differentiable ARPES forward model.
 :func:`voigt`
-    Compute normalized Voigt profile via pseudo-Voigt approximation.
+    Compute a normalized Thompson-Cox-Hastings pseudo-Voigt profile.
 :func:`yeh_lindau_weights`
     Compute Yeh-Lindau cross-section weights per orbital.
 

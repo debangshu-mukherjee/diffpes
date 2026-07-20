@@ -60,6 +60,12 @@ def _path_name(path: tuple[object, ...]) -> str:
     return path_name
 
 
+def _as_jax_arrays(tree: PyTree) -> PyTree:
+    """Normalize numerical-check inputs before runtime type validation."""
+    normalized: PyTree = jax.tree.map(jnp.asarray, tree)
+    return normalized
+
+
 def _central_leaf_grad(
     jitted_fn: ScalarLoss,
     treedef: jax.tree_util.PyTreeDef,
@@ -159,8 +165,14 @@ def assert_grad_matches_fd(
         if atol is None
         else atol
     )
+
+    def checked_fn(candidate: PyTree) -> Float[Array, ""]:
+        normalized: PyTree = _as_jax_arrays(candidate)
+        checked_value: Float[Array, ""] = fn(normalized)
+        return checked_value
+
     test_util.check_grads(
-        fn,
+        checked_fn,
         (theta,),
         order=1,
         modes=modes,

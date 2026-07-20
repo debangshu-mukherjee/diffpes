@@ -20,6 +20,8 @@ The submodules are organized as follows:
     Full dipole matrix element assembly.
 - :mod:`gaunt`
     Gaunt coefficient table for dipole transitions.
+- :mod:`safe`
+    Provide named gradient-safe elementary operations.
 - :mod:`spherical_harmonics`
     Real spherical harmonics in JAX.
 
@@ -43,6 +45,20 @@ Routine Listings
     Evaluate a single real spherical harmonic.
 :func:`real_spherical_harmonics_all`
     Evaluate all real spherical harmonics up to l_max.
+:func:`safe_arccos`
+    Evaluate arccos with saturated values and zero boundary gradients.
+:func:`safe_arctan2`
+    Evaluate arctan2 with a zero value and gradient at the origin.
+:func:`safe_divide`
+    Divide with a fallback and zero quotient gradients at zero denominators.
+:func:`safe_log`
+    Evaluate log with a finite floor and zero gradients below it.
+:func:`safe_norm`
+    Calculate a Euclidean norm with a zero gradient at zero vectors.
+:func:`safe_power`
+    Raise positive inputs to a power and return zero otherwise.
+:func:`safe_sqrt`
+    Evaluate sqrt on positive inputs and return zero otherwise.
 
 Notes
 -----
@@ -58,6 +74,15 @@ from .dipole import (
     dipole_matrix_element_single,
 )
 from .gaunt import GAUNT_TABLE, L_MAX, build_gaunt_table, gaunt_lookup
+from .safe import (
+    safe_arccos,
+    safe_arctan2,
+    safe_divide,
+    safe_log,
+    safe_norm,
+    safe_power,
+    safe_sqrt,
+)
 from .spherical_harmonics import (
     real_spherical_harmonic,
     real_spherical_harmonics_all,
@@ -73,4 +98,11 @@ __all__: list[str] = [
     "gaunt_lookup",
     "real_spherical_harmonic",
     "real_spherical_harmonics_all",
+    "safe_arccos",
+    "safe_arctan2",
+    "safe_divide",
+    "safe_log",
+    "safe_norm",
+    "safe_power",
+    "safe_sqrt",
 ]

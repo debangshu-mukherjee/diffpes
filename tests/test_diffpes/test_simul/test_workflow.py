@@ -3,8 +3,10 @@
 from pathlib import Path
 
 import chex
+import jax
 import jax.numpy as jnp
 import pytest
+from jaxtyping import Array, Float
 
 from diffpes.simul import (
     load_vasp_context,
@@ -13,6 +15,7 @@ from diffpes.simul import (
     simulate_context,
 )
 from diffpes.types import (
+    ArpesSpectrum,
     SpinOrbitalProjection,
     WorkflowContext,
     make_band_structure,
@@ -20,6 +23,7 @@ from diffpes.types import (
     make_spin_orbital_projection,
     make_workflow_context,
 )
+from tests._gradients import gradient_gate
 
 _FIXTURES_DIR: Path = (
     Path(__file__).resolve().parents[1] / "test_inout" / "fixtures"
@@ -203,6 +207,59 @@ class TestSimulateContext(chex.TestCase):
         chex.assert_shape(base.intensity, (nk, 320))
         chex.assert_shape(broadened.intensity, (nk, 320))
         assert not jnp.allclose(base.intensity, broadened.intensity)
+
+    def test_loaded_fermi_energy_gradient_matches_fd(self) -> None:
+        """Propagate the loaded Fermi energy through the workflow gradient.
+
+        Extended Summary
+        ----------------
+        Verifies an explicit scalar-array Fermi energy remains a traced leaf
+        through ``load_vasp_context`` and ``simulate_context`` and produces a
+        finite, nonzero derivative that agrees with central finite
+        differences to the stiff ``rtol=1e-5`` gate.
+
+        Notes
+        -----
+        Loads the two-k-point spin fixtures inside the traced loss, simulates
+        the basic Gaussian level at 300 K, and applies the shared
+        differentiability harness to the summed intensity.
+        """
+
+        def workflow_loss(
+            fermi_energy: Float[Array, ""],
+        ) -> Float[Array, ""]:
+            context: WorkflowContext = load_vasp_context(
+                directory=str(_FIXTURES_DIR),
+                eigenval_file="EIGENVAL_spin",
+                procar_file="PROCAR_spin",
+                doscar_file=None,
+                kpoints_file=None,
+                fermi_energy=fermi_energy,
+                procar_mode="legacy",
+                check_dimensions=True,
+            )
+            spectrum: ArpesSpectrum = simulate_context(
+                context=context,
+                level="basic",
+                fidelity=96,
+                sigma=0.05,
+                gamma=0.1,
+                temperature=300.0,
+                photon_energy=35.0,
+            )
+            loss: Float[Array, ""] = jnp.sum(spectrum.intensity)
+            return loss
+
+        fermi_energy: Float[Array, ""] = jnp.asarray(-0.4)
+        derivative: Float[Array, ""] = jax.grad(workflow_loss)(fermi_energy)
+        chex.assert_tree_all_finite(derivative)
+        assert float(jnp.abs(derivative)) > 1e-12
+        gradient_gate(
+            workflow_loss,
+            fermi_energy,
+            regime="stiff",
+            scale_floor=1.0,
+        )
 
 
 class TestRunVaspWorkflow(chex.TestCase):

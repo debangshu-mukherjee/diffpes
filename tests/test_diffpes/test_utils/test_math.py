@@ -2,26 +2,42 @@
 
 Extended Summary
 ----------------
-Exercises the utils.math module: faddeeva (complex error function)
-and zscore_normalize. Faddeeva tests cover the real axis, the
-imaginary axis, and the known value at the origin; each is run with
-and without JIT. Z-score tests cover normalisation statistics,
-constant input (zero std guard), and 2D input. All test logic and
-assertions are documented in the docstrings of each test class
-and method.
-
-Routine Listings
-----------------
-:class:`TestFaddeeva`
-    Tests for faddeeva.
-:class:`TestZscoreNormalize`
-    Tests for zscore_normalize.
+Exercises the Faddeeva function, z-score normalization, and the sanctioned
+complex-to-stacked-real optimizer boundary. Packing tests cover generic
+asymmetric complex data, exact round trips, precision preservation, JIT,
+vectorization, real-coordinate gradients, and JAX's pinned Wirtinger
+convention.
 """
 
 import chex
+import jax
 import jax.numpy as jnp
+from beartype import beartype
+from jaxtyping import Array, Complex, Float, jaxtyped
 
-from diffpes.utils.math import faddeeva, zscore_normalize
+from diffpes.utils import (
+    faddeeva,
+    pack_complex,
+    unpack_complex,
+    zscore_normalize,
+)
+
+
+@jaxtyped(typechecker=beartype)
+def _packed_norm_squared(
+    packed: Float[Array, " ... 2"],
+) -> Float[Array, ""]:
+    """Evaluate squared complex magnitude from packed real coordinates."""
+    unpacked: Complex[Array, " ..."] = unpack_complex(packed)
+    loss: Float[Array, ""] = jnp.sum(jnp.abs(unpacked) ** 2)
+    return loss
+
+
+@jaxtyped(typechecker=beartype)
+def _complex_abs_squared(z: Complex[Array, ""]) -> Float[Array, ""]:
+    """Evaluate squared magnitude for the Wirtinger convention pin."""
+    loss: Float[Array, ""] = jnp.abs(z) ** 2
+    return loss
 
 
 class TestFaddeeva(chex.TestCase):
@@ -183,7 +199,7 @@ class TestZscoreNormalize(chex.TestCase):
         Asserts
         -------
         Output is all zeros, confirming the zero-variance guard path
-        (jnp.where(std > 0, std, 1.0)) produces the correct degenerate result.
+        produces the correct degenerate result.
         """
         data = jnp.ones(10, dtype=jnp.float64)
         var_fn = self.variant(zscore_normalize)
@@ -224,3 +240,153 @@ class TestZscoreNormalize(chex.TestCase):
         chex.assert_trees_all_close(
             jnp.mean(result), jnp.float64(0.0), atol=1e-10
         )
+
+
+class TestPackComplex(chex.TestCase):
+    """Validate :func:`~diffpes.utils.math.pack_complex`.
+
+    Covers exact complex round trips, complex128-to-float64 preservation, JIT
+    compilation, and vectorization on generic data whose real and imaginary
+    magnitudes are deliberately asymmetric.
+
+    :see: :func:`~diffpes.utils.math.pack_complex`
+    """
+
+    def test_round_trip_and_dtype(self) -> None:
+        """Preserve generic complex128 values exactly through a JIT round trip.
+
+        The input uses unequal real and imaginary components so an accidental
+        component swap or real-symmetric implementation cannot pass.
+
+        Notes
+        -----
+        Packs a ``(2, 2)`` complex128 array under ``jax.jit``, asserts the
+        ``(2, 2, 2)`` float64 representation, and unpacks it under ``jax.jit``
+        before checking bitwise equality.
+        """
+        complex_values: Complex[Array, "2 2"] = jnp.array(
+            [[1.0 + 2.0j, -3.0 + 0.5j], [7.0 - 4.0j, 0.25 + 9.0j]],
+            dtype=jnp.complex128,
+        )
+        packed: Float[Array, "2 2 2"] = jax.jit(pack_complex)(complex_values)
+        round_tripped: Complex[Array, "2 2"] = jax.jit(unpack_complex)(packed)
+
+        chex.assert_shape(packed, (2, 2, 2))
+        chex.assert_equal(packed.dtype, jnp.dtype("float64"))
+        chex.assert_trees_all_equal(round_tripped, complex_values)
+
+    def test_vmap(self) -> None:
+        """Vectorize packing independently over a leading parameter batch.
+
+        The result must retain batch and parameter axes while appending only
+        the two-component packing axis.
+
+        Notes
+        -----
+        Applies ``jax.vmap`` to three generic two-element complex parameter
+        vectors and compares with one direct packing operation exactly.
+        """
+        complex_values: Complex[Array, "3 2"] = jnp.array(
+            [
+                [1.0 + 4.0j, 2.0 - 3.0j],
+                [-5.0 + 0.25j, 7.0 + 8.0j],
+                [9.0 - 2.0j, -1.5 + 6.0j],
+            ],
+            dtype=jnp.complex128,
+        )
+        vmapped: Float[Array, "3 2 2"] = jax.vmap(pack_complex)(complex_values)
+        direct: Float[Array, "3 2 2"] = pack_complex(complex_values)
+        unpacked: Complex[Array, "3 2"] = jax.vmap(unpack_complex)(vmapped)
+
+        chex.assert_shape(vmapped, (3, 2, 2))
+        chex.assert_trees_all_equal(vmapped, direct)
+        chex.assert_trees_all_equal(unpacked, complex_values)
+
+
+class TestUnpackComplex(chex.TestCase):
+    """Validate :func:`~diffpes.utils.math.unpack_complex`.
+
+    Covers exact stacked-real round trips, float64-to-complex128 preservation,
+    and equivalence between complex magnitude gradients and ordinary real
+    optimizer-coordinate gradients.
+
+    :see: :func:`~diffpes.utils.math.unpack_complex`
+    """
+
+    def test_round_trip_and_dtype(self) -> None:
+        """Preserve generic stacked float64 values exactly through a JIT round trip.
+
+        The final input axis contains deliberately asymmetric real and
+        imaginary coordinates to detect ordering errors.
+
+        Notes
+        -----
+        Unpacks a ``(2, 3, 2)`` float64 array under ``jax.jit``, asserts a
+        ``(2, 3)`` complex128 result, and packs it again before checking exact
+        coordinate equality.
+        """
+        packed_values: Float[Array, "2 3 2"] = jnp.array(
+            [
+                [[1.0, 2.0], [-3.0, 0.5], [7.0, -4.0]],
+                [[0.25, 9.0], [6.0, -8.0], [-2.5, 11.0]],
+            ],
+            dtype=jnp.float64,
+        )
+        unpacked: Complex[Array, "2 3"] = jax.jit(unpack_complex)(
+            packed_values
+        )
+        round_tripped: Float[Array, "2 3 2"] = jax.jit(pack_complex)(unpacked)
+
+        chex.assert_shape(unpacked, (2, 3))
+        chex.assert_equal(unpacked.dtype, jnp.dtype("complex128"))
+        chex.assert_trees_all_equal(round_tripped, packed_values)
+
+    def test_gradient_equivalence(self) -> None:
+        """Match complex-magnitude gradients to packed real coordinates exactly.
+
+        For ``p = stack([x, y])``, the real optimizer gradient of
+        ``sum(abs(unpack_complex(p))**2)`` must equal ``stack([2x, 2y])``.
+
+        Notes
+        -----
+        Differentiates a JIT-compiled loss on generic float64 coordinates and
+        checks exact equality with twice the input, pinning an optax-safe real
+        gradient with no Wirtinger bookkeeping at the optimizer boundary.
+        """
+        packed_values: Float[Array, "3 2"] = jnp.array(
+            [[1.0, 2.0], [-3.0, 0.5], [7.0, -4.0]], dtype=jnp.float64
+        )
+        gradient: Float[Array, "3 2"] = jax.jit(
+            jax.grad(_packed_norm_squared)
+        )(packed_values)
+        expected: Float[Array, "3 2"] = 2.0 * packed_values
+
+        chex.assert_trees_all_equal(gradient, expected)
+
+
+class TestComplexAutodiffConvention(chex.TestCase):
+    """Pin JAX's complex-gradient convention at the packing boundary.
+
+    Guards the exact conjugated Wirtinger convention assumed when complex
+    physics values are related to stacked real optimizer coordinates.
+    """
+
+    def test_wirtinger_convention(self) -> None:
+        """Pin ``grad(abs(z)**2)`` at ``1+1j`` to exactly ``2-2j``.
+
+        This convention determines how real-loss complex gradients relate to
+        gradients of the two stacked real optimizer coordinates.
+
+        Notes
+        -----
+        Applies reverse-mode autodiff to the scalar complex128 point
+        ``1+1j`` and checks bitwise equality with the JAX-cookbook convention
+        ``2-2j`` so any upstream convention change fails loudly.
+        """
+        z: Complex[Array, ""] = jnp.asarray(1.0 + 1.0j, dtype=jnp.complex128)
+        gradient: Complex[Array, ""] = jax.grad(_complex_abs_squared)(z)
+        expected: Complex[Array, ""] = jnp.asarray(
+            2.0 - 2.0j, dtype=jnp.complex128
+        )
+
+        chex.assert_trees_all_equal(gradient, expected)

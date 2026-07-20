@@ -105,6 +105,14 @@ def build_polarization_vectors(
     e_p : Float[Array, " 3"]
         p-polarization unit vector (in incidence plane,
         perpendicular to photon wavevector).
+
+    Notes
+    -----
+    The reference-axis choice at the collinearity threshold is a deliberately
+    hard geometric selector. Its branch-choice gradient is zero away from the
+    threshold and undefined at it, so it cannot supply a continuous
+    parameter-Jacobian column. Plan 06 replaces this coordinate guard in the
+    differentiable matrix-element geometry.
     """
     k_photon: Float[Array, " 3"] = jnp.array(
         [

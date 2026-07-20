@@ -116,7 +116,7 @@ def load_vasp_context(
     dos: Optional[DosType] = None
     if fermi_energy is None:
         if doscar_file is None:
-            resolved_fermi: float = 0.0
+            resolved_fermi: ScalarFloat = 0.0
         else:
             dos_path_req: Path = root / doscar_file
             if not dos_path_req.exists():
@@ -126,9 +126,9 @@ def load_vasp_context(
                 )
                 raise FileNotFoundError(msg)
             dos = read_doscar(str(dos_path_req), return_mode=doscar_mode)
-            resolved_fermi = float(dos.fermi_energy)
+            resolved_fermi = dos.fermi_energy
     else:
-        resolved_fermi = float(fermi_energy)
+        resolved_fermi = fermi_energy
         if doscar_file is not None:
             dos_path_opt: Path = root / doscar_file
             if dos_path_opt.exists():

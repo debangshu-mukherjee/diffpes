@@ -3,7 +3,7 @@
 Extended Summary
 ----------------
 Provides JAX-compatible broadening profiles including Gaussian
-(instrumental resolution), Voigt (combined Gaussian-Lorentzian),
+(instrumental resolution), pseudo-Voigt (combined Gaussian-Lorentzian),
 and Fermi-Dirac thermal occupation functions.
 
 Routine Listings
@@ -13,7 +13,7 @@ Routine Listings
 :func:`gaussian`
     Compute normalized Gaussian broadening profile.
 :func:`voigt`
-    Compute normalized Voigt profile via pseudo-Voigt approximation.
+    Compute a normalized Thompson-Cox-Hastings pseudo-Voigt profile.
 
 Notes
 -----
@@ -21,10 +21,13 @@ All functions are JIT-compilable and support ``jax.vmap``
 for vectorized evaluation across k-points and bands.
 """
 
+import equinox as eqx
+import jax
 import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
+from diffpes.maths import safe_divide, safe_power
 from diffpes.types import KB_EV_PER_K, ScalarFloat
 
 
@@ -96,7 +99,7 @@ def voigt(
     sigma: ScalarFloat,
     gamma: ScalarFloat,
 ) -> Float[Array, " E"]:
-    """Compute normalized Voigt profile via pseudo-Voigt approximation.
+    """Compute a normalized Thompson-Cox-Hastings pseudo-Voigt profile.
 
     Evaluates a Voigt lineshape using the pseudo-Voigt method of
     Thompson, Cox & Hastings (1987) [1]_, which expresses the Voigt
@@ -104,6 +107,8 @@ def voigt(
     as a linear combination of Gaussian and Lorentzian components:
 
         V(E) = eta * L(E) + (1 - eta) * G(E)
+
+    :see: :class:`~.test_broadening.TestVoigt`
 
     where eta is an empirically determined mixing ratio. This
     approximation is accurate to better than 1% relative error.
@@ -131,8 +136,8 @@ def voigt(
 
        The Thompson-Cox-Hastings empirical relation approximates
        the FWHM of the true Voigt convolution from the component
-       FWHMs. A safety guard replaces f_V = 0 with 1e-30 to avoid
-       division by zero.
+       FWHMs. The width polynomial is sanitized before its fractional
+       power is evaluated so an inactive branch cannot poison gradients.
 
     3. **Compute mixing ratio eta**::
 
@@ -141,7 +146,8 @@ def voigt(
                  + 0.11116 * ratio^3
 
        The mixing ratio interpolates between pure Gaussian (eta = 0)
-       and pure Lorentzian (eta = 1). It is clipped to [0, 1].
+       and pure Lorentzian (eta = 1). For non-negative physical widths,
+       the Thompson-Cox-Hastings polynomial keeps it in [0, 1].
 
     4. **Combine Gaussian and Lorentzian components**::
 
@@ -168,7 +174,21 @@ def voigt(
     Returns
     -------
     profile : Float[Array, " E"]
-        Normalized Voigt profile values.
+        Normalized pseudo-Voigt profile values.
+
+    Raises
+    ------
+    EquinoxRuntimeError
+        If ``sigma`` and ``gamma`` are simultaneously zero, where the
+        normalized profile and its directional derivative are undefined.
+
+    Notes
+    -----
+    Quotients use :func:`diffpes.maths.safe_divide`, so inactive zero-width
+    branches cannot inject NaNs into reverse-mode gradients. The
+    pure-Gaussian ray ``gamma = 0`` and pure-Lorentzian ray ``sigma = 0``
+    retain their genuine finite boundary sensitivities; only their singular
+    intersection is rejected.
 
     References
     ----------
@@ -176,28 +196,36 @@ def voigt(
        Debye-Scherrer synchrotron X-ray data from Al2O3",
        J. Appl. Cryst. 20, 79-83 (1987).
     """
-    _ln2: Float[Array, " "] = jnp.log(jnp.float64(2.0))
-    f_g: Float[Array, " "] = 2.0 * sigma * jnp.sqrt(2.0 * _ln2)
-    f_l: Float[Array, " "] = jnp.asarray(2.0 * gamma)
-    f_v: Float[Array, " "] = (
+    sigma_array: Float[Array, ""] = jnp.asarray(sigma, dtype=jnp.float64)
+    gamma_array: Float[Array, ""] = jnp.asarray(gamma, dtype=jnp.float64)
+    checked_sigma: Float[Array, ""] = eqx.error_if(
+        sigma_array,
+        (sigma_array == 0.0) & (gamma_array == 0.0),
+        "sigma and gamma must not both be zero",
+    )
+    ln_two: Float[Array, ""] = jnp.log(jnp.float64(2.0))
+    f_g: Float[Array, ""] = 2.0 * checked_sigma * jnp.sqrt(2.0 * ln_two)
+    f_l: Float[Array, ""] = 2.0 * gamma_array
+    poly: Float[Array, ""] = (
         f_g**5
         + 2.69269 * f_g**4 * f_l
         + 2.42843 * f_g**3 * f_l**2
         + 4.47163 * f_g**2 * f_l**3
         + 0.07842 * f_g * f_l**4
         + f_l**5
-    ) ** 0.2
-    safe_fv: Float[Array, " "] = jnp.where(f_v > 0.0, f_v, jnp.float64(1e-30))
-    ratio: Float[Array, " "] = f_l / safe_fv
-    eta: Float[Array, " "] = (
+    )
+    f_v: Float[Array, ""] = safe_power(poly, 0.2)
+    ratio: Float[Array, ""] = safe_divide(f_l, f_v)
+    eta: Float[Array, ""] = (
         1.36603 * ratio - 0.47719 * ratio**2 + 0.11116 * ratio**3
     )
-    eta: Float[Array, ""] = jnp.clip(eta, 0.0, 1.0)
-    sigma_v: Float[Array, " "] = safe_fv / (2.0 * jnp.sqrt(2.0 * _ln2))
+    sigma_v: Float[Array, ""] = safe_divide(f_v, 2.0 * jnp.sqrt(2.0 * ln_two))
     g_part: Float[Array, " E"] = gaussian(energy_range, center, sigma_v)
     diff: Float[Array, " E"] = energy_range - center
-    gamma_v: Float[Array, " "] = safe_fv / 2.0
-    l_part: Float[Array, " E"] = gamma_v / (jnp.pi * (diff**2 + gamma_v**2))
+    gamma_v: Float[Array, ""] = safe_divide(f_v, jnp.float64(2.0))
+    l_part: Float[Array, " E"] = safe_divide(
+        gamma_v, jnp.pi * (diff**2 + gamma_v**2)
+    )
     profile: Float[Array, " E"] = eta * l_part + (1.0 - eta) * g_part
     return profile
 
@@ -214,6 +242,8 @@ def fermi_dirac(
     energy, Fermi level, and temperature::
 
         f(E) = 1 / (1 + exp((E - Ef) / (kB * T)))
+
+    :see: :class:`~.test_broadening.TestFermiDirac`
 
     Implementation Logic
     --------------------
@@ -237,7 +267,7 @@ def fermi_dirac(
     3. **Evaluate Fermi-Dirac function**::
 
            exponent = (E - Ef) / safe_kt
-           occupation = 1 / (1 + exp(exponent))
+           occupation = sigmoid(-exponent)
 
        Computes the occupation probability. For E << Ef the result
        approaches 1 (filled states); for E >> Ef it approaches 0
@@ -260,17 +290,24 @@ def fermi_dirac(
     Notes
     -----
     Uses the Boltzmann constant kB = 8.617333e-5 eV/K, imported as
-    :obj:`~diffpes.types.KB_EV_PER_K`.
+    :obj:`~diffpes.types.KB_EV_PER_K`. ``jax.nn.sigmoid`` is algebraically
+    identical to the reciprocal-exponential expression but has an
+    overflow-safe JVP. Values and derivatives therefore underflow to finite
+    exact zeros far above the Fermi level instead of becoming NaN. The
+    existing ``1e-10`` eV thermal-scale clamp keeps the public function total
+    at nonpositive temperature; validated simulation parameters require a
+    strictly positive temperature.
     """
     kt: Float[Array, " "] = jnp.asarray(
         KB_EV_PER_K, dtype=jnp.float64
     ) * jnp.asarray(temperature, dtype=jnp.float64)
-    safe_kt: Float[Array, " "] = jnp.where(kt > 0.0, kt, jnp.float64(1e-10))
-    exponent: Float[Array, " "] = (
+    safe_kt: Float[Array, " "] = jnp.maximum(kt, jnp.float64(1e-10))
+    exponent: Float[Array, " "] = safe_divide(
         jnp.asarray(energy, dtype=jnp.float64)
-        - jnp.asarray(fermi_energy, dtype=jnp.float64)
-    ) / safe_kt
-    occupation: Float[Array, " "] = 1.0 / (1.0 + jnp.exp(exponent))
+        - jnp.asarray(fermi_energy, dtype=jnp.float64),
+        safe_kt,
+    )
+    occupation: Float[Array, " "] = jax.nn.sigmoid(-exponent)
     return occupation
 
 

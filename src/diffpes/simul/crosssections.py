@@ -79,6 +79,14 @@ def heuristic_weights(
     weights : Float[Array, " 9"]
         Orbital weights for [s, py, pz, px, dxy, dyz, dz2,
         dxz, dx2-y2].
+
+    Notes
+    -----
+    The 50 eV regime choice is a deliberately hard selector. Its gradient
+    with respect to photon energy is zero away from the threshold and
+    undefined at the threshold, so this heuristic contributes no continuous
+    photon-energy Jacobian column. Plan 06 replaces this approximation with
+    a differentiable matrix-element treatment.
     """
     low_e: Float[Array, " 9"] = jnp.array(
         [1.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0],

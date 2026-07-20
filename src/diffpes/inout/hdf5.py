@@ -16,21 +16,22 @@ Routine Listings
 
 Notes
 -----
-All eight diffpes PyTree types are supported:
-``DensityOfStates``, ``BandStructure``, ``ArpesSpectrum``,
-``OrbitalProjection``, ``SimulationParams``,
-``PolarizationConfig``, ``KPathInfo``, ``CrystalGeometry``.
+All nineteen types-owned Equinox carriers are supported. Serialization
+metadata is derived from dataclass fields: non-static fields are stored as
+datasets or recursive module groups, while ``eqx.field(static=True)`` values
+are encoded as tuple-preserving JSON.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 
+import equinox as eqx
 import h5py
 import jax.numpy as jnp
 import numpy as np
 from beartype import beartype
-from beartype.typing import Any, Callable, Optional, Union
+from beartype.typing import Any, Optional, Union
 from jaxtyping import Shaped
 from numpy import ndarray as NDArray  # noqa: N812
 
@@ -39,20 +40,26 @@ from diffpes.types import (
     BandStructure,
     CrystalGeometry,
     DensityOfStates,
+    DiagonalizedBands,
+    FullDensityOfStates,
     KPathInfo,
+    OrbitalBasis,
     OrbitalProjection,
     PolarizationConfig,
+    SelfEnergyConfig,
     SimulationParams,
+    SlaterParams,
     SOCVolumetricData,
+    SpinBandStructure,
     SpinOrbitalProjection,
+    TBModel,
     VolumetricData,
+    WorkflowContext,
 )
 from diffpes.types.vasp_constants import (
     _ATTR_AUX,
     _ATTR_NONE,
     _ATTR_TYPE,
-    _KPATH_AUX_WITH_COMMENT_LEN,
-    _KPATH_AUX_WITH_COORD_MODE_LEN,
 )
 
 
@@ -72,459 +79,129 @@ class _PyTreeMeta:
         Ordered field names of JAX array children.
     static_fields : tuple[str, ...]
         Ordered field names of static Equinox metadata.
-    aux_encoder : Callable[[Any], Any]
-        Converts aux_data to a JSON-serializable value.
-    aux_decoder : Callable[[Any], Any]
-        Converts JSON-decoded value back to the Python type
-        expected by the type constructor.
     """
 
     cls: Any  # Equinox module class
     children_fields: tuple[str, ...]
     static_fields: tuple[str, ...]
-    aux_encoder: Callable[[Any], Any]
-    aux_decoder: Callable[[Any], Any]
 
 
-def _encode_none(
-    _aux: None,  # noqa: ARG001
-) -> None:
-    """Encode PyTree auxiliary data ``None`` for JSON storage.
-
-    Used for PyTree types that have no auxiliary data (e.g. DensityOfStates).
-    The value is returned unchanged; when written to JSON it becomes
-    ``null``.
-
-    Parameters
-    ----------
-    _aux : None
-        The auxiliary data to encode (must be None).
-
-    Returns
-    -------
-    None
-        Unchanged; serializers write this as JSON ``null``.
-    """
-
-
-def _decode_none(
-    _val: None,  # noqa: ARG001
-) -> None:
-    """Decode JSON ``null`` back to PyTree auxiliary data ``None``.
-
-    Inverse of ``_encode_none``. Used when loading PyTrees that have
-    no auxiliary data.
-
-    Parameters
-    ----------
-    _val : None
-        The decoded value (expected to be None / JSON null).
-
-    Returns
-    -------
-    None
-        The reconstructed auxiliary data for the PyTree.
-    """
-
-
-def _encode_int(aux: int) -> int:
-    """Encode PyTree auxiliary integer for JSON storage.
-
-    Converts the Python int to a JSON-serialisable integer. Used for
-    types that store a single int in auxiliary data (e.g. SimulationParams
-    fidelity).
-
-    Parameters
-    ----------
-    aux : int
-        The auxiliary integer to encode.
-
-    Returns
-    -------
-    int
-        The same value, guaranteed to be a plain Python int for JSON.
-    """
-    return int(aux)
-
-
-def _decode_int(val: Any) -> int:  # noqa: ANN401
-    """Decode a JSON integer back to Python int for PyTree auxiliary data.
-
-    Inverse of ``_encode_int``. Accepts any value and casts to int so that
-    JSON number types are correctly restored.
-
-    Parameters
-    ----------
-    val : Any
-        The value read from JSON (typically an int or float).
-
-    Returns
-    -------
-    int
-        The reconstructed auxiliary integer.
-    """
-    return int(val)
-
-
-def _encode_str(aux: str) -> str:
-    """Encode PyTree auxiliary string for JSON storage.
-
-    Returns the string unchanged so it can be written as a JSON string.
-    Used for single-string auxiliary fields.
-
-    Parameters
-    ----------
-    aux : str
-        The auxiliary string to encode.
-
-    Returns
-    -------
-    str
-        The same string for JSON serialisation.
-    """
-    return str(aux)
-
-
-def _decode_str(val: Any) -> str:  # noqa: ANN401
-    """Decode a JSON string back to Python str for PyTree auxiliary data.
-
-    Inverse of ``_encode_str``. Converts the loaded value to str so that
-    non-string JSON types (if any) are normalised.
-
-    Parameters
-    ----------
-    val : Any
-        The value read from JSON (typically a string).
-
-    Returns
-    -------
-    str
-        The reconstructed auxiliary string.
-    """
-    return str(val)
-
-
-def _encode_tuple_str(
-    aux: tuple[str, ...],
-) -> list[str]:
-    """Encode PyTree auxiliary tuple of strings for JSON storage.
-
-    JSON does not support tuples; the tuple is converted to a list of
-    strings so that it can be serialised. Used for types that store
-    sequences of strings (e.g. KPathInfo labels).
-
-    Parameters
-    ----------
-    aux : tuple[str, ...]
-        The auxiliary tuple of strings to encode.
-
-    Returns
-    -------
-    list[str]
-        A list of the same strings for JSON array serialisation.
-    """
-    return list(aux)
-
-
-def _decode_tuple_str(
-    val: Any,  # noqa: ANN401
-) -> tuple[str, ...]:
-    """Decode a JSON array of strings to a tuple for PyTree auxiliary data.
-
-    Inverse of ``_encode_tuple_str``. Each element is coerced to str and
-    the result is returned as an immutable tuple.
-
-    Parameters
-    ----------
-    val : Any
-        The value read from JSON (typically a list of strings).
-
-    Returns
-    -------
-    tuple[str, ...]
-        The reconstructed auxiliary tuple of strings.
-    """
-    return tuple(str(s) for s in val)
-
-
-def _encode_kpath_aux(
-    aux: tuple[str, tuple[str, ...], str, str],
-) -> list[Any]:
-    """Encode KPathInfo auxiliary string metadata for JSON storage.
-
-    Extended Summary
-    ----------------
-    KPathInfo stores ``(mode, labels, comment, coordinate_mode)`` as
-    its PyTree auxiliary data. Since JSON does not support Python
-    tuples, this encoder converts the 4-element tuple into a JSON
-    list ``[mode_str, [label_str, ...], comment_str,
-    coordinate_mode_str]``.
-
-    Parameters
-    ----------
-    aux : tuple[str, tuple[str, ...], str, str]
-        The KPathInfo auxiliary data:
-        ``(mode, labels, comment, coordinate_mode)``.
-
-    Returns
-    -------
-    list[Any]
-        JSON-serializable list representation.
-    """
-    mode: str
-    labels: tuple[str, ...]
-    comment: str
-    coordinate_mode: str
-    mode, labels, comment, coordinate_mode = aux
-    result: list[Any] = [
-        str(mode),
-        list(labels),
-        str(comment),
-        str(coordinate_mode),
-    ]
-    return result
-
-
-def _decode_kpath_aux(
-    val: Any,  # noqa: ANN401
-) -> tuple[str, tuple[str, ...], str, str]:
-    """Decode JSON list back to KPathInfo auxiliary string metadata.
-
-    Extended Summary
-    ----------------
-    Inverse of :func:`_encode_kpath_aux`. Supports both the legacy
-    2-element format ``[mode, labels]`` (written by older versions of
-    the serializer) and the current 4-element format
-    ``[mode, labels, comment, coordinate_mode]``. Missing fields
-    default to empty strings.
-
-    Implementation Logic
-    --------------------
-    1. Extract ``mode`` from index 0 and ``labels`` from index 1.
-    2. If the list has >= 3 elements, extract ``comment`` from index 2;
-       otherwise default to ``""``.
-    3. If the list has >= 4 elements, extract ``coordinate_mode`` from
-       index 3; otherwise default to ``""``.
-    4. Return as a 4-tuple matching the KPathInfo auxiliary signature.
-
-    Parameters
-    ----------
-    val : Any
-        The value read from JSON (a list of 2-4 elements).
-
-    Returns
-    -------
-    tuple[str, tuple[str, ...], str, str]
-        Reconstructed ``(mode, labels, comment, coordinate_mode)``.
-    """
-    mode: str = str(val[0])
-    labels: tuple[str, ...] = tuple(str(s) for s in val[1])
-    comment: str = (
-        str(val[2]) if len(val) >= _KPATH_AUX_WITH_COMMENT_LEN else ""
+def _pytree_classes() -> tuple[type[eqx.Module], ...]:
+    """Return the complete carrier class set used by the codec."""
+    classes: tuple[type[eqx.Module], ...] = (
+        ArpesSpectrum,
+        BandStructure,
+        CrystalGeometry,
+        DensityOfStates,
+        DiagonalizedBands,
+        FullDensityOfStates,
+        KPathInfo,
+        OrbitalBasis,
+        OrbitalProjection,
+        PolarizationConfig,
+        SelfEnergyConfig,
+        SimulationParams,
+        SlaterParams,
+        SOCVolumetricData,
+        SpinBandStructure,
+        SpinOrbitalProjection,
+        TBModel,
+        VolumetricData,
+        WorkflowContext,
     )
-    coordinate_mode: str = (
-        str(val[3]) if len(val) >= _KPATH_AUX_WITH_COORD_MODE_LEN else ""
-    )
-    return (mode, labels, comment, coordinate_mode)
+    return classes
 
 
-def _encode_volumetric_aux(
-    aux: tuple[tuple[int, int, int], tuple[str, ...]],
-) -> list[Any]:
-    """Encode VolumetricData auxiliary data for JSON storage.
+def _encode_static(value: Any) -> Any:  # noqa: ANN401
+    """Encode nested static Equinox metadata without losing tuple types."""
+    if isinstance(value, tuple):
+        return {"__tuple__": [_encode_static(item) for item in value]}
+    if isinstance(value, eqx.Module) and is_dataclass(value):
+        return {
+            "__module__": type(value).__name__,
+            "fields": {
+                field.name: _encode_static(getattr(value, field.name))
+                for field in fields(value)
+            },
+        }
+    if isinstance(value, list):
+        return [_encode_static(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _encode_static(item) for key, item in value.items()}
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
-    Extended Summary
-    ----------------
-    VolumetricData and SOCVolumetricData store
-    ``(grid_shape, symbols)`` as their PyTree auxiliary data. This
-    encoder converts the nested tuple into a JSON-serializable list
-    ``[[NGX, NGY, NGZ], [symbol_str, ...]]``.
 
-    Parameters
-    ----------
-    aux : tuple[tuple[int, int, int], tuple[str, ...]]
-        The volumetric auxiliary data:
-        ``(grid_shape, symbols)``.
+def _decode_static(value: Any) -> Any:  # noqa: ANN401
+    """Decode tuple-preserving and nested-module static metadata."""
+    if isinstance(value, dict) and "__tuple__" in value:
+        return tuple(_decode_static(item) for item in value["__tuple__"])
+    if isinstance(value, dict) and "__module__" in value:
+        class_name: str = str(value["__module__"])
+        module_class: type[eqx.Module] = _PYTREE_REGISTRY[class_name].cls
+        module_fields: dict[str, Any] = {
+            str(name): _decode_static(item)
+            for name, item in value["fields"].items()
+        }
+        return module_class(**module_fields)
+    if isinstance(value, list):
+        return [_decode_static(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _decode_static(item) for key, item in value.items()}
+    return value
 
-    Returns
-    -------
-    list[Any]
-        JSON-serializable nested list representation.
+
+def _decode_aux_data(type_name: str, value: Any) -> Any:  # noqa: ANN401
+    """Decode current static metadata and supported legacy HDF5 aux data.
+
+    Plan 02's pre-migration codec wrote plain JSON lists for tuple-valued
+    metadata. Current files use explicit tuple tags. The three conversions
+    below retain read compatibility with those pinned files without restoring
+    a per-carrier write registry.
     """
-    grid_shape: tuple[int, int, int]
-    symbols: tuple[str, ...]
-    grid_shape, symbols = aux
-    result: list[Any] = [list(grid_shape), list(symbols)]
-    return result
+    decoded: Any = _decode_static(value)
+    if isinstance(value, dict) or value is None:
+        return decoded
+    if type_name == "CrystalGeometry":
+        return tuple(str(item) for item in value)
+    if type_name == "KPathInfo":
+        return (
+            str(value[0]),
+            tuple(str(item) for item in value[1]),
+            str(value[2]),
+            str(value[3]),
+        )
+    if type_name in {"SOCVolumetricData", "VolumetricData"}:
+        return (
+            tuple(int(item) for item in value[0]),
+            tuple(str(item) for item in value[1]),
+        )
+    return decoded
 
 
-def _decode_volumetric_aux(
-    val: Any,  # noqa: ANN401
-) -> tuple[tuple[int, int, int], tuple[str, ...]]:
-    """Decode JSON list back to VolumetricData auxiliary data.
-
-    Extended Summary
-    ----------------
-    Inverse of :func:`_encode_volumetric_aux`. Converts the nested
-    JSON list ``[[NGX, NGY, NGZ], [symbol_str, ...]]`` back into the
-    Python tuple ``(grid_shape, symbols)`` expected by the
-    VolumetricData / SOCVolumetricData constructor.
-
-    Parameters
-    ----------
-    val : Any
-        The value read from JSON (a list of two sub-lists).
-
-    Returns
-    -------
-    tuple[tuple[int, int, int], tuple[str, ...]]
-        Reconstructed ``(grid_shape, symbols)``.
-    """
-    grid_shape: tuple[int, int, int] = (
-        int(val[0][0]),
-        int(val[0][1]),
-        int(val[0][2]),
+def _module_meta(module_class: type[eqx.Module]) -> _PyTreeMeta:
+    """Build serialization metadata from Equinox dataclass fields."""
+    module_fields = fields(module_class)
+    children_fields: tuple[str, ...] = tuple(
+        field.name
+        for field in module_fields
+        if not bool(field.metadata.get("static", False))
     )
-    symbols: tuple[str, ...] = tuple(str(s) for s in val[1])
-    return (grid_shape, symbols)
+    static_fields: tuple[str, ...] = tuple(
+        field.name
+        for field in module_fields
+        if bool(field.metadata.get("static", False))
+    )
+    return _PyTreeMeta(
+        cls=module_class,
+        children_fields=children_fields,
+        static_fields=static_fields,
+    )
 
 
 _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
-    "DensityOfStates": _PyTreeMeta(
-        cls=DensityOfStates,
-        children_fields=(
-            "energy",
-            "total_dos",
-            "fermi_energy",
-        ),
-        static_fields=(),
-        aux_encoder=_encode_none,
-        aux_decoder=_decode_none,
-    ),
-    "BandStructure": _PyTreeMeta(
-        cls=BandStructure,
-        children_fields=(
-            "eigenvalues",
-            "kpoints",
-            "kpoint_weights",
-            "fermi_energy",
-        ),
-        static_fields=(),
-        aux_encoder=_encode_none,
-        aux_decoder=_decode_none,
-    ),
-    "ArpesSpectrum": _PyTreeMeta(
-        cls=ArpesSpectrum,
-        children_fields=(
-            "intensity",
-            "energy_axis",
-        ),
-        static_fields=(),
-        aux_encoder=_encode_none,
-        aux_decoder=_decode_none,
-    ),
-    "OrbitalProjection": _PyTreeMeta(
-        cls=OrbitalProjection,
-        children_fields=(
-            "projections",
-            "spin",
-            "oam",
-        ),
-        static_fields=(),
-        aux_encoder=_encode_none,
-        aux_decoder=_decode_none,
-    ),
-    "SpinOrbitalProjection": _PyTreeMeta(
-        cls=SpinOrbitalProjection,
-        children_fields=(
-            "projections",
-            "spin",
-            "oam",
-        ),
-        static_fields=(),
-        aux_encoder=_encode_none,
-        aux_decoder=_decode_none,
-    ),
-    "SimulationParams": _PyTreeMeta(
-        cls=SimulationParams,
-        children_fields=(
-            "energy_min",
-            "energy_max",
-            "sigma",
-            "gamma",
-            "temperature",
-            "photon_energy",
-        ),
-        static_fields=("fidelity",),
-        aux_encoder=_encode_int,
-        aux_decoder=_decode_int,
-    ),
-    "PolarizationConfig": _PyTreeMeta(
-        cls=PolarizationConfig,
-        children_fields=(
-            "theta",
-            "phi",
-            "polarization_angle",
-        ),
-        static_fields=("polarization_type",),
-        aux_encoder=_encode_str,
-        aux_decoder=_decode_str,
-    ),
-    "KPathInfo": _PyTreeMeta(
-        cls=KPathInfo,
-        children_fields=(
-            "num_kpoints",
-            "label_indices",
-            "points_per_segment",
-            "segments",
-            "kpoints",
-            "weights",
-            "grid",
-            "shift",
-        ),
-        static_fields=("mode", "labels", "comment", "coordinate_mode"),
-        aux_encoder=_encode_kpath_aux,
-        aux_decoder=_decode_kpath_aux,
-    ),
-    "CrystalGeometry": _PyTreeMeta(
-        cls=CrystalGeometry,
-        children_fields=(
-            "lattice",
-            "reciprocal_lattice",
-            "coords",
-            "atom_counts",
-        ),
-        static_fields=("symbols",),
-        aux_encoder=_encode_tuple_str,
-        aux_decoder=_decode_tuple_str,
-    ),
-    "VolumetricData": _PyTreeMeta(
-        cls=VolumetricData,
-        children_fields=(
-            "lattice",
-            "coords",
-            "charge",
-            "magnetization",
-            "atom_counts",
-        ),
-        static_fields=("grid_shape", "symbols"),
-        aux_encoder=_encode_volumetric_aux,
-        aux_decoder=_decode_volumetric_aux,
-    ),
-    "SOCVolumetricData": _PyTreeMeta(
-        cls=SOCVolumetricData,
-        children_fields=(
-            "lattice",
-            "coords",
-            "charge",
-            "magnetization",
-            "magnetization_vector",
-            "atom_counts",
-        ),
-        static_fields=("grid_shape", "symbols"),
-        aux_encoder=_encode_volumetric_aux,
-        aux_decoder=_decode_volumetric_aux,
-    ),
+    cls.__name__: _module_meta(cls) for cls in _pytree_classes()
 }
 
 
@@ -684,58 +361,53 @@ def save_to_h5(
         msg = "compression_opts requires compression to be set."
         raise ValueError(msg)
 
+    def _write_module(
+        grp: h5py.Group,
+        pytree: Any,  # noqa: ANN401
+    ) -> None:
+        """Write one Equinox module, recursively storing module children."""
+        type_name: str = type(pytree).__name__
+        if type_name not in _PYTREE_REGISTRY:
+            msg = f"Unsupported PyTree type: {type_name}"
+            raise TypeError(msg)
+        meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
+        static_values: tuple[Any, ...] = tuple(
+            getattr(pytree, field_name) for field_name in meta.static_fields
+        )
+        aux_data: Any = None
+        if len(static_values) == 1:
+            aux_data = static_values[0]
+        elif static_values:
+            aux_data = static_values
+        grp.attrs[_ATTR_TYPE] = type_name
+        grp.attrs[_ATTR_AUX] = json.dumps(_encode_static(aux_data))
+
+        none_fields: list[str] = []
+        for field_name in meta.children_fields:
+            child: Any = getattr(pytree, field_name)
+            if child is None:
+                none_fields.append(field_name)
+            elif isinstance(child, eqx.Module):
+                child_group: h5py.Group = grp.create_group(field_name)
+                _write_module(child_group, child)
+            else:
+                child_arr: Shaped[NDArray, "..."] = np.asarray(child)
+                ds_kwargs: dict[str, Any] = _dataset_write_kwargs(
+                    data=child_arr,
+                    compression=compression,
+                    compression_opts=compression_opts,
+                    shuffle=shuffle,
+                    fletcher32=fletcher32,
+                    chunks=chunks,
+                )
+                grp.create_dataset(field_name, data=child_arr, **ds_kwargs)
+        grp.attrs[_ATTR_NONE] = json.dumps(none_fields)
+
     file_path: Path = Path(path)
     with h5py.File(file_path, "w") as f:
         for group_name, pytree in pytrees.items():
-            type_name: str = type(pytree).__name__
-            if type_name not in _PYTREE_REGISTRY:
-                msg = f"Unsupported PyTree type: {type_name}"
-                raise TypeError(msg)
-
-            meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
-            children: tuple[Any, ...] = tuple(
-                getattr(pytree, field_name)
-                for field_name in meta.children_fields
-            )
-            static_values: tuple[Any, ...] = tuple(
-                getattr(pytree, field_name)
-                for field_name in meta.static_fields
-            )
-            aux_data: Any = None
-            if len(static_values) == 1:
-                aux_data = static_values[0]
-            elif static_values:
-                aux_data = static_values
-
             grp: h5py.Group = f.create_group(group_name)
-            grp.attrs[_ATTR_TYPE] = type_name
-            aux_serializable: Any = meta.aux_encoder(aux_data)
-            grp.attrs[_ATTR_AUX] = json.dumps(aux_serializable)
-
-            none_fields: list[str] = []
-            for field_name, child in zip(
-                meta.children_fields,
-                children,
-                strict=True,
-            ):
-                if child is None:
-                    none_fields.append(field_name)
-                else:
-                    child_arr: Shaped[NDArray, "..."] = np.asarray(child)
-                    ds_kwargs: dict[str, Any] = _dataset_write_kwargs(
-                        data=child_arr,
-                        compression=compression,
-                        compression_opts=compression_opts,
-                        shuffle=shuffle,
-                        fletcher32=fletcher32,
-                        chunks=chunks,
-                    )
-                    grp.create_dataset(
-                        field_name,
-                        data=child_arr,
-                        **ds_kwargs,
-                    )
-            grp.attrs[_ATTR_NONE] = json.dumps(none_fields)
+            _write_module(grp, pytree)
 
 
 @beartype
@@ -808,7 +480,7 @@ def load_from_h5(
 
         meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
         aux_json: Any = json.loads(str(grp.attrs[_ATTR_AUX]))
-        aux_data: Any = meta.aux_decoder(aux_json)
+        aux_data: Any = _decode_aux_data(type_name, aux_json)
 
         none_fields: list[str] = json.loads(str(grp.attrs[_ATTR_NONE]))
 
@@ -816,6 +488,8 @@ def load_from_h5(
         for field_name in meta.children_fields:
             if field_name in none_fields:
                 children.append(None)
+            elif isinstance(grp[field_name], h5py.Group):
+                children.append(_load_group(grp[field_name]))
             else:
                 arr: Shaped[NDArray, "..."] = grp[field_name][()]
                 children.append(jnp.asarray(arr))
