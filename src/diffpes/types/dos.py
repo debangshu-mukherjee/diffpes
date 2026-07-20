@@ -22,18 +22,17 @@ Notes
 All energy values are in electron-volts (eV).
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple
+from beartype.typing import Optional
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
 
 
-@register_pytree_node_class
-class DensityOfStates(NamedTuple):
+class DensityOfStates(eqx.Module):
     """PyTree for density of states.
 
     Stores total density of states (DOS) data parsed from VASP DOSCAR
@@ -41,7 +40,6 @@ class DensityOfStates(NamedTuple):
     same energy axis, together with a scalar Fermi energy reference.
 
     This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``, allowing instances to be passed
     through ``jax.jit``, ``jax.grad``, ``jax.vmap``, and other JAX
     transformations. All fields are JAX arrays (no auxiliary data),
     so every field participates in autodiff tracing.
@@ -57,7 +55,6 @@ class DensityOfStates(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
     All three fields are JAX arrays and stored as children (no
     auxiliary data). This means every field is visible to JAX's
     tracing and transformation machinery.
@@ -71,80 +68,6 @@ class DensityOfStates(NamedTuple):
     energy: Float[Array, " E"]
     total_dos: Float[Array, " E"]
     fermi_energy: Float[Array, " "]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, " E"],
-            Float[Array, " E"],
-            Float[Array, " "],
-        ],
-        None,
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For DensityOfStates,
-        all fields are JAX arrays, so the auxiliary data is ``None``.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(energy, total_dos, fermi_energy)``
-        2. **Auxiliary data** (static, not traced): ``None``
-           -- No static fields exist on this type.
-
-        Returns
-        -------
-        children : tuple of Array
-            Tuple of ``(energy, total_dos, fermi_energy)`` JAX arrays.
-        aux_data : None
-            No auxiliary data for this type.
-        """
-        return (
-            (self.energy, self.total_dos, self.fermi_energy),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, " E"],
-            Float[Array, " E"],
-            Float[Array, " "],
-        ],
-    ) -> "DensityOfStates":
-        """Reconstruct a DensityOfStates from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Receive ``children`` tuple of three JAX arrays and
-           ``_aux_data = None``.
-        2. Splat ``children`` directly into the constructor via
-           ``cls(*children)`` because field order matches the
-           children order from :meth:`tree_flatten`.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused -- DensityOfStates has no auxiliary data.
-        children : tuple of Array
-            Tuple of ``(energy, total_dos, fermi_energy)`` JAX arrays.
-
-        Returns
-        -------
-        dos : DensityOfStates
-            Reconstructed instance with identical data.
-        """
-        dos: DensityOfStates = cls(*children)
-        return dos
 
 
 @jaxtyped(typechecker=beartype)
@@ -165,7 +88,7 @@ def make_density_of_states(
     1. **Cast energy** to ``jnp.float64`` via ``jnp.asarray``.
     2. **Cast total_dos** to ``jnp.float64`` via ``jnp.asarray``.
     3. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    4. **Construct** the ``DensityOfStates`` NamedTuple from the
+    4. **Construct** the ``DensityOfStates`` Equinox module from the
        three validated arrays and return it.
 
     Parameters
@@ -253,8 +176,7 @@ def make_density_of_states(
     return dos
 
 
-@register_pytree_node_class
-class FullDensityOfStates(NamedTuple):
+class FullDensityOfStates(eqx.Module):
     """PyTree for complete density of states with spin and PDOS.
 
     Extended Summary
@@ -267,7 +189,6 @@ class FullDensityOfStates(NamedTuple):
     total-DOS channel.
 
     This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. All numeric fields (seven
     arrays, some optional) are stored as children visible to JAX
     tracing, while ``natoms`` is a plain Python ``int`` stored as
     auxiliary data because it is a structural constant that JAX
@@ -302,15 +223,13 @@ class FullDensityOfStates(NamedTuple):
         Fermi level energy in eV. A 0-D scalar array.
         JAX-traced (differentiable).
     natoms : int
-        Number of atoms in the unit cell. Stored as auxiliary data
-        (not a JAX array) because it is a structural constant.
+        Number of atoms in the unit cell. **Static** structural metadata;
+        changing it triggers retracing.
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    The ``natoms`` field is a Python ``int`` (not a JAX array) and
-    is therefore stored as auxiliary data rather than as a child. JAX
-    treats auxiliary data as a compile-time constant: changing
+    The ``natoms`` field is a Python ``int`` declared with
+    ``eqx.field(static=True)`` rather than as a traced leaf. Changing
     ``natoms`` triggers recompilation of any ``jit``-compiled
     function that receives this PyTree.
 
@@ -333,131 +252,7 @@ class FullDensityOfStates(NamedTuple):
     integrated_dos_down: Optional[Float[Array, " E"]]
     pdos: Optional[Float[Array, "A E C"]]
     fermi_energy: Float[Array, " "]
-    natoms: int
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, " E"],
-            Float[Array, " E"],
-            Optional[Float[Array, " E"]],
-            Float[Array, " E"],
-            Optional[Float[Array, " E"]],
-            Optional[Float[Array, "A E C"]],
-            Float[Array, " "],
-        ],
-        int,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(energy, total_dos_up, total_dos_down, integrated_dos_up,
-           integrated_dos_down, pdos, fermi_energy)`` -- seven fields,
-           some of which may be ``None``. JAX treats ``None`` leaves
-           as empty subtrees and skips them during tracing.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``natoms`` -- a Python ``int`` representing the number of
-           atoms. Stored as aux_data because JAX cannot trace Python
-           ints and because this value is a structural constant.
-
-        Returns
-        -------
-        children : tuple of (jax.Array or None)
-            ``(energy, total_dos_up, total_dos_down,
-            integrated_dos_up, integrated_dos_down, pdos,
-            fermi_energy)``.
-        aux_data : int
-            The ``natoms`` value, stored outside JAX tracing.
-        """
-        return (
-            (
-                self.energy,
-                self.total_dos_up,
-                self.total_dos_down,
-                self.integrated_dos_up,
-                self.integrated_dos_down,
-                self.pdos,
-                self.fermi_energy,
-            ),
-            self.natoms,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: int,
-        children: Tuple[
-            Float[Array, " E"],
-            Float[Array, " E"],
-            Optional[Float[Array, " E"]],
-            Float[Array, " E"],
-            Optional[Float[Array, " E"]],
-            Optional[Float[Array, "A E C"]],
-            Float[Array, " "],
-        ],
-    ) -> "FullDensityOfStates":
-        """Reconstruct a ``FullDensityOfStates`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into seven array-valued fields:
-           ``(energy, total_dos_up, total_dos_down, integrated_dos_up,
-           integrated_dos_down, pdos, fermi_energy)``.
-        2. Receive ``aux_data`` as the ``natoms`` Python int.
-        3. Pass all eight fields to the constructor, restoring
-           ``natoms`` from ``aux_data`` into its correct position.
-
-        Parameters
-        ----------
-        aux_data : int
-            The ``natoms`` value recovered from auxiliary data.
-        children : tuple of (jax.Array or None)
-            ``(energy, total_dos_up, total_dos_down,
-            integrated_dos_up, integrated_dos_down, pdos,
-            fermi_energy)`` as returned by :meth:`tree_flatten`.
-
-        Returns
-        -------
-        dos : FullDensityOfStates
-            Reconstructed instance with identical data.
-        """
-        energy: Float[Array, " E"]
-        total_dos_up: Float[Array, " E"]
-        total_dos_down: Optional[Float[Array, " E"]]
-        integrated_dos_up: Float[Array, " E"]
-        integrated_dos_down: Optional[Float[Array, " E"]]
-        pdos: Optional[Float[Array, "A E C"]]
-        fermi_energy: Float[Array, " "]
-        (
-            energy,
-            total_dos_up,
-            total_dos_down,
-            integrated_dos_up,
-            integrated_dos_down,
-            pdos,
-            fermi_energy,
-        ) = children
-        dos: FullDensityOfStates = cls(
-            energy=energy,
-            total_dos_up=total_dos_up,
-            total_dos_down=total_dos_down,
-            integrated_dos_up=integrated_dos_up,
-            integrated_dos_down=integrated_dos_down,
-            pdos=pdos,
-            fermi_energy=fermi_energy,
-            natoms=aux_data,
-        )
-        return dos
+    natoms: int = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -503,7 +298,7 @@ def make_full_density_of_states(
        not ``None``; otherwise leave as ``None``.
     6. **Keep natoms** as a Python ``int`` (not cast). It is stored
        as auxiliary data in the resulting PyTree.
-    7. **Construct** the ``FullDensityOfStates`` NamedTuple from all
+    7. **Construct** the ``FullDensityOfStates`` Equinox module from all
        fields and return it.
 
     Parameters

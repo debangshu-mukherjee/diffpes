@@ -19,18 +19,17 @@ while the mode string is static (auxiliary data) because it
 selects different code branches.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple
+from beartype.typing import Optional
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarFloat
 
 
-@register_pytree_node_class
-class SelfEnergyConfig(NamedTuple):
+class SelfEnergyConfig(eqx.Module):
     """PyTree for energy-dependent self-energy (lifetime broadening).
 
     Extended Summary
@@ -79,7 +78,7 @@ class SelfEnergyConfig(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Implemented as an immutable :class:`equinox.Module` PyTree.
     ``coefficients`` and ``energy_nodes`` are children (on the
     gradient tape); ``mode`` is auxiliary data (compile-time
     constant). Changing ``mode`` triggers JIT recompilation because
@@ -93,81 +92,7 @@ class SelfEnergyConfig(NamedTuple):
 
     coefficients: Float[Array, " P"]
     energy_nodes: Optional[Float[Array, " P"]]
-    mode: str
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[Float[Array, " P"], Optional[Float[Array, " P"]]],
-        str,
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(coefficients, energy_nodes)`` -- both are either dense
-           JAX arrays or ``None``. ``coefficients`` is always present;
-           ``energy_nodes`` is ``None`` for constant and polynomial
-           modes. JAX treats ``None`` leaves as empty subtrees.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``mode`` -- a Python string selecting the self-energy
-           model. Stored as aux_data because it controls code-path
-           selection at compile time.
-
-        Returns
-        -------
-        children : tuple of (jax.Array or None)
-            ``(coefficients, energy_nodes)``.
-        aux_data : str
-            The ``mode`` string, stored outside JAX tracing.
-        """
-        return ((self.coefficients, self.energy_nodes), self.mode)
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: str,
-        children: Tuple[Float[Array, " P"], Optional[Float[Array, " P"]]],
-    ) -> "SelfEnergyConfig":
-        """Reconstruct a ``SelfEnergyConfig`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into ``(coefficients, energy_nodes)``.
-        2. Receive ``aux_data`` as the ``mode`` string.
-        3. Pass all three fields to the constructor, restoring
-           ``mode`` from ``aux_data``.
-
-        Parameters
-        ----------
-        aux_data : str
-            The ``mode`` string recovered from auxiliary data.
-        children : tuple of (jax.Array or None)
-            ``(coefficients, energy_nodes)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        config : SelfEnergyConfig
-            Reconstructed instance with identical data.
-        """
-        coefficients: Float[Array, " P"]
-        energy_nodes: Optional[Float[Array, " P"]]
-        coefficients, energy_nodes = children
-        config: SelfEnergyConfig = cls(
-            coefficients=coefficients,
-            energy_nodes=energy_nodes,
-            mode=aux_data,
-        )
-        return config
+    mode: str = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -205,7 +130,7 @@ def make_self_energy_config(
     4. **Validate tabulated mode**: raise ``ValueError`` if
        ``mode == "tabulated"`` but ``energy_nodes`` is ``None``,
        because interpolation requires an energy grid.
-    5. **Construct** the ``SelfEnergyConfig`` NamedTuple and return.
+    5. **Construct** the ``SelfEnergyConfig`` Equinox module and return.
 
     Parameters
     ----------

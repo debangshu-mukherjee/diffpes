@@ -26,8 +26,7 @@ from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
 from diffpes.types import ScalarFloat
-
-_KB: float = 8.617333e-5
+from diffpes.types.constants import KB_EV_PER_K as _KB
 
 
 @jaxtyped(typechecker=beartype)

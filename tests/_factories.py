@@ -16,8 +16,6 @@ from jaxtyping import Array, Float, PRNGKeyArray, jaxtyped
 
 from diffpes.tightb import (
     diagonalize_tb,
-    make_1d_chain_model,
-    make_graphene_model,
 )
 from diffpes.types import (
     BandStructure,
@@ -27,7 +25,9 @@ from diffpes.types import (
     SimulationParams,
     SlaterParams,
     TBModel,
+    make_1d_chain_model,
     make_band_structure,
+    make_graphene_model,
     make_orbital_basis,
     make_orbital_projection,
     make_polarization_config,

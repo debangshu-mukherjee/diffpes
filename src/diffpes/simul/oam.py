@@ -22,14 +22,12 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
-_M_P: Float[Array, " 3"] = jnp.array([1.0, 0.0, -1.0], dtype=jnp.float64)
-
-_M_D: Float[Array, " 5"] = jnp.array(
-    [-2.0, -1.0, 0.0, 1.0, 2.0], dtype=jnp.float64
+from diffpes.types.orbital_constants import (
+    _D_ORBITAL_SLICE,
+    _M_D,
+    _M_P,
+    _P_ORBITAL_SLICE,
 )
-
-_P_ORBITAL_SLICE: slice = slice(1, 4)
-_D_ORBITAL_SLICE: slice = slice(4, 9)
 
 
 @jaxtyped(typechecker=beartype)

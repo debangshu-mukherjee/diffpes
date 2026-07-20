@@ -2,10 +2,9 @@
 
 Extended Summary
 ----------------
-Provides functions for saving and loading diffpes PyTree objects
-(NamedTuples registered with ``@register_pytree_node_class``)
-to and from HDF5 files via ``h5py``. Each PyTree's named fields
-become HDF5 datasets, and auxiliary data (non-JAX metadata) is
+Provides functions for saving and loading diffpes Equinox PyTree objects
+to and from HDF5 files via ``h5py``. Each module's named array fields
+become HDF5 datasets, and static metadata is
 stored as HDF5 group attributes in JSON format.
 
 Routine Listings
@@ -48,12 +47,13 @@ from diffpes.types import (
     SpinOrbitalProjection,
     VolumetricData,
 )
-
-_ATTR_TYPE: str = "_pytree_type"
-_ATTR_AUX: str = "_aux_data_json"
-_ATTR_NONE: str = "_none_fields"
-_KPATH_AUX_WITH_COMMENT_LEN: int = 3
-_KPATH_AUX_WITH_COORD_MODE_LEN: int = 4
+from diffpes.types.vasp_constants import (
+    _ATTR_AUX,
+    _ATTR_NONE,
+    _ATTR_TYPE,
+    _KPATH_AUX_WITH_COMMENT_LEN,
+    _KPATH_AUX_WITH_COORD_MODE_LEN,
+)
 
 
 @dataclass(frozen=True)
@@ -61,25 +61,27 @@ class _PyTreeMeta:
     """Serialization metadata for a registered PyTree type.
 
     Stores the class reference, the ordered names of JAX-traced
-    children fields (matching the order returned by
-    ``tree_flatten``), and encoder/decoder callables for
-    converting auxiliary data to and from JSON-serializable form.
+    array field names, static metadata field names, and encoder/decoder
+    callables for converting static metadata to and from JSON.
 
-    Parameters
+    Attributes
     ----------
-    cls : type
-        The NamedTuple PyTree class.
+    cls : Any
+        The Equinox module class.
     children_fields : tuple[str, ...]
         Ordered field names of JAX array children.
+    static_fields : tuple[str, ...]
+        Ordered field names of static Equinox metadata.
     aux_encoder : Callable[[Any], Any]
         Converts aux_data to a JSON-serializable value.
     aux_decoder : Callable[[Any], Any]
         Converts JSON-decoded value back to the Python type
-        expected by ``tree_unflatten``.
+        expected by the type constructor.
     """
 
-    cls: Any  # PyTree NamedTuple class
+    cls: Any  # Equinox module class
     children_fields: tuple[str, ...]
+    static_fields: tuple[str, ...]
     aux_encoder: Callable[[Any], Any]
     aux_decoder: Callable[[Any], Any]
 
@@ -366,7 +368,7 @@ def _decode_volumetric_aux(
     Inverse of :func:`_encode_volumetric_aux`. Converts the nested
     JSON list ``[[NGX, NGY, NGZ], [symbol_str, ...]]`` back into the
     Python tuple ``(grid_shape, symbols)`` expected by the
-    VolumetricData / SOCVolumetricData ``tree_unflatten`` method.
+    VolumetricData / SOCVolumetricData constructor.
 
     Parameters
     ----------
@@ -395,6 +397,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "total_dos",
             "fermi_energy",
         ),
+        static_fields=(),
         aux_encoder=_encode_none,
         aux_decoder=_decode_none,
     ),
@@ -406,6 +409,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "kpoint_weights",
             "fermi_energy",
         ),
+        static_fields=(),
         aux_encoder=_encode_none,
         aux_decoder=_decode_none,
     ),
@@ -415,6 +419,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "intensity",
             "energy_axis",
         ),
+        static_fields=(),
         aux_encoder=_encode_none,
         aux_decoder=_decode_none,
     ),
@@ -425,6 +430,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "spin",
             "oam",
         ),
+        static_fields=(),
         aux_encoder=_encode_none,
         aux_decoder=_decode_none,
     ),
@@ -435,6 +441,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "spin",
             "oam",
         ),
+        static_fields=(),
         aux_encoder=_encode_none,
         aux_decoder=_decode_none,
     ),
@@ -448,6 +455,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "temperature",
             "photon_energy",
         ),
+        static_fields=("fidelity",),
         aux_encoder=_encode_int,
         aux_decoder=_decode_int,
     ),
@@ -458,6 +466,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "phi",
             "polarization_angle",
         ),
+        static_fields=("polarization_type",),
         aux_encoder=_encode_str,
         aux_decoder=_decode_str,
     ),
@@ -473,6 +482,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "grid",
             "shift",
         ),
+        static_fields=("mode", "labels", "comment", "coordinate_mode"),
         aux_encoder=_encode_kpath_aux,
         aux_decoder=_decode_kpath_aux,
     ),
@@ -484,6 +494,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "coords",
             "atom_counts",
         ),
+        static_fields=("symbols",),
         aux_encoder=_encode_tuple_str,
         aux_decoder=_decode_tuple_str,
     ),
@@ -496,6 +507,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "magnetization",
             "atom_counts",
         ),
+        static_fields=("grid_shape", "symbols"),
         aux_encoder=_encode_volumetric_aux,
         aux_decoder=_decode_volumetric_aux,
     ),
@@ -509,6 +521,7 @@ _PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
             "magnetization_vector",
             "atom_counts",
         ),
+        static_fields=("grid_shape", "symbols"),
         aux_encoder=_encode_volumetric_aux,
         aux_decoder=_decode_volumetric_aux,
     ),
@@ -598,7 +611,7 @@ def save_to_h5(
 
     Serializes each keyword-argument PyTree into a named HDF5
     group. JAX array fields become HDF5 datasets (named by the
-    NamedTuple field name), and auxiliary data is stored as a
+    Equinox field name), and static metadata is stored as a
     JSON-encoded group attribute.
 
     Implementation Logic
@@ -612,8 +625,7 @@ def save_to_h5(
        a. Look up ``type(pytree).__name__`` in
           ``_PYTREE_REGISTRY`` to obtain serialization metadata.
 
-       b. Call ``pytree.tree_flatten()`` to separate the PyTree
-          into ``(children, aux_data)``.
+       b. Read child arrays and static metadata by registered field name.
 
        c. Create an HDF5 group named ``group_name``.
 
@@ -681,9 +693,19 @@ def save_to_h5(
                 raise TypeError(msg)
 
             meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
-            children: list[Any]
-            aux_data: Any
-            children, aux_data = pytree.tree_flatten()
+            children: tuple[Any, ...] = tuple(
+                getattr(pytree, field_name)
+                for field_name in meta.children_fields
+            )
+            static_values: tuple[Any, ...] = tuple(
+                getattr(pytree, field_name)
+                for field_name in meta.static_fields
+            )
+            aux_data: Any = None
+            if len(static_values) == 1:
+                aux_data = static_values[0]
+            elif static_values:
+                aux_data = static_values
 
             grp: h5py.Group = f.create_group(group_name)
             grp.attrs[_ATTR_TYPE] = type_name
@@ -725,7 +747,7 @@ def load_from_h5(
 
     Deserializes HDF5 groups back into diffpes PyTree objects
     by reading datasets as JAX arrays and reconstructing the
-    NamedTuple via ``tree_unflatten``.
+    Equinox module with keyword arguments.
 
     Implementation Logic
     --------------------
@@ -751,8 +773,7 @@ def load_from_h5(
           otherwise read the HDF5 dataset and convert to a JAX
           array via ``jnp.asarray``.
 
-       e. Call ``cls.tree_unflatten(aux_data, children)`` to
-          reconstruct the PyTree.
+       e. Reconstruct the Equinox module with keyword arguments.
 
     Parameters
     ----------
@@ -799,7 +820,21 @@ def load_from_h5(
                 arr: Shaped[NDArray, "..."] = grp[field_name][()]
                 children.append(jnp.asarray(arr))
 
-        return meta.cls.tree_unflatten(aux_data, tuple(children))
+        constructor_fields: dict[str, Any] = dict(
+            zip(meta.children_fields, children, strict=True)
+        )
+        static_values: tuple[Any, ...]
+        if not meta.static_fields:
+            static_values = ()
+        elif len(meta.static_fields) == 1:
+            static_values = (aux_data,)
+        else:
+            static_values = tuple(aux_data)
+        constructor_fields.update(
+            zip(meta.static_fields, static_values, strict=True)
+        )
+        loaded: Any = meta.cls(**constructor_fields)
+        return loaded
 
     with h5py.File(file_path, "r") as f:
         if name is not None:

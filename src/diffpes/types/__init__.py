@@ -18,6 +18,8 @@ The submodules are organized as follows:
     Scalar type aliases for JAX-compatible numeric types.
 - :mod:`bands`
     Band structure and orbital projection data structures.
+- :mod:`constants`
+    Dependency-light numerical and physical constants used by diffpes.
 - :mod:`dos`
     Density of states data structures.
 - :mod:`geometry`
@@ -26,6 +28,10 @@ The submodules are organized as follows:
     K-point path information data structure.
 - :mod:`params`
     Simulation parameter data structures.
+- :mod:`orbital_constants`
+    Shared orbital ordering and direction conventions.
+- :mod:`tables`
+    Small numerical lookup tables used by simulations.
 - :mod:`radial_params`
     Radial wavefunction parameter data structures.
 - :mod:`self_energy`
@@ -34,6 +40,10 @@ The submodules are organized as follows:
     Tight-binding model and diagonalized band data structures.
 - :mod:`volumetric`
     Volumetric data structures for VASP CHGCAR files.
+- :mod:`vasp_constants`
+    VASP parser and serialization conventions.
+- :mod:`context`
+    High-level VASP workflow input data structures.
 
 Routine Listings
 ----------------
@@ -41,24 +51,42 @@ Routine Listings
     PyTree for ARPES simulation output.
 :class:`BandStructure`
     PyTree for electronic band structure.
+:obj:`BOHR_TO_ANGSTROM`
+    Bohr radius in Angstrom.
 :class:`CrystalGeometry`
     PyTree for crystal geometry from VASP POSCAR.
 :class:`DensityOfStates`
     PyTree for density of states.
 :class:`DiagonalizedBands`
     PyTree for diagonalized electronic structure.
+:obj:`DosType`
+    Density-of-states carrier union used by workflow contexts.
 :class:`FullDensityOfStates`
     PyTree for complete density of states with spin and PDOS.
+:obj:`HBAR_C_EV_A`
+    Reduced Planck constant times c in eV Angstrom.
+:obj:`HBAR_EV_S`
+    Reduced Planck constant in eV s.
+:obj:`KB_EV_PER_K`
+    Boltzmann constant in eV per kelvin.
 :class:`KPathInfo`
     PyTree for k-point path metadata.
+:obj:`L_MAX`
+    Maximum angular momentum supported by the precomputed table.
+:obj:`ME_EV`
+    Electron rest energy in eV.
 :obj:`NonJaxNumber`
     Union of ``int``, ``float``, and ``complex``.
+:obj:`ORBITAL_DIRS_NORMALIZED`
+    Unit-normalized orbital directions in VASP orbital order.
 :class:`OrbitalBasis`
     PyTree for orbital quantum number metadata.
 :class:`OrbitalProjection`
     PyTree for orbital-resolved band projections.
 :class:`PolarizationConfig`
     PyTree for photon polarization geometry.
+:obj:`ProjectionType`
+    Orbital-projection carrier union used by workflow contexts.
 :class:`SOCVolumetricData`
     PyTree for volumetric data from SOC CHGCAR files.
 :obj:`ScalarBool`
@@ -85,6 +113,8 @@ Routine Listings
     PyTree for tight-binding model parameters (legacy).
 :class:`VolumetricData`
     PyTree for volumetric grid data from CHGCAR.
+:class:`WorkflowContext`
+    PyTree bundling parsed inputs for high-level VASP workflows.
 :func:`make_arpes_spectrum`
     Create a validated ``ArpesSpectrum`` instance.
 :func:`make_band_structure`
@@ -95,8 +125,14 @@ Routine Listings
     Create a validated DensityOfStates instance.
 :func:`make_diagonalized_bands`
     Create a validated ``DiagonalizedBands`` instance.
+:func:`make_expanded_simulation_params`
+    Build simulation parameters with an automatically derived energy window.
 :func:`make_full_density_of_states`
     Create a validated ``FullDensityOfStates`` instance.
+:func:`make_graphene_model`
+    Create a graphene pz tight-binding model.
+:func:`make_1d_chain_model`
+    Create a 1D chain tight-binding model.
 :func:`make_kpath_info`
     Create a validated KPathInfo instance.
 :func:`make_orbital_basis`
@@ -121,11 +157,14 @@ Routine Listings
     Create a validated ``TBModel`` instance.
 :func:`make_volumetric_data`
     Create a validated ``VolumetricData`` instance.
+:func:`make_workflow_context`
+    Create a ``WorkflowContext`` instance from parsed inputs.
 
 Notes
 -----
-All PyTree types use ``@register_pytree_node_class`` for
-compatibility with JAX transformations (jit, grad, vmap).
+All structured carriers are immutable :class:`equinox.Module` PyTrees.
+Array fields remain differentiable leaves, while shape and control-flow
+metadata use ``equinox.field(static=True)``.
 """
 
 from .aliases import (
@@ -148,6 +187,20 @@ from .bands import (
     make_spin_band_structure,
     make_spin_orbital_projection,
 )
+from .constants import (
+    BOHR_TO_ANGSTROM,
+    HBAR_C_EV_A,
+    HBAR_EV_S,
+    KB_EV_PER_K,
+    L_MAX,
+    ME_EV,
+)
+from .context import (
+    DosType,
+    ProjectionType,
+    WorkflowContext,
+    make_workflow_context,
+)
 from .dos import (
     DensityOfStates,
     FullDensityOfStates,
@@ -162,9 +215,11 @@ from .kpath import (
     KPathInfo,
     make_kpath_info,
 )
+from .orbital_constants import ORBITAL_DIRS_NORMALIZED
 from .params import (
     PolarizationConfig,
     SimulationParams,
+    make_expanded_simulation_params,
     make_polarization_config,
     make_simulation_params,
 )
@@ -181,7 +236,9 @@ from .self_energy import (
 from .tb_model import (
     DiagonalizedBands,
     TBModel,
+    make_1d_chain_model,
     make_diagonalized_bands,
+    make_graphene_model,
     make_tb_model,
 )
 from .volumetric import (
@@ -194,15 +251,24 @@ from .volumetric import (
 __all__: list[str] = [
     "ArpesSpectrum",
     "BandStructure",
+    "BOHR_TO_ANGSTROM",
     "CrystalGeometry",
     "DensityOfStates",
     "DiagonalizedBands",
+    "DosType",
     "FullDensityOfStates",
+    "HBAR_C_EV_A",
+    "HBAR_EV_S",
+    "KB_EV_PER_K",
     "KPathInfo",
+    "L_MAX",
+    "ME_EV",
     "NonJaxNumber",
+    "ORBITAL_DIRS_NORMALIZED",
     "OrbitalBasis",
     "OrbitalProjection",
     "PolarizationConfig",
+    "ProjectionType",
     "SOCVolumetricData",
     "ScalarBool",
     "ScalarComplex",
@@ -216,12 +282,16 @@ __all__: list[str] = [
     "SpinOrbitalProjection",
     "TBModel",
     "VolumetricData",
+    "WorkflowContext",
     "make_arpes_spectrum",
     "make_band_structure",
     "make_crystal_geometry",
     "make_density_of_states",
     "make_diagonalized_bands",
+    "make_expanded_simulation_params",
     "make_full_density_of_states",
+    "make_graphene_model",
+    "make_1d_chain_model",
     "make_kpath_info",
     "make_orbital_basis",
     "make_orbital_projection",
@@ -234,4 +304,5 @@ __all__: list[str] = [
     "make_spin_orbital_projection",
     "make_tb_model",
     "make_volumetric_data",
+    "make_workflow_context",
 ]

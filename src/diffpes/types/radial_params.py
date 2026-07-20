@@ -26,16 +26,15 @@ spherical Bessel functions and associated Legendre polynomials).
 the static orbital basis.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple
+from beartype.typing import Optional
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, jaxtyped
 
 
-@register_pytree_node_class
-class OrbitalBasis(NamedTuple):
+class OrbitalBasis(eqx.Module):
     """PyTree for orbital quantum number metadata.
 
     Extended Summary
@@ -74,7 +73,7 @@ class OrbitalBasis(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Implemented as an immutable :class:`equinox.Module` PyTree.
     All fields are auxiliary data (no JAX array children) because
     changing any quantum number changes the computational graph and
     requires JIT recompilation. The children tuple is always empty.
@@ -87,102 +86,13 @@ class OrbitalBasis(NamedTuple):
         default label generation.
     """
 
-    n_values: tuple[int, ...]
-    l_values: tuple[int, ...]
-    m_values: tuple[int, ...]
-    labels: tuple[str, ...]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[()],
-        Tuple[
-            tuple[int, ...],
-            tuple[int, ...],
-            tuple[int, ...],
-            tuple[str, ...],
-        ],
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For ``OrbitalBasis``,
-        there are *no* JAX array children -- all fields are static.
-
-        Implementation Logic
-        --------------------
-        1. **Children**: empty tuple ``()`` -- there are no numerical
-           JAX arrays in this type. All quantum number data is static.
-        2. **Auxiliary data**: ``(n_values, l_values, m_values,
-           labels)`` -- four tuples of Python ints/strings. JAX
-           treats these as compile-time constants; any change triggers
-           JIT recompilation.
-
-        Returns
-        -------
-        children : tuple
-            Empty tuple (no JAX array children).
-        aux_data : tuple
-            ``(n_values, l_values, m_values, labels)`` -- all four
-            fields packed as static auxiliary data.
-        """
-        return ((), (self.n_values, self.l_values, self.m_values, self.labels))
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: Tuple[
-            tuple[int, ...],
-            tuple[int, ...],
-            tuple[int, ...],
-            tuple[str, ...],
-        ],
-        _children: Tuple[()],
-    ) -> "OrbitalBasis":
-        """Reconstruct an ``OrbitalBasis`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation. Because ``OrbitalBasis`` has no array
-        children, this method simply reconstructs from auxiliary data.
-
-        Implementation Logic
-        --------------------
-        1. **Children**: ignored (always an empty tuple) because
-           ``OrbitalBasis`` has no JAX array fields.
-        2. **Reconstruction**: unpacks ``aux_data`` into the four
-           static tuples ``(n_values, l_values, m_values, labels)``
-           and passes them to the ``NamedTuple`` constructor.
-
-        Parameters
-        ----------
-        aux_data : tuple
-            ``(n_values, l_values, m_values, labels)`` recovered
-            from auxiliary data.
-        _children : tuple
-            Empty tuple (unused -- no JAX array children).
-
-        Returns
-        -------
-        basis : OrbitalBasis
-            Reconstructed instance with identical quantum numbers.
-        """
-        n_values: tuple[int, ...]
-        l_values: tuple[int, ...]
-        m_values: tuple[int, ...]
-        labels: tuple[str, ...]
-        n_values, l_values, m_values, labels = aux_data
-        basis: OrbitalBasis = cls(
-            n_values=n_values,
-            l_values=l_values,
-            m_values=m_values,
-            labels=labels,
-        )
-        return basis
+    n_values: tuple[int, ...] = eqx.field(static=True)
+    l_values: tuple[int, ...] = eqx.field(static=True)
+    m_values: tuple[int, ...] = eqx.field(static=True)
+    labels: tuple[str, ...] = eqx.field(static=True)
 
 
-@register_pytree_node_class
-class SlaterParams(NamedTuple):
+class SlaterParams(eqx.Module):
     """PyTree for Slater radial wavefunction parameters.
 
     Extended Summary
@@ -220,7 +130,7 @@ class SlaterParams(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Implemented as an immutable :class:`equinox.Module` PyTree.
     ``zeta`` and ``coefficients`` are JAX array children (on the
     gradient tape), while ``orbital_basis`` is auxiliary data
     (static at trace time). This separation means that
@@ -237,83 +147,7 @@ class SlaterParams(NamedTuple):
 
     zeta: Float[Array, " O"]
     coefficients: Float[Array, "O C"]
-    orbital_basis: OrbitalBasis
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[Float[Array, " O"], Float[Array, "O C"]],
-        OrbitalBasis,
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(zeta, coefficients)`` -- both are dense float64 arrays
-           that live on the gradient tape. ``jax.grad`` sees and
-           differentiates through these leaves.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``orbital_basis`` -- an ``OrbitalBasis`` NamedTuple of
-           Python ints and strings. Because ``OrbitalBasis`` is itself
-           a registered PyTree with all-auxiliary fields, it nests
-           cleanly as static data here.
-
-        Returns
-        -------
-        children : tuple of Array
-            ``(zeta, coefficients)`` -- differentiable JAX arrays.
-        aux_data : OrbitalBasis
-            The orbital basis metadata (quantum numbers and labels).
-        """
-        return ((self.zeta, self.coefficients), self.orbital_basis)
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: OrbitalBasis,
-        children: Tuple[Float[Array, " O"], Float[Array, "O C"]],
-    ) -> "SlaterParams":
-        """Reconstruct a ``SlaterParams`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into ``(zeta, coefficients)``.
-        2. Receive ``aux_data`` as the ``OrbitalBasis`` instance
-           carrying the static quantum number metadata.
-        3. Pass all three fields to the constructor, restoring
-           ``orbital_basis`` from ``aux_data``.
-
-        Parameters
-        ----------
-        aux_data : OrbitalBasis
-            The orbital basis metadata recovered from auxiliary data.
-        children : tuple of Array
-            ``(zeta, coefficients)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        params : SlaterParams
-            Reconstructed instance with the original array and basis
-            data.
-        """
-        zeta: Float[Array, " O"]
-        coefficients: Float[Array, "O C"]
-        zeta, coefficients = children
-        params: SlaterParams = cls(
-            zeta=zeta,
-            coefficients=coefficients,
-            orbital_basis=aux_data,
-        )
-        return params
+    orbital_basis: OrbitalBasis = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -346,7 +180,7 @@ def make_orbital_basis(
        count.
     4. **Validate label length**: raise ``ValueError`` if ``labels``
        has a different length from the quantum number tuples.
-    5. **Construct** the ``OrbitalBasis`` NamedTuple and return it.
+    5. **Construct** the ``OrbitalBasis`` Equinox module and return it.
 
     Parameters
     ----------
@@ -426,7 +260,7 @@ def make_slater_params(
        create ``jnp.ones((O, 1), dtype=jnp.float64)`` for a
        single-zeta expansion. Otherwise cast the provided array to
        ``jnp.float64``.
-    5. **Construct** the ``SlaterParams`` NamedTuple and return it.
+    5. **Construct** the ``SlaterParams`` Equinox module and return it.
 
     Parameters
     ----------

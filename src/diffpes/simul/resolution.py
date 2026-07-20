@@ -26,9 +26,7 @@ from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
 from diffpes.types import ScalarFloat
-
-_EPS: float = 1e-12
-_MIN_SUM: float = 1e-30
+from diffpes.types.constants import _EPS, _MIN_SUM
 
 
 @jaxtyped(typechecker=beartype)

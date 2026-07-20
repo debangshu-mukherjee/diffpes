@@ -33,9 +33,7 @@ from diffpes.types import (
     make_density_of_states,
     make_full_density_of_states,
 )
-
-_NONSPIN_COLS: int = 3
-_SPIN_COLS: int = 5
+from diffpes.types.vasp_constants import _NONSPIN_COLS, _SPIN_COLS
 
 
 def read_doscar(  # noqa: PLR0912, PLR0915

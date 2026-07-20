@@ -29,10 +29,10 @@ Notes
 -----
 Physical constants used in this module:
 
-- ``_HBAR_EV_S``: hbar in eV*s (6.582e-16)
-- ``_ME_EV``: electron mass in eV/c^2 (0.511e6)
-- ``_HBAR_C_EV_A``: hbar*c in eV*Angstrom (1973.27)
-- ``_BOHR_TO_ANGSTROM``: Bohr radius in Angstroms (0.5292)
+- ``HBAR_EV_S``: hbar in eV*s (6.582e-16)
+- ``ME_EV``: electron mass in eV/c^2 (0.511e6)
+- ``HBAR_C_EV_A``: hbar*c in eV*Angstrom (1973.27)
+- ``BOHR_TO_ANGSTROM``: Bohr radius in Angstroms (0.5292)
 
 The private helper ``_ekin_to_k_magnitude`` converts photon
 energy and binding energy to a photoelectron wavevector magnitude
@@ -58,17 +58,15 @@ from diffpes.types import (
     make_arpes_spectrum,
 )
 from diffpes.types.aliases import ScalarFloat
+from diffpes.types.constants import (
+    HBAR_C_EV_A,
+    ME_EV,
+)
 
 from .broadening import fermi_dirac, voigt
 from .polarization import build_efield, build_polarization_vectors
 from .resolution import apply_momentum_broadening
 from .self_energy import evaluate_self_energy
-
-# Physical constants
-_HBAR_EV_S: float = 6.582119569e-16  # eV·s
-_ME_EV: float = 0.51099895e6  # electron mass in eV/c^2
-_HBAR_C_EV_A: float = 1973.269804  # hbar*c in eV·Å
-_BOHR_TO_ANGSTROM: float = 0.529177
 
 
 def _ekin_to_k_magnitude(
@@ -114,8 +112,8 @@ def _ekin_to_k_magnitude(
 
     3. **Convert to wavevector magnitude**:
        ``k_mag = sqrt(2 * m_e * safe_ekin) / (hbar * c)``
-       Using natural units with ``_ME_EV = 0.511e6 eV/c^2`` and
-       ``_HBAR_C_EV_A = 1973.27 eV*Angstrom``, the result is
+       Using natural units with ``ME_EV = 0.511e6 eV/c^2`` and
+       ``HBAR_C_EV_A = 1973.27 eV*Angstrom``, the result is
        directly in inverse Angstroms. The approximate relation is
        ``|k| ~ 0.5123 * sqrt(E_kin [eV])`` in Angstrom^-1.
 
@@ -137,7 +135,7 @@ def _ekin_to_k_magnitude(
     Notes
     -----
     Uses physical constants defined at module level:
-    ``_ME_EV`` (electron mass in eV/c^2) and ``_HBAR_C_EV_A``
+    ``ME_EV`` (electron mass in eV/c^2) and ``HBAR_C_EV_A``
     (hbar*c in eV*Angstrom). The function is JAX-traceable and
     supports ``jax.grad`` through the ``jnp.maximum`` guard.
     """
@@ -145,9 +143,7 @@ def _ekin_to_k_magnitude(
         photon_energy - work_function - jnp.abs(binding_energy)
     )
     safe_ekin: Float[Array, " "] = jnp.maximum(e_kin, 0.0)
-    k_mag: Float[Array, " "] = (
-        jnp.sqrt(2.0 * _ME_EV * safe_ekin) / _HBAR_C_EV_A
-    )
+    k_mag: Float[Array, " "] = jnp.sqrt(2.0 * ME_EV * safe_ekin) / HBAR_C_EV_A
     return k_mag
 
 

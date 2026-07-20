@@ -32,16 +32,15 @@ as auxiliary data because JAX cannot trace Python tuples of ints
 or strings.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple
+from beartype.typing import Optional
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, Int, jaxtyped
 
 
-@register_pytree_node_class
-class VolumetricData(NamedTuple):
+class VolumetricData(eqx.Module):
     """PyTree for volumetric grid data from CHGCAR.
 
     Extended Summary
@@ -53,8 +52,8 @@ class VolumetricData(NamedTuple):
     the magnetization is the difference between spin-up and spin-down
     charge densities.
 
-    This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. Numeric fields (``lattice``,
+    This class is an immutable :class:`equinox.Module` PyTree. Numeric
+    fields (``lattice``,
     ``coords``, ``charge``, ``magnetization``, ``atom_counts``) are
     stored as children visible to JAX tracing, while ``grid_shape``
     (a Python tuple of ints) and ``symbols`` (a Python tuple of
@@ -79,6 +78,9 @@ class VolumetricData(NamedTuple):
         Scalar magnetization density (spin-up minus spin-down), or
         ``None`` for non-spin-polarized calculations (ISPIN=1).
         Same units and grid as ``charge``. JAX-traced when present.
+    atom_counts : Int[Array, " S"]
+        Number of atoms per species, with S = number of species.
+        JAX-traced (differentiable, int32).
     grid_shape : tuple[int, int, int]
         Grid dimensions ``(Nx, Ny, Nz)``. Stored as auxiliary data
         (static) because these integers determine array shapes and
@@ -86,13 +88,10 @@ class VolumetricData(NamedTuple):
     symbols : tuple[str, ...]
         Element symbols for each species (e.g. ``("Bi", "Se")``).
         Stored as auxiliary data (static).
-    atom_counts : Int[Array, " S"]
-        Number of atoms per species, with S = number of species.
-        JAX-traced (differentiable, int32).
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Equinox derives the PyTree structure from the annotated fields.
     The ``grid_shape`` and ``symbols`` fields are Python tuples and
     therefore must be stored as PyTree auxiliary data. JAX treats
     auxiliary data as compile-time constants: changing them triggers
@@ -110,117 +109,9 @@ class VolumetricData(NamedTuple):
     coords: Float[Array, "N 3"]
     charge: Float[Array, "Nx Ny Nz"]
     magnetization: Optional[Float[Array, "Nx Ny Nz"]]
-    grid_shape: tuple[int, int, int]
-    symbols: tuple[str, ...]
     atom_counts: Int[Array, " S"]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Float[Array, "Nx Ny Nz"],
-            Optional[Float[Array, "Nx Ny Nz"]],
-            Int[Array, " S"],
-        ],
-        Tuple[tuple[int, int, int], tuple[str, ...]],
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(lattice, coords, charge, magnetization, atom_counts)``
-           -- five fields, where ``magnetization`` may be ``None``
-           for non-spin-polarized data. JAX treats ``None`` leaves as
-           empty subtrees and skips them during tracing.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``(grid_shape, symbols)`` -- a tuple of Python ints and a
-           tuple of Python strings. JAX treats these as compile-time
-           constants; changing either triggers JIT recompilation.
-
-        Returns
-        -------
-        children : tuple of (jax.Array or None)
-            ``(lattice, coords, charge, magnetization,
-            atom_counts)``.
-        aux_data : tuple
-            ``(grid_shape, symbols)`` static metadata.
-        """
-        return (
-            (
-                self.lattice,
-                self.coords,
-                self.charge,
-                self.magnetization,
-                self.atom_counts,
-            ),
-            (self.grid_shape, self.symbols),
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: Tuple[tuple[int, int, int], tuple[str, ...]],
-        children: Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Float[Array, "Nx Ny Nz"],
-            Optional[Float[Array, "Nx Ny Nz"]],
-            Int[Array, " S"],
-        ],
-    ) -> "VolumetricData":
-        """Reconstruct a ``VolumetricData`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into five array-valued fields:
-           ``(lattice, coords, charge, magnetization, atom_counts)``.
-        2. Unpack ``aux_data`` into ``(grid_shape, symbols)``.
-        3. Pass all seven fields to the constructor, re-interleaving
-           the static metadata from ``aux_data`` into their correct
-           positions.
-
-        Parameters
-        ----------
-        aux_data : tuple
-            ``(grid_shape, symbols)`` recovered from auxiliary data.
-        children : tuple of (jax.Array or None)
-            ``(lattice, coords, charge, magnetization, atom_counts)``
-            as returned by :meth:`tree_flatten`.
-
-        Returns
-        -------
-        vol : VolumetricData
-            Reconstructed instance with identical data.
-        """
-        lattice: Float[Array, "3 3"]
-        coords: Float[Array, "N 3"]
-        charge: Float[Array, "Nx Ny Nz"]
-        magnetization: Optional[Float[Array, "Nx Ny Nz"]]
-        atom_counts: Int[Array, " S"]
-        lattice, coords, charge, magnetization, atom_counts = children
-        grid_shape: tuple[int, int, int]
-        symbols: tuple[str, ...]
-        grid_shape, symbols = aux_data
-        vol: VolumetricData = cls(
-            lattice=lattice,
-            coords=coords,
-            charge=charge,
-            magnetization=magnetization,
-            grid_shape=grid_shape,
-            symbols=symbols,
-            atom_counts=atom_counts,
-        )
-        return vol
+    grid_shape: tuple[int, int, int] = eqx.field(static=True)
+    symbols: tuple[str, ...] = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -260,7 +151,7 @@ def make_volumetric_data(
        ``jnp.int32``.
     6. **Pass through** ``grid_shape`` and ``symbols`` unchanged --
        these become auxiliary data in the PyTree.
-    7. **Construct** the ``VolumetricData`` NamedTuple and return it.
+    7. **Construct** the ``VolumetricData`` Equinox module and return it.
 
     Parameters
     ----------
@@ -348,8 +239,7 @@ def make_volumetric_data(
     return vol
 
 
-@register_pytree_node_class
-class SOCVolumetricData(NamedTuple):
+class SOCVolumetricData(eqx.Module):
     """PyTree for volumetric data from SOC CHGCAR files.
 
     Extended Summary
@@ -362,8 +252,8 @@ class SOCVolumetricData(NamedTuple):
     ``magnetization_vector`` holds the full 3-component
     magnetization vector ``(mx, my, mz)`` at each grid point.
 
-    This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. Numeric fields are stored as
+    This class is an immutable :class:`equinox.Module` PyTree. Numeric
+    fields are stored as
     children visible to JAX tracing, while ``grid_shape`` and
     ``symbols`` are stored as auxiliary data.
 
@@ -387,18 +277,18 @@ class SOCVolumetricData(NamedTuple):
         Full vector magnetization ``(mx, my, mz)`` at each grid
         point. The last axis indexes the three Cartesian components.
         JAX-traced (differentiable).
+    atom_counts : Int[Array, " S"]
+        Number of atoms per species. JAX-traced (int32).
     grid_shape : tuple[int, int, int]
         Grid dimensions ``(Nx, Ny, Nz)``. Stored as auxiliary data
         (static).
     symbols : tuple[str, ...]
         Element symbols per species. Stored as auxiliary data
         (static).
-    atom_counts : Int[Array, " S"]
-        Number of atoms per species. JAX-traced (int32).
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Equinox derives the PyTree structure from the annotated fields.
     Six numeric fields are children; ``grid_shape`` and ``symbols``
     are auxiliary data. Unlike :class:`VolumetricData`, both
     ``magnetization`` and ``magnetization_vector`` are mandatory
@@ -418,129 +308,9 @@ class SOCVolumetricData(NamedTuple):
     charge: Float[Array, "Nx Ny Nz"]
     magnetization: Float[Array, "Nx Ny Nz"]
     magnetization_vector: Float[Array, "Nx Ny Nz 3"]
-    grid_shape: tuple[int, int, int]
-    symbols: tuple[str, ...]
     atom_counts: Int[Array, " S"]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Float[Array, "Nx Ny Nz"],
-            Float[Array, "Nx Ny Nz"],
-            Float[Array, "Nx Ny Nz 3"],
-            Int[Array, " S"],
-        ],
-        Tuple[tuple[int, int, int], tuple[str, ...]],
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(lattice, coords, charge, magnetization,
-           magnetization_vector, atom_counts)`` -- six dense JAX
-           arrays. All are mandatory (no ``None`` leaves) because
-           SOC calculations always produce all grid blocks.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``(grid_shape, symbols)`` -- Python tuples of ints and
-           strings. Stored as compile-time constants.
-
-        Returns
-        -------
-        children : tuple of jax.Array
-            ``(lattice, coords, charge, magnetization,
-            magnetization_vector, atom_counts)``.
-        aux_data : tuple
-            ``(grid_shape, symbols)`` static metadata.
-        """
-        return (
-            (
-                self.lattice,
-                self.coords,
-                self.charge,
-                self.magnetization,
-                self.magnetization_vector,
-                self.atom_counts,
-            ),
-            (self.grid_shape, self.symbols),
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: Tuple[tuple[int, int, int], tuple[str, ...]],
-        children: Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Float[Array, "Nx Ny Nz"],
-            Float[Array, "Nx Ny Nz"],
-            Float[Array, "Nx Ny Nz 3"],
-            Int[Array, " S"],
-        ],
-    ) -> "SOCVolumetricData":
-        """Reconstruct a ``SOCVolumetricData`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into six array-valued fields:
-           ``(lattice, coords, charge, magnetization,
-           magnetization_vector, atom_counts)``.
-        2. Unpack ``aux_data`` into ``(grid_shape, symbols)``.
-        3. Pass all eight fields to the constructor, re-interleaving
-           the static metadata from ``aux_data``.
-
-        Parameters
-        ----------
-        aux_data : tuple
-            ``(grid_shape, symbols)`` recovered from auxiliary data.
-        children : tuple of jax.Array
-            ``(lattice, coords, charge, magnetization,
-            magnetization_vector, atom_counts)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        vol : SOCVolumetricData
-            Reconstructed instance with identical data.
-        """
-        lattice: Float[Array, "3 3"]
-        coords: Float[Array, "N 3"]
-        charge: Float[Array, "Nx Ny Nz"]
-        magnetization: Float[Array, "Nx Ny Nz"]
-        magnetization_vector: Float[Array, "Nx Ny Nz 3"]
-        atom_counts: Int[Array, " S"]
-        (
-            lattice,
-            coords,
-            charge,
-            magnetization,
-            magnetization_vector,
-            atom_counts,
-        ) = children
-        grid_shape: tuple[int, int, int]
-        symbols: tuple[str, ...]
-        grid_shape, symbols = aux_data
-        vol: SOCVolumetricData = cls(
-            lattice=lattice,
-            coords=coords,
-            charge=charge,
-            magnetization=magnetization,
-            magnetization_vector=magnetization_vector,
-            grid_shape=grid_shape,
-            symbols=symbols,
-            atom_counts=atom_counts,
-        )
-        return vol
+    grid_shape: tuple[int, int, int] = eqx.field(static=True)
+    symbols: tuple[str, ...] = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -580,7 +350,7 @@ def make_soc_volumetric_data(
        ``jnp.float64`` via ``jnp.asarray``.
     3. **Pass through** ``grid_shape`` and ``symbols`` unchanged --
        these become auxiliary data in the PyTree.
-    4. **Construct** the ``SOCVolumetricData`` NamedTuple and return.
+    4. **Construct** the ``SOCVolumetricData`` Equinox module and return.
 
     Parameters
     ----------

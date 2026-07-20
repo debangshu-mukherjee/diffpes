@@ -14,8 +14,7 @@ This module retains:
   ``orbital_coefficients``.
 - **Current fixtures, superseded by plan 04**:
   ``build_hamiltonian_k``, ``diagonalize_single_k``,
-  ``diagonalize_tb``, ``make_1d_chain_model``,
-  ``make_graphene_model``.
+  ``diagonalize_tb``.
 
 The submodules are organized as follows:
 
@@ -36,10 +35,6 @@ Routine Listings
     Diagonalize a TB model at all k-points.
 :func:`eigenvector_orbital_weights`
     Compute orbital weights from eigenvectors.
-:func:`make_1d_chain_model`
-    Create a 1D chain tight-binding model.
-:func:`make_graphene_model`
-    Create a graphene pz tight-binding model.
 :func:`orbital_coefficients`
     Return the raw complex orbital coefficients.
 :func:`vasp_to_diagonalized`
@@ -53,8 +48,6 @@ from .diagonalize import (
 )
 from .hamiltonian import (
     build_hamiltonian_k,
-    make_1d_chain_model,
-    make_graphene_model,
 )
 from .projections import eigenvector_orbital_weights, orbital_coefficients
 
@@ -63,8 +56,6 @@ __all__: list[str] = [
     "diagonalize_single_k",
     "diagonalize_tb",
     "eigenvector_orbital_weights",
-    "make_1d_chain_model",
-    "make_graphene_model",
     "orbital_coefficients",
     "vasp_to_diagonalized",
 ]

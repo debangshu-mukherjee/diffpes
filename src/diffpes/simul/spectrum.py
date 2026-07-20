@@ -49,6 +49,7 @@ from diffpes.types import (
     SpinOrbitalProjection,
     make_arpes_spectrum,
 )
+from diffpes.types.orbital_constants import _NON_S_ORBITAL_SLICE
 
 from .broadening import fermi_dirac, gaussian, voigt
 from .crosssections import heuristic_weights, yeh_lindau_weights
@@ -58,8 +59,6 @@ from .polarization import (
     dipole_matrix_elements,
     photon_wavevector,
 )
-
-_NON_S_ORBITAL_SLICE: slice = slice(1, 9)
 
 
 @jaxtyped(typechecker=beartype)

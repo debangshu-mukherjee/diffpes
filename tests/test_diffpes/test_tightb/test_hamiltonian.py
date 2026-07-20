@@ -21,12 +21,13 @@ Routine Listings
     Tests for the graphene model factory.
 """
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
 
-from diffpes.tightb.hamiltonian import (
-    build_hamiltonian_k,
+from diffpes.tightb.hamiltonian import build_hamiltonian_k
+from diffpes.types import (
     make_1d_chain_model,
     make_graphene_model,
 )
@@ -217,7 +218,7 @@ class TestMakeGrapheneModel:
         from diffpes.tightb.diagonalize import diagonalize_tb
 
         def loss(hop):
-            m = model._replace(hopping_params=hop)
+            m = eqx.tree_at(lambda item: item.hopping_params, model, hop)
             d = diagonalize_tb(m, kpoints)
             return jnp.sum(d.eigenvalues**2)
 

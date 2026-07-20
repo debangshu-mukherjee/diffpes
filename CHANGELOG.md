@@ -9,6 +9,13 @@ and the project uses calendar versioning.
 
 ### Changed
 
+- Replaced every registered `NamedTuple` carrier with a types-owned
+  `equinox.Module`, moved all carrier factories to `diffpes.types`, and
+  updated HDF5 serialization for explicit array and static fields.
+- Consolidated declarative constants, orbital conventions, parser schemas,
+  and lookup tables under `diffpes.types`.
+- Moved the workflow context and its projection and DOS aliases into
+  `diffpes.types`, and converted the context PyTree to an Equinox module.
 - Normalized the project, repository links, documentation, and release
   surfaces to the lowercase `diffpes` name.
 

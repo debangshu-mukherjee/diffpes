@@ -7,7 +7,6 @@ import jax.numpy as jnp
 import pytest
 
 from diffpes.simul import (
-    WorkflowContext,
     load_vasp_context,
     prepare_projection,
     run_vasp_workflow,
@@ -15,9 +14,11 @@ from diffpes.simul import (
 )
 from diffpes.types import (
     SpinOrbitalProjection,
+    WorkflowContext,
     make_band_structure,
     make_orbital_projection,
     make_spin_orbital_projection,
+    make_workflow_context,
 )
 
 _FIXTURES_DIR: Path = (
@@ -172,7 +173,7 @@ class TestSimulateContext(chex.TestCase):
             fermi_energy=0.0,
         )
         orb = make_orbital_projection(projections=projections)
-        context = WorkflowContext(
+        context = make_workflow_context(
             bands=bands,
             orb_proj=orb,
             kpath=None,

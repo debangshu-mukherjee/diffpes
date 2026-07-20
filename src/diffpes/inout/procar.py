@@ -33,11 +33,14 @@ from diffpes.types import (
     make_orbital_projection,
     make_spin_orbital_projection,
 )
-
-_NORBS: int = 9
-_NSPIN_COMPONENTS: int = 6
-_ISPIN2_BLOCKS: int = 2
-_SOC_BLOCKS: int = 4
+from diffpes.types.orbital_constants import _N_ORBITALS as _NORBS
+from diffpes.types.vasp_constants import (
+    _ISPIN2_BLOCKS,
+    _SOC_BLOCKS,
+)
+from diffpes.types.vasp_constants import (
+    _N_SPIN_COMPONENTS as _NSPIN_COMPONENTS,
+)
 
 
 def read_procar(

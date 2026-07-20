@@ -29,13 +29,12 @@ from diffpes.types import (
     make_soc_volumetric_data,
     make_volumetric_data,
 )
-
-_LATTICE_ROWS: int = 3
-_XYZ_COMPONENTS: int = 3
-_SCALAR_LINE_COMPONENTS: int = 3
-
-
-_N_SOC_MAG_BLOCKS: int = 3
+from diffpes.types.vasp_constants import (
+    _LATTICE_ROWS,
+    _N_SOC_MAG_BLOCKS,
+    _SCALAR_LINE_COMPONENTS,
+    _XYZ_COMPONENTS,
+)
 
 
 @jaxtyped(typechecker=beartype)

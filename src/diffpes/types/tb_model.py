@@ -15,6 +15,10 @@ Routine Listings
     PyTree for tight-binding model parameters (legacy).
 :func:`make_diagonalized_bands`
     Create a validated ``DiagonalizedBands`` instance.
+:func:`make_1d_chain_model`
+    Create a 1D chain tight-binding model.
+:func:`make_graphene_model`
+    Create a graphene pz tight-binding model.
 :func:`make_tb_model`
     Create a validated ``TBModel`` instance.
 
@@ -25,19 +29,17 @@ Notes
 from static structural metadata (auxiliary data).
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Tuple
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Complex, Float, jaxtyped
 
-from .aliases import ScalarNumeric
-from .radial_params import OrbitalBasis
+from .aliases import ScalarFloat, ScalarNumeric
+from .radial_params import OrbitalBasis, make_orbital_basis
 
 
-@register_pytree_node_class
-class DiagonalizedBands(NamedTuple):
+class DiagonalizedBands(eqx.Module):
     """PyTree for diagonalized electronic structure.
 
     Extended Summary
@@ -80,11 +82,8 @@ class DiagonalizedBands(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    All four fields are JAX array children (fully differentiable).
-    The explicit ``tree_flatten`` / ``tree_unflatten`` pair makes the
-    children-vs-auxiliary split self-documenting: all fields are
-    children and auxiliary data is ``None``.
+    Implemented as an immutable :class:`equinox.Module` PyTree. All four
+    fields are differentiable leaves and no static metadata is present.
 
     See Also
     --------
@@ -99,266 +98,34 @@ class DiagonalizedBands(NamedTuple):
     kpoints: Float[Array, "K 3"]
     fermi_energy: Float[Array, " "]
 
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "K B"],
-            Complex[Array, "K B O"],
-            Float[Array, "K 3"],
-            Float[Array, " "],
-        ],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
 
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
+class TBModel(eqx.Module):
+    """Tight-binding parameters with differentiable and static fields.
 
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(eigenvalues, eigenvectors, kpoints,
-           fermi_energy)`` -- all four fields are dense JAX arrays.
-           ``eigenvectors`` is complex128; the rest are float64.
-           All must be visible to the tracer for ``jit``/``grad``/
-           ``vmap``.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values because every field is a numerical array.
-
-        Returns
-        -------
-        children : tuple of jax.Array
-            ``(eigenvalues, eigenvectors, kpoints, fermi_energy)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return (
-            (
-                self.eigenvalues,
-                self.eigenvectors,
-                self.kpoints,
-                self.fermi_energy,
-            ),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K B"],
-            Complex[Array, "K B O"],
-            Float[Array, "K 3"],
-            Float[Array, " "],
-        ],
-    ) -> "DiagonalizedBands":
-        """Reconstruct a ``DiagonalizedBands`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util``
-        when a traced ``DiagonalizedBands`` needs to be reassembled
-        -- for example at the boundary of a ``jit``-compiled function
-        or after ``vmap`` unstacks batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``DiagonalizedBands`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(eigenvalues, eigenvectors, kpoints,
-           fermi_energy)`` in declaration order.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of jax.Array
-            ``(eigenvalues, eigenvectors, kpoints, fermi_energy)``
-            as returned by :meth:`tree_flatten`.
-
-        Returns
-        -------
-        bands : DiagonalizedBands
-            Reconstructed instance with the original array fields.
-        """
-        eigenvalues: Float[Array, "K B"]
-        eigenvectors: Complex[Array, "K B O"]
-        kpoints: Float[Array, "K 3"]
-        fermi_energy: Float[Array, " "]
-        eigenvalues, eigenvectors, kpoints, fermi_energy = children
-        bands: DiagonalizedBands = cls(
-            eigenvalues=eigenvalues,
-            eigenvectors=eigenvectors,
-            kpoints=kpoints,
-            fermi_energy=fermi_energy,
-        )
-        return bands
-
-
-@register_pytree_node_class
-class TBModel(NamedTuple):
-    """PyTree for tight-binding model parameters (legacy).
-
-    Extended Summary
-    ----------------
-    Minimal Slater-Koster tight-binding model retained for testing
-    the differentiable forward simulator and extended by the native
-    tight-binding plan series. The Hamiltonian is constructed at each
-    k-point by Fourier-transforming the real-space hopping matrix:
-
-        H_{ij}(k) = sum_R t_{ij,R} * exp(i k . R)
-
-    where ``t_{ij,R}`` are the hopping amplitudes between orbital i
-    and orbital j separated by lattice vector R.
-
-    The hopping amplitudes and lattice vectors are differentiable
-    (children) so that ``jax.grad`` can compute gradients of the
-    simulated ARPES intensity with respect to TB parameters. The
-    structural information (connectivity, orbital count, quantum
-    numbers) is static (auxiliary data) because changing the model
-    topology requires JIT recompilation.
+    ``hopping_params`` and ``lattice_vectors`` are differentiable leaves.
+    The connectivity, orbital count, and basis are compile-time metadata;
+    changing any static field changes the PyTree definition and retraces JIT
+    compiled consumers.
 
     Attributes
     ----------
     hopping_params : Float[Array, " H"]
-        Hopping amplitudes t_{ij,R} in eV, one per hopping
-        connection. H is the total number of unique hoppings in the
-        model. JAX-traced (differentiable) -- the primary
-        optimization target for TB model fitting.
+        Hopping amplitudes in eV.
     lattice_vectors : Float[Array, "3 3"]
-        Real-space lattice vectors as rows, in Angstroms. Used to
-        convert the lattice translation indices (R_x, R_y, R_z) in
-        ``hopping_indices`` to Cartesian displacements for the
-        Fourier transform. JAX-traced (differentiable).
-    hopping_indices : tuple[tuple[int, int, tuple[int, int, int]], ...]
-        Connectivity information: for each hopping, a triple
-        ``(orb_i, orb_j, (R_x, R_y, R_z))`` specifying which pair
-        of orbitals are connected and by which lattice translation.
-        Static (auxiliary data) -- changing the topology triggers
-        JIT recompilation.
+        Real-space lattice vectors in Angstrom.
+    hopping_indices : tuple
+        **Static.** Orbital connectivity and lattice translations.
     n_orbitals : int
-        Number of orbitals in the unit cell. Determines the
-        Hamiltonian matrix size (n_orbitals x n_orbitals). Static
-        (auxiliary data).
+        **Static.** Number of orbitals in the unit cell.
     orbital_basis : OrbitalBasis
-        Quantum numbers (n, l, m) and labels for each orbital.
-        Used by the matrix element calculation. Static (auxiliary
-        data, nested PyTree).
-
-    Notes
-    -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    ``hopping_params`` and ``lattice_vectors`` are children (on the
-    gradient tape); ``hopping_indices``, ``n_orbitals``, and
-    ``orbital_basis`` are auxiliary data (compile-time constants).
-    This separation enables differentiating the ARPES spectrum with
-    respect to hopping amplitudes while keeping the model structure
-    fixed.
-
-    See Also
-    --------
-    DiagonalizedBands : The output of diagonalizing a ``TBModel``
-        at a set of k-points.
-    make_tb_model : Factory function with validation and dtype
-        casting.
+        **Static.** Orbital quantum-number metadata.
     """
 
     hopping_params: Float[Array, " H"]
     lattice_vectors: Float[Array, "3 3"]
-    hopping_indices: tuple
-    n_orbitals: int
-    orbital_basis: OrbitalBasis
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[Float[Array, " H"], Float[Array, "3 3"]],
-        Tuple[tuple, int, OrbitalBasis],
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(hopping_params, lattice_vectors)`` -- both are dense
-           float64 arrays. ``hopping_params`` are the TB amplitudes
-           to optimize; ``lattice_vectors`` define the real-space
-           basis for the Fourier transform.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``(hopping_indices, n_orbitals, orbital_basis)`` -- the
-           model topology and quantum number metadata. These are
-           compile-time constants: changing any of them triggers JIT
-           recompilation.
-
-        Returns
-        -------
-        children : tuple of Array
-            ``(hopping_params, lattice_vectors)`` -- differentiable
-            JAX arrays.
-        aux_data : tuple
-            ``(hopping_indices, n_orbitals, orbital_basis)`` -- static
-            structural metadata.
-        """
-        return (
-            (self.hopping_params, self.lattice_vectors),
-            (self.hopping_indices, self.n_orbitals, self.orbital_basis),
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: Tuple[tuple, int, OrbitalBasis],
-        children: Tuple[Float[Array, " H"], Float[Array, "3 3"]],
-    ) -> "TBModel":
-        """Reconstruct a ``TBModel`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into ``(hopping_params,
-           lattice_vectors)``.
-        2. Unpack ``aux_data`` into ``(hopping_indices, n_orbitals,
-           orbital_basis)``.
-        3. Pass all five fields to the constructor, restoring the
-           static topology metadata from ``aux_data``.
-
-        Parameters
-        ----------
-        aux_data : tuple
-            ``(hopping_indices, n_orbitals, orbital_basis)`` recovered
-            from auxiliary data.
-        children : tuple of Array
-            ``(hopping_params, lattice_vectors)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        model : TBModel
-            Reconstructed instance with the original array and
-            structural data.
-        """
-        hopping_params: Float[Array, " H"]
-        lattice_vectors: Float[Array, "3 3"]
-        hopping_params, lattice_vectors = children
-        hopping_indices: tuple
-        n_orbitals: int
-        orbital_basis: OrbitalBasis
-        hopping_indices, n_orbitals, orbital_basis = aux_data
-        model: TBModel = cls(
-            hopping_params=hopping_params,
-            lattice_vectors=lattice_vectors,
-            hopping_indices=hopping_indices,
-            n_orbitals=n_orbitals,
-            orbital_basis=orbital_basis,
-        )
-        return model
+    hopping_indices: tuple = eqx.field(static=True)
+    n_orbitals: int = eqx.field(static=True)
+    orbital_basis: OrbitalBasis = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -394,7 +161,7 @@ def make_diagonalized_bands(
        complex orbital coefficients.
     3. **Cast kpoints** to ``jnp.float64`` via ``jnp.asarray``.
     4. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    5. **Construct** the ``DiagonalizedBands`` NamedTuple from all
+    5. **Construct** the ``DiagonalizedBands`` Equinox module from all
        four validated arrays and return it.
 
     Parameters
@@ -511,7 +278,7 @@ def make_tb_model(
     3. **Pass through** ``hopping_indices``, ``n_orbitals``, and
        ``orbital_basis`` unchanged -- these become auxiliary data
        in the PyTree.
-    4. **Construct** the ``TBModel`` NamedTuple from all five fields
+    4. **Construct** the ``TBModel`` Equinox module from all five fields
        and return it.
 
     Parameters
@@ -588,9 +355,168 @@ def make_tb_model(
     return model
 
 
+@jaxtyped(typechecker=beartype)
+def make_1d_chain_model(
+    t: ScalarFloat = -1.0,
+) -> TBModel:
+    r"""Create a 1D chain tight-binding model.
+
+    Single orbital per unit cell with nearest-neighbor hopping t.
+
+    Extended Summary
+    ----------------
+    The 1D chain is the simplest possible tight-binding model: one
+    s-orbital per unit cell with hopping only to the two nearest
+    neighbors at lattice vectors ``+a1`` and ``-a1``.  The lattice is
+    set to an identity matrix (``a1 = [1, 0, 0]``, etc.) so that
+    fractional and Cartesian coordinates coincide with a lattice
+    constant of 1 (arbitrary units).
+
+    The resulting band dispersion is the textbook cosine band:
+
+    .. math::
+
+        E(k) = 2t \cos(2 \pi k)
+
+    with bandwidth ``|4t|``.  This model is useful as a minimal
+    smoke-test for the Hamiltonian builder, diagonalizer, and
+    gradient machinery.
+
+    The hopping list contains two entries -- ``(0, 0, (+1,0,0))`` and
+    ``(0, 0, (-1,0,0))`` -- which are the forward and backward
+    nearest-neighbor hops of the single orbital to itself in adjacent
+    unit cells.  After Hermitianization in ``build_hamiltonian_k``
+    these are redundant (each is its own conjugate), so the
+    on-diagonal entry receives ``2t cos(2 pi k)`` as expected.
+
+    Parameters
+    ----------
+    t : ScalarFloat
+        Hopping amplitude. Default -1.0.
+
+    Returns
+    -------
+    model : TBModel
+        1D chain model.
+    """
+    basis: OrbitalBasis = make_orbital_basis(
+        n_values=(1,),
+        l_values=(0,),
+        m_values=(0,),
+        labels=("s",),
+    )
+    hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
+        (0, 0, (1, 0, 0)),  # +R hop
+        (0, 0, (-1, 0, 0)),  # -R hop
+    )
+    lattice: Float[Array, "3 3"] = jnp.eye(3, dtype=jnp.float64)
+    model: TBModel = make_tb_model(
+        hopping_params=jnp.array([t, t], dtype=jnp.float64),
+        lattice_vectors=lattice,
+        hopping_indices=hopping_indices,
+        n_orbitals=1,
+        orbital_basis=basis,
+    )
+    return model
+
+
+@jaxtyped(typechecker=beartype)
+def make_graphene_model(
+    t: ScalarFloat = -2.7,
+) -> TBModel:
+    """Create a graphene pz tight-binding model.
+
+    Two-orbital (A/B sublattice) model on a honeycomb lattice
+    with nearest-neighbor hopping t.
+
+    Extended Summary
+    ----------------
+    Graphene's honeycomb lattice has two atoms (sublattices A and B)
+    per primitive cell.  The lattice vectors used here are:
+
+    * ``a1 = (a, 0, 0)``
+    * ``a2 = (a/2, a*sqrt(3)/2, 0)``
+    * ``a3 = (0, 0, 10)``  (vacuum slab for 2-D periodicity)
+
+    with ``a = 2.46`` Angstrom (the experimental graphene lattice
+    constant).  The two orbitals are labeled ``A_pz`` and ``B_pz``
+    with quantum numbers ``(n=2, l=1, m=0)``, representing carbon
+    p_z orbitals on each sublattice.
+
+    Each A-site atom has three nearest-neighbor B-site atoms.  In
+    fractional coordinates the three A -> B hoppings connect to cells
+    ``(0,0,0)``, ``(-1,0,0)``, and ``(0,-1,0)``.  The reverse B -> A
+    hoppings at ``(0,0,0)``, ``(+1,0,0)``, and ``(0,+1,0)`` are
+    listed explicitly so that the raw Hamiltonian matrix is already
+    nearly Hermitian before the Hermitianization step in
+    ``build_hamiltonian_k``.
+
+    The resulting 2x2 Hamiltonian produces the classic Dirac-cone
+    band structure with linear dispersion near the K and K' points
+    and a bandwidth of ``|6t|``.
+
+    Parameters
+    ----------
+    t : ScalarFloat
+        Nearest-neighbor hopping. Default -2.7 eV.
+
+    Returns
+    -------
+    model : TBModel
+        Graphene model.
+
+    Notes
+    -----
+    The default hopping value of -2.7 eV reproduces the standard
+    nearest-neighbor graphene band structure commonly used in the
+    literature (e.g. Castro Neto et al., Rev. Mod. Phys. 81, 109).
+    The negative sign follows the convention that bonding states
+    are lower in energy.
+    """
+    basis: OrbitalBasis = make_orbital_basis(
+        n_values=(2, 2),
+        l_values=(1, 1),
+        m_values=(0, 0),
+        labels=("A_pz", "B_pz"),
+    )
+    # Honeycomb lattice vectors (Angstrom)
+    a: float = 2.46
+    a1: Float[Array, " 3"] = jnp.array([a, 0.0, 0.0], dtype=jnp.float64)
+    a2: Float[Array, " 3"] = jnp.array(
+        [a / 2.0, a * jnp.sqrt(3.0) / 2.0, 0.0], dtype=jnp.float64
+    )
+    a3: Float[Array, " 3"] = jnp.array([0.0, 0.0, 10.0], dtype=jnp.float64)
+    lattice: Float[Array, "3 3"] = jnp.stack([a1, a2, a3])
+
+    # Three nearest-neighbor hoppings A->B
+    hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
+        (0, 1, (0, 0, 0)),  # same cell
+        (0, 1, (-1, 0, 0)),  # -a1
+        (0, 1, (0, -1, 0)),  # -a2
+        # Hermitian conjugates (B->A)
+        (1, 0, (0, 0, 0)),  # same cell
+        (1, 0, (1, 0, 0)),  # +a1
+        (1, 0, (0, 1, 0)),  # +a2
+    )
+    t_val: Float[Array, " "] = jnp.asarray(t, dtype=jnp.float64)
+    hopping_params: Float[Array, " H"] = jnp.array(
+        [t_val, t_val, t_val, t_val, t_val, t_val], dtype=jnp.float64
+    )
+    model: TBModel = make_tb_model(
+        hopping_params=hopping_params,
+        lattice_vectors=lattice,
+        hopping_indices=hopping_indices,
+        n_orbitals=2,
+        orbital_basis=basis,
+    )
+    return model
+
+
 __all__: list[str] = [
     "DiagonalizedBands",
     "TBModel",
+    "make_1d_chain_model",
     "make_diagonalized_bands",
+    "make_graphene_model",
     "make_tb_model",
 ]

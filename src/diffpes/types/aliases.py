@@ -31,15 +31,10 @@ from beartype.typing import TypeAlias, Union
 from jaxtyping import Array, Bool, Complex, Float, Int, Num
 
 NonJaxNumber: TypeAlias = Union[int, float, complex]
-
 ScalarBool: TypeAlias = Union[bool, Bool[Array, " "]]
-
 ScalarComplex: TypeAlias = Union[complex, Complex[Array, " "]]
-
 ScalarFloat: TypeAlias = Union[float, Float[Array, " "]]
-
 ScalarInteger: TypeAlias = Union[int, Int[Array, " "]]
-
 ScalarNumeric: TypeAlias = Union[int, float, complex, Num[Array, " "]]
 
 __all__: list[str] = [

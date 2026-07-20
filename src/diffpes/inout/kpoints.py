@@ -21,19 +21,13 @@ from beartype.typing import Optional
 from jaxtyping import Array, Float, Int
 
 from diffpes.types import KPathInfo, make_kpath_info
-
-_FLOAT_TOKEN_RE: re.Pattern[str] = re.compile(
-    r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+from diffpes.types.vasp_constants import (
+    _COORDINATE_MODE_TOKENS,
+    _FLOAT_TOKEN_RE,
+    _WEIGHT_COMPONENT_COUNT,
+    _WEIGHT_COMPONENT_INDEX,
+    _XYZ_COMPONENTS,
 )
-_XYZ_COMPONENTS: int = 3
-_WEIGHT_COMPONENT_INDEX: int = 3
-_WEIGHT_COMPONENT_COUNT: int = 4
-_COORDINATE_MODE_TOKENS: set[str] = {
-    "cartesian",
-    "reciprocal",
-    "direct",
-    "fractional",
-}
 
 
 def read_kpoints(  # noqa: PLR0915

@@ -36,18 +36,17 @@ Orbital indexing convention (9 orbitals):
 matching VASP PROCAR output ordering.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple, Union
+from beartype.typing import Optional, Union
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
 
 
-@register_pytree_node_class
-class BandStructure(NamedTuple):
+class BandStructure(eqx.Module):
     """PyTree for electronic band structure.
 
     Extended Summary
@@ -77,13 +76,9 @@ class BandStructure(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree via ``@register_pytree_node_class``.
-    Because ``BandStructure`` is a ``NamedTuple``, JAX would normally
-    flatten it by treating each field as a leaf in declaration order.
-    The explicit ``tree_flatten`` / ``tree_unflatten`` pair overrides
-    this default to make the children-vs-auxiliary split explicit and
-    self-documenting, even though in this case all fields are children
-    and the auxiliary data is ``None``.
+    Implemented as an immutable :class:`equinox.Module` PyTree.
+    Equinox derives the tree structure from the annotated fields; all
+    fields are differentiable leaves and no static metadata is present.
     """
 
     eigenvalues: Float[Array, "K B"]
@@ -91,358 +86,48 @@ class BandStructure(NamedTuple):
     kpoint_weights: Float[Array, " K"]
     fermi_energy: Float[Array, " "]
 
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "K B"],
-            Float[Array, "K 3"],
-            Float[Array, " K"],
-            Float[Array, " "],
-        ],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
 
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
+class OrbitalProjection(eqx.Module):
+    """Orbital-resolved band projections.
 
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(eigenvalues, kpoints, kpoint_weights,
-           fermi_energy)`` -- all four fields are dense JAX arrays that
-           must be visible to the tracer so that ``jit``, ``grad``, and
-           ``vmap`` can differentiate through or batch over them.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values (no strings, ints, or flags) because every field in a
-           ``BandStructure`` is a numerical array.
-
-        Returns
-        -------
-        children : tuple of jax.Array
-            ``(eigenvalues, kpoints, kpoint_weights, fermi_energy)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return (
-            (
-                self.eigenvalues,
-                self.kpoints,
-                self.kpoint_weights,
-                self.fermi_energy,
-            ),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K B"],
-            Float[Array, "K 3"],
-            Float[Array, " K"],
-            Float[Array, " "],
-        ],
-    ) -> "BandStructure":
-        """Reconstruct a ``BandStructure`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util`` when
-        a traced ``BandStructure`` needs to be reassembled -- for example
-        at the boundary of a ``jit``-compiled function or after a
-        ``vmap`` transformation unstacks its batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``BandStructure`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(eigenvalues, kpoints, kpoint_weights,
-           fermi_energy)`` in declaration order.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of jax.Array
-            ``(eigenvalues, kpoints, kpoint_weights, fermi_energy)``
-            as returned by :meth:`tree_flatten`.
-
-        Returns
-        -------
-        band_structure : BandStructure
-            Reconstructed instance with the original array fields.
-        """
-        return cls(*children)
-
-
-@register_pytree_node_class
-class OrbitalProjection(NamedTuple):
-    """PyTree for orbital-resolved band projections.
-
-    Extended Summary
-    ----------------
-    Stores the orbital character of each Bloch state as extracted from
-    a VASP PROCAR file: the squared projection of each eigenstate onto
-    atom-centred spherical harmonics. The nine orbital channels follow
-    the VASP ordering ``[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]``.
-
-    Optional spin-resolved and orbital-angular-momentum (OAM) projections
-    are included when the DFT calculation was spin-orbit coupled. These
-    additional fields enable simulation of spin-ARPES and circular-
-    dichroism ARPES experiments.
-
-    This type exists as a JAX-compatible PyTree so that orbital weights
-    can participate in JAX transformations (``jit``, ``vmap``, ``grad``)
-    alongside the band structure data. All fields are JAX arrays (or
-    ``None``), so there is no static auxiliary data.
+    All array fields are differentiable PyTree leaves. Optional fields are
+    empty subtrees when ``None``; changing their presence changes the tree
+    structure and may trigger recompilation.
 
     Attributes
     ----------
     projections : Float[Array, "K B A 9"]
-        Orbital projection weights for K k-points, B bands,
-        A atoms, and 9 orbitals.
+        Orbital projection weights.
     spin : Optional[Float[Array, "K B A 6"]]
-        Spin projections (up/down for x, y, z) or None.
+        Optional spin projections.
     oam : Optional[Float[Array, "K B A 3"]]
-        Orbital angular momentum (p, d, total) or None.
-
-    Notes
-    -----
-    Registered as a JAX PyTree via ``@register_pytree_node_class``.
-    The ``spin`` and ``oam`` fields may be ``None`` when the underlying
-    DFT calculation did not include spin-orbit coupling. JAX's tree
-    utilities treat ``None`` leaves correctly (they are simply skipped
-    during tracing), so the PyTree structure adapts automatically to
-    both spin-polarised and non-spin-polarised inputs.
+        Optional orbital-angular-momentum projections.
     """
 
     projections: Float[Array, "K B A 9"]
     spin: Optional[Float[Array, "K B A 6"]]
     oam: Optional[Float[Array, "K B A 3"]]
 
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "K B A 9"],
-            Optional[Float[Array, "K B A 6"]],
-            Optional[Float[Array, "K B A 3"]],
-        ],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
 
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
+class SpinOrbitalProjection(eqx.Module):
+    """Orbital projections with mandatory spin data.
 
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(projections, spin, oam)`` -- all three
-           fields are either dense JAX arrays or ``None``. They are
-           placed in the children tuple so that the JAX tracer can see
-           (and differentiate through) the numerical data. When
-           ``spin`` or ``oam`` is ``None``, JAX treats that leaf as an
-           empty subtree and skips it during tracing.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values. The presence or absence of ``spin`` / ``oam`` is
-           encoded implicitly by the ``None`` leaves inside the
-           children tuple, not by a separate flag in auxiliary data.
-
-        Returns
-        -------
-        children : tuple of (jax.Array or None)
-            ``(projections, spin, oam)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return (
-            (self.projections, self.spin, self.oam),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K B A 9"],
-            Optional[Float[Array, "K B A 6"]],
-            Optional[Float[Array, "K B A 3"]],
-        ],
-    ) -> "OrbitalProjection":
-        """Reconstruct an ``OrbitalProjection`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util`` when
-        a traced ``OrbitalProjection`` needs to be reassembled -- for
-        example at the boundary of a ``jit``-compiled function or after
-        ``vmap`` unstacks batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``OrbitalProjection`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(projections, spin, oam)`` in declaration order.
-           If ``spin`` or ``oam`` was ``None`` before flattening, it
-           remains ``None`` after reconstruction.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of (jax.Array or None)
-            ``(projections, spin, oam)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        orbital_projection : OrbitalProjection
-            Reconstructed instance with the original array fields.
-        """
-        return cls(*children)
-
-
-@register_pytree_node_class
-class SpinOrbitalProjection(NamedTuple):
-    """PyTree for orbital projections with mandatory spin data.
-
-    Extended Summary
-    ----------------
-    Variant of :class:`OrbitalProjection` where the ``spin`` field
-    is required (not Optional). Used by spin-orbit coupling
-    simulations (:func:`~diffpes.simul.simulate_soc`) that need
-    guaranteed access to spin projection data.
-
-    Hardening (validation that spin data exists) belongs at the I/O
-    boundary -- the factory :func:`make_spin_orbital_projection`
-    enforces the contract so the simulation kernel stays pure.
-
-    This type exists as a JAX-compatible PyTree so that spin-resolved
-    orbital weights can participate in JAX transformations (``jit``,
-    ``vmap``, ``grad``) alongside band structure data. All array
-    fields are JAX-traced children; ``None``-valued ``oam`` is
-    handled transparently by JAX's tree utilities.
+    All present arrays are differentiable PyTree leaves. ``oam=None`` is an
+    empty subtree; changing its presence changes the tree structure.
 
     Attributes
     ----------
     projections : Float[Array, "K B A 9"]
-        Orbital projection weights ``|<psi_{k,b}|Y_{lm}>|^2`` for K
-        k-points, B bands, A atoms, and 9 orbitals following VASP
-        ordering ``[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]``.
-        Units are dimensionless (squared overlap). JAX-traced
-        (differentiable).
+        Orbital projection weights.
     spin : Float[Array, "K B A 6"]
-        Spin projections from VASP PROCAR, stored as six columns:
-        ``[Sx_up, Sx_dn, Sy_up, Sy_dn, Sz_up, Sz_dn]``. Required
-        (non-optional) unlike in :class:`OrbitalProjection`.
-        JAX-traced (differentiable).
+        Mandatory spin projections.
     oam : Optional[Float[Array, "K B A 3"]]
-        Orbital angular momentum expectation values
-        ``[L_p, L_d, L_total]`` for p-shell, d-shell, and total
-        OAM contributions, or ``None`` when the PROCAR does not
-        contain OAM data. JAX-traced when present.
-
-    Notes
-    -----
-    Registered as a JAX PyTree via ``@register_pytree_node_class``.
-    All fields are stored as children (no auxiliary data). When
-    ``oam`` is ``None``, JAX treats that leaf as an empty subtree
-    and skips it during tracing, so the PyTree structure adapts
-    automatically.
-
-    See Also
-    --------
-    OrbitalProjection : Variant with optional ``spin`` field.
-    make_spin_orbital_projection : Factory function with validation
-        and float64 casting.
+        Optional orbital-angular-momentum projections.
     """
 
     projections: Float[Array, "K B A 9"]
     spin: Float[Array, "K B A 6"]
     oam: Optional[Float[Array, "K B A 3"]]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "K B A 9"],
-            Float[Array, "K B A 6"],
-            Optional[Float[Array, "K B A 3"]],
-        ],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(projections, spin, oam)`` -- all three
-           fields are either dense JAX arrays or ``None``. ``spin``
-           is guaranteed non-None for this type. When ``oam`` is
-           ``None``, JAX treats that leaf as an empty subtree and
-           skips it during tracing.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values because every field is a numerical array (or
-           ``None``).
-
-        Returns
-        -------
-        children : tuple of (jax.Array or None)
-            ``(projections, spin, oam)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return (
-            (self.projections, self.spin, self.oam),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K B A 9"],
-            Float[Array, "K B A 6"],
-            Optional[Float[Array, "K B A 3"]],
-        ],
-    ) -> "SpinOrbitalProjection":
-        """Reconstruct a ``SpinOrbitalProjection`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util``
-        when a traced ``SpinOrbitalProjection`` needs to be reassembled
-        -- for example at the boundary of a ``jit``-compiled function
-        or after ``vmap`` unstacks batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``SpinOrbitalProjection`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(projections, spin, oam)`` in declaration
-           order. If ``oam`` was ``None`` before flattening, it
-           remains ``None`` after reconstruction.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of (jax.Array or None)
-            ``(projections, spin, oam)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        spin_orbital_projection : SpinOrbitalProjection
-            Reconstructed instance with the original array fields.
-        """
-        return cls(*children)
 
 
 @jaxtyped(typechecker=beartype)
@@ -476,7 +161,7 @@ def make_spin_orbital_projection(
        field is mandatory, unlike in :func:`make_orbital_projection`.
     3. **Cast oam** to ``jnp.float64`` when not ``None``; otherwise
        leave as ``None`` to signal that OAM data is absent.
-    4. **Construct** the ``SpinOrbitalProjection`` NamedTuple from the
+    4. **Construct** the ``SpinOrbitalProjection`` Equinox module from the
        three validated fields and return it.
 
     Parameters
@@ -563,8 +248,7 @@ def make_spin_orbital_projection(
     return soc_proj
 
 
-@register_pytree_node_class
-class SpinBandStructure(NamedTuple):
+class SpinBandStructure(eqx.Module):
     """PyTree for spin-resolved electronic band structure.
 
     Extended Summary
@@ -575,8 +259,8 @@ class SpinBandStructure(NamedTuple):
     ``return_mode="full"`` and the EIGENVAL file contains spin-
     polarized data.
 
-    This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. All five fields are dense JAX
+    This class is an immutable :class:`equinox.Module` PyTree. All five
+    fields are dense JAX
     arrays stored as children (no auxiliary data), making the entire
     object fully differentiable with respect to any of its fields.
 
@@ -601,14 +285,9 @@ class SpinBandStructure(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    Because ``SpinBandStructure`` is a ``NamedTuple``, JAX would
-    normally flatten it by treating each field as a leaf in
-    declaration order. The explicit ``tree_flatten`` /
-    ``tree_unflatten`` pair overrides this default to make the
-    children-vs-auxiliary split explicit and self-documenting, even
-    though in this case all fields are children and the auxiliary
-    data is ``None``.
+    Implemented as an immutable :class:`equinox.Module` PyTree.
+    Equinox derives the tree structure from the annotated fields; all
+    fields are differentiable leaves and no static metadata is present.
 
     See Also
     --------
@@ -622,97 +301,6 @@ class SpinBandStructure(NamedTuple):
     kpoints: Float[Array, "K 3"]
     kpoint_weights: Float[Array, " K"]
     fermi_energy: Float[Array, " "]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "K B"],
-            Float[Array, "K B"],
-            Float[Array, "K 3"],
-            Float[Array, " K"],
-            Float[Array, " "],
-        ],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(eigenvalues_up, eigenvalues_down, kpoints,
-           kpoint_weights, fermi_energy)`` -- all five fields are dense
-           JAX arrays that must be visible to the tracer so that
-           ``jit``, ``grad``, and ``vmap`` can differentiate through
-           or batch over them.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values because every field in a ``SpinBandStructure`` is a
-           numerical array.
-
-        Returns
-        -------
-        children : tuple of jax.Array
-            ``(eigenvalues_up, eigenvalues_down, kpoints,
-            kpoint_weights, fermi_energy)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return (
-            (
-                self.eigenvalues_up,
-                self.eigenvalues_down,
-                self.kpoints,
-                self.kpoint_weights,
-                self.fermi_energy,
-            ),
-            None,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K B"],
-            Float[Array, "K B"],
-            Float[Array, "K 3"],
-            Float[Array, " K"],
-            Float[Array, " "],
-        ],
-    ) -> "SpinBandStructure":
-        """Reconstruct a ``SpinBandStructure`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util``
-        when a traced ``SpinBandStructure`` needs to be reassembled
-        -- for example at the boundary of a ``jit``-compiled function
-        or after a ``vmap`` transformation unstacks its batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``SpinBandStructure`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(eigenvalues_up, eigenvalues_down, kpoints,
-           kpoint_weights, fermi_energy)`` in declaration order.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of jax.Array
-            ``(eigenvalues_up, eigenvalues_down, kpoints,
-            kpoint_weights, fermi_energy)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        band_structure : SpinBandStructure
-            Reconstructed instance with the original array fields.
-        """
-        return cls(*children)
 
 
 @jaxtyped(typechecker=beartype)
@@ -865,8 +453,7 @@ def make_spin_band_structure(
     return bands
 
 
-@register_pytree_node_class
-class ArpesSpectrum(NamedTuple):
+class ArpesSpectrum(eqx.Module):
     """PyTree for ARPES simulation output.
 
     Extended Summary
@@ -892,84 +479,13 @@ class ArpesSpectrum(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree via ``@register_pytree_node_class``.
-    The explicit ``tree_flatten`` / ``tree_unflatten`` pair overrides
-    the default ``NamedTuple`` flattening to make the children-vs-
-    auxiliary split self-documenting. In this case all fields are
-    children and the auxiliary data is ``None``.
+    Implemented as an immutable :class:`equinox.Module` PyTree. Equinox
+    derives the tree structure from the annotated fields; both fields
+    are differentiable leaves.
     """
 
     intensity: Float[Array, "K E"]
     energy_axis: Float[Array, " E"]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[Float[Array, "K E"], Float[Array, " E"]],
-        None,
-    ]:
-        """Flatten into JAX leaf arrays and auxiliary data.
-
-        Separates JAX-traced arrays (children) from static Python
-        values (auxiliary data) for ``jax.tree_util`` compatibility.
-
-        Implementation Logic
-        --------------------
-        1. **Children**: ``(intensity, energy_axis)`` -- both fields are
-           dense JAX arrays. ``intensity`` is the 2-D photoemission map
-           and ``energy_axis`` is the 1-D energy grid. Both must be
-           visible to the tracer for ``jit``/``grad``/``vmap``.
-        2. **Auxiliary data**: ``None`` -- there are no static Python
-           values because every field in an ``ArpesSpectrum`` is a
-           numerical array.
-
-        Returns
-        -------
-        children : tuple of jax.Array
-            ``(intensity, energy_axis)``.
-        aux_data : None
-            No static metadata is needed for reconstruction.
-        """
-        return ((self.intensity, self.energy_axis), None)
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        _aux_data: None,
-        children: Tuple[
-            Float[Array, "K E"],
-            Float[Array, " E"],
-        ],
-    ) -> "ArpesSpectrum":
-        """Reconstruct an ``ArpesSpectrum`` from flattened components.
-
-        Inverse of :meth:`tree_flatten`. Called by ``jax.tree_util`` when
-        a traced ``ArpesSpectrum`` needs to be reassembled -- for example
-        at the boundary of a ``jit``-compiled function or after ``vmap``
-        unstacks batched leaves.
-
-        Implementation Logic
-        --------------------
-        1. **Auxiliary data**: ignored (always ``None``) because
-           ``ArpesSpectrum`` carries no static metadata.
-        2. **Reconstruction**: unpacks the children tuple positionally
-           into the ``NamedTuple`` constructor via ``cls(*children)``,
-           restoring ``(intensity, energy_axis)`` in declaration order.
-
-        Parameters
-        ----------
-        _aux_data : None
-            Unused static metadata (always ``None``).
-        children : tuple of jax.Array
-            ``(intensity, energy_axis)`` as returned by
-            :meth:`tree_flatten`.
-
-        Returns
-        -------
-        spectrum : ArpesSpectrum
-            Reconstructed instance with the original array fields.
-        """
-        return cls(*children)
 
 
 @jaxtyped(typechecker=beartype)

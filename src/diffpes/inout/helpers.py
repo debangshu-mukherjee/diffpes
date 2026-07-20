@@ -28,10 +28,15 @@ from diffpes.types import (
     OrbitalProjection,
     SpinOrbitalProjection,
 )
-
-_S_IDX: int = 0
-_P_SLICE: slice = slice(1, 4)
-_D_SLICE: slice = slice(4, 9)
+from diffpes.types.orbital_constants import (
+    _D_ORBITAL_SLICE as _D_SLICE,
+)
+from diffpes.types.orbital_constants import (
+    _P_ORBITAL_SLICE as _P_SLICE,
+)
+from diffpes.types.orbital_constants import (
+    _S_IDX,
+)
 
 
 def select_atoms(

@@ -8,8 +8,6 @@ used internally by diffpes.
 
 Routine Listings
 ----------------
-:func:`make_expanded_simulation_params`
-    Build simulation parameters with auto-derived energy window.
 :func:`simulate_advanced_expanded`
     Run advanced-level ARPES simulation from plain arrays.
 :func:`simulate_basic_expanded`
@@ -45,9 +43,9 @@ from diffpes.types import (
     SimulationParams,
     SpinOrbitalProjection,
     make_band_structure,
+    make_expanded_simulation_params,
     make_orbital_projection,
     make_polarization_config,
-    make_simulation_params,
     make_spin_orbital_projection,
 )
 
@@ -62,78 +60,6 @@ from .spectrum import (
 
 
 @jaxtyped(typechecker=beartype)
-def make_expanded_simulation_params(
-    eigenbands: Float[Array, "K B"],
-    fidelity: int = 25000,
-    sigma: ScalarFloat = 0.04,
-    gamma: ScalarFloat = 0.1,
-    temperature: ScalarFloat = 15.0,
-    photon_energy: ScalarFloat = 11.0,
-    energy_padding: ScalarFloat = 1.0,
-) -> SimulationParams:
-    """Build simulation parameters with auto-derived energy window.
-
-    Constructs a :class:`~diffpes.types.SimulationParams` PyTree whose
-    energy window is derived from the actual band energies rather than
-    from fixed defaults.  The window spans
-    ``[min(eigenbands) - energy_padding, max(eigenbands) + energy_padding]``,
-    ensuring every band falls within the simulated range.
-
-    Implementation Logic
-    --------------------
-    1. **Cast to float64**: ``eigenbands`` is promoted to
-       ``jnp.float64`` via ``jnp.asarray``.
-    2. **Derive energy bounds**: ``energy_min`` and ``energy_max``
-       are computed from the global min/max of the band array plus
-       symmetric padding controlled by ``energy_padding``.
-    3. **Delegate**: Passes all values to
-       :func:`~diffpes.types.make_simulation_params` for final
-       construction and type validation.
-
-    Parameters
-    ----------
-    eigenbands : Float[Array, "K B"]
-        Band eigenvalues in eV, shape ``(n_kpoints, n_bands)``.
-        Used only to derive ``energy_min`` and ``energy_max``.
-    fidelity : int, optional
-        Number of points in the energy axis. Default is 25000.
-    sigma : ScalarFloat, optional
-        Gaussian broadening width in eV. Default is 0.04.
-    gamma : ScalarFloat, optional
-        Lorentzian broadening width in eV. Default is 0.1.
-    temperature : ScalarFloat, optional
-        Electronic temperature in Kelvin. Default is 15.
-    photon_energy : ScalarFloat, optional
-        Incident photon energy in eV. Default is 11.
-    energy_padding : ScalarFloat, optional
-        Symmetric padding around band extrema in eV. Default is 1.
-
-    Returns
-    -------
-    params : SimulationParams
-        Simulation parameters with data-derived energy window.
-
-    See Also
-    --------
-    make_simulation_params : Lower-level factory with explicit
-        energy bounds.
-    """
-    bands_arr: Float[Array, "K B"] = jnp.asarray(eigenbands, dtype=jnp.float64)
-    pad: Float[Array, " "] = jnp.asarray(energy_padding, dtype=jnp.float64)
-    energy_min: Float[Array, " "] = jnp.min(bands_arr) - pad
-    energy_max: Float[Array, " "] = jnp.max(bands_arr) + pad
-    params: SimulationParams = make_simulation_params(
-        energy_min=energy_min,
-        energy_max=energy_max,
-        fidelity=fidelity,
-        sigma=sigma,
-        gamma=gamma,
-        temperature=temperature,
-        photon_energy=photon_energy,
-    )
-    return params
-
-
 @jaxtyped(typechecker=beartype)
 def _build_inputs(
     eigenbands: Float[Array, "K B"],
@@ -1008,7 +934,6 @@ def simulate_expanded(  # noqa: PLR0913
 
 
 __all__: list[str] = [
-    "make_expanded_simulation_params",
     "simulate_advanced_expanded",
     "simulate_basic_expanded",
     "simulate_basicplus_expanded",

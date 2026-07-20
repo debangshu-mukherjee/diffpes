@@ -20,7 +20,7 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, Integer, jaxtyped
 
-_SMALL_ARGUMENT: float = 1.0e-8
+from diffpes.types.constants import _SMALL_ARGUMENT
 
 
 def _odd_double_factorial(order: int) -> float:

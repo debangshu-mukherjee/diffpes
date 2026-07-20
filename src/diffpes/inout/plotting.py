@@ -49,49 +49,12 @@ from diffpes.types import (
     OrbitalProjection,
     SpinOrbitalProjection,
 )
-
-_INTENSITY_NDIM: int = 2
-_ENERGY_AXIS_NDIM: int = 1
-_BAND_NDIM: int = 2
-
-_ORBITAL_INDEX: dict[str, int] = {
-    "s": 0,
-    "py": 1,
-    "pz": 2,
-    "px": 3,
-    "dxy": 4,
-    "dyz": 5,
-    "dz2": 6,
-    "dxz": 7,
-    "dx2y2": 8,
-}
-_PRESET_NAMES: tuple[str, ...] = (
-    "s",
-    "py",
-    "pz",
-    "px",
-    "p",
-    "dxy",
-    "dyz",
-    "dz2",
-    "dxz",
-    "dx2y2",
-    "d",
-    "non_s",
-    "total",
-    "spin_x_up",
-    "spin_x_down",
-    "spin_y_up",
-    "spin_y_down",
-    "spin_z_up",
-    "spin_z_down",
-    "spin_x",
-    "spin_y",
-    "spin_z",
-    "oam_p",
-    "oam_d",
-    "oam_total",
-    "oam_abs_total",
+from diffpes.types.orbital_constants import _ORBITAL_INDEX
+from diffpes.types.vasp_constants import (
+    _BAND_NDIM,
+    _ENERGY_AXIS_NDIM,
+    _INTENSITY_NDIM,
+    _PRESET_NAMES,
 )
 
 

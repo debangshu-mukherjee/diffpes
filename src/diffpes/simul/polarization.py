@@ -33,31 +33,7 @@ from beartype.typing import Tuple
 from jaxtyping import Array, Complex, Float, jaxtyped
 
 from diffpes.types import PolarizationConfig, ScalarFloat
-
-_ORBITAL_DIRS: Float[Array, "9 3"] = jnp.array(
-    [
-        [0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 0.0],
-        [1.0, 1.0, 0.0],
-        [0.0, 1.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 1.0],
-        [1.0, -1.0, 0.0],
-    ],
-    dtype=jnp.float64,
-)
-
-_ORBITAL_NORMS: Float[Array, " 9"] = jnp.where(
-    jnp.linalg.norm(_ORBITAL_DIRS, axis=1) > 0.0,
-    jnp.linalg.norm(_ORBITAL_DIRS, axis=1),
-    1.0,
-)
-
-ORBITAL_DIRS_NORMALIZED: Float[Array, "9 3"] = (
-    _ORBITAL_DIRS / _ORBITAL_NORMS[:, jnp.newaxis]
-)
+from diffpes.types.orbital_constants import ORBITAL_DIRS_NORMALIZED
 
 
 @jaxtyped(typechecker=beartype)

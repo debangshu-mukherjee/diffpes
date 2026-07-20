@@ -21,6 +21,7 @@ Routine Listings
     Tests for simulate_tb_radial.
 """
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
@@ -28,10 +29,10 @@ import pytest
 from diffpes.simul.forward import simulate_tb_radial
 from diffpes.tightb import (
     diagonalize_tb,
-    make_1d_chain_model,
-    make_graphene_model,
 )
 from diffpes.types import (
+    make_1d_chain_model,
+    make_graphene_model,
     make_orbital_basis,
     make_polarization_config,
     make_self_energy_config,
@@ -381,7 +382,7 @@ class TestSimulateTBRadial:
         pol = make_polarization_config(polarization_type="LHP")
 
         def loss(hop):
-            m = model._replace(hopping_params=hop)
+            m = eqx.tree_at(lambda item: item.hopping_params, model, hop)
             diag = diagonalize_tb(m, kpoints)
             spec = simulate_tb_radial(
                 diag,

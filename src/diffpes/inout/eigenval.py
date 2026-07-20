@@ -32,13 +32,14 @@ from diffpes.types import (
     make_band_structure,
     make_spin_band_structure,
 )
-
-_ISPIN_SPIN_POLARIZED: int = 2
-_KPOINT_LINE_VALUES: int = 4
-_BAND_LINE_MIN_VALUES: int = 2
-_BAND_LINE_SPIN_VALUES: int = 3
-_EIG_UP_INDEX: int = 1
-_EIG_DOWN_INDEX: int = 2
+from diffpes.types.vasp_constants import (
+    _BAND_LINE_MIN_VALUES,
+    _BAND_LINE_SPIN_VALUES,
+    _EIG_DOWN_INDEX,
+    _EIG_UP_INDEX,
+    _ISPIN_SPIN_POLARIZED,
+    _KPOINT_LINE_VALUES,
+)
 
 
 def read_eigenval(

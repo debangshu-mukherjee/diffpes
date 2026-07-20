@@ -33,7 +33,6 @@ import chex
 import jax.numpy as jnp
 
 from diffpes.simul import (
-    make_expanded_simulation_params,
     simulate_advanced,
     simulate_advanced_expanded,
     simulate_basic,
@@ -47,6 +46,7 @@ from diffpes.simul import (
 )
 from diffpes.types import (
     make_band_structure,
+    make_expanded_simulation_params,
     make_orbital_projection,
     make_polarization_config,
     make_spin_orbital_projection,

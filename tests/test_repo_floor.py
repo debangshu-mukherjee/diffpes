@@ -5,6 +5,7 @@ installed, diffpes enables JAX 64-bit precision before numerical work, and
 Equinox modules retain their structure through JAX PyTree operations.
 """
 
+import ast
 import hashlib
 import re
 import tomllib
@@ -485,6 +486,105 @@ class TestRegressionReferences(chex.TestCase):
                         array.dtype == np.float64 for array in archive.values()
                     )
                 )
+
+
+class TestRepositoryArchitecture(chex.TestCase):
+    """Enforce centralized Equinox carriers, factories, and constants."""
+
+    @staticmethod
+    def _production_modules() -> tuple[tuple[Path, ast.Module], ...]:
+        """Parse every production Python module in deterministic order."""
+        source_root: Path = Path(__file__).resolve().parents[1] / "src/diffpes"
+        modules: tuple[tuple[Path, ast.Module], ...] = tuple(
+            (path, ast.parse(path.read_text(encoding="utf-8")))
+            for path in sorted(source_root.rglob("*.py"))
+        )
+        return modules
+
+    def test_legacy_pytree_carriers_are_forbidden(self) -> None:
+        """Reject NamedTuple and manual JAX PyTree registration machinery."""
+        violations: list[str] = []
+        for path, module in self._production_modules():
+            for node in ast.walk(module):
+                if isinstance(node, ast.ClassDef):
+                    bases: set[str] = {
+                        ast.unparse(base) for base in node.bases
+                    }
+                    methods: set[str] = {
+                        child.name
+                        for child in node.body
+                        if isinstance(child, ast.FunctionDef)
+                    }
+                    if "NamedTuple" in bases or methods & {
+                        "tree_flatten",
+                        "tree_unflatten",
+                    }:
+                        violations.append(f"{path}:{node.lineno}:{node.name}")
+                if isinstance(node, ast.Call):
+                    called: str = ast.unparse(node.func)
+                    if called.endswith("register_pytree_node_class"):
+                        violations.append(f"{path}:{node.lineno}:{called}")
+        self.assertEqual(violations, [])
+
+    def test_all_production_carriers_are_types_equinox_modules(self) -> None:
+        """Keep every public production carrier under ``diffpes.types``."""
+        violations: list[str] = []
+        for path, module in self._production_modules():
+            in_types: bool = path.parent.name == "types"
+            for node in module.body:
+                if not isinstance(node, ast.ClassDef) or node.name.startswith(
+                    "_"
+                ):
+                    continue
+                bases: set[str] = {ast.unparse(base) for base in node.bases}
+                if not in_types or "eqx.Module" not in bases:
+                    violations.append(f"{path}:{node.lineno}:{node.name}")
+        self.assertEqual(violations, [])
+
+    def test_make_factories_are_types_owned(self) -> None:
+        """Forbid carrier-building ``make_*`` factories outside types."""
+        violations: list[str] = []
+        for path, module in self._production_modules():
+            if path.parent.name == "types":
+                continue
+            for node in module.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name.startswith("make_"):
+                        violations.append(f"{path}:{node.lineno}:{node.name}")
+        self.assertEqual(violations, [])
+
+    def test_declarative_constants_are_types_owned(self) -> None:
+        """Allow only generated/runtime module state outside types."""
+        allowed: dict[str, set[str]] = {
+            "__init__.py": {"__version__"},
+            "inout/hdf5.py": {"_PYTREE_REGISTRY"},
+            "maths/gaunt.py": {"GAUNT_TABLE"},
+            "utils/math.py": {"_W_POLY"},
+        }
+        violations: list[str] = []
+        for path, module in self._production_modules():
+            if path.parent.name == "types":
+                continue
+            relative_path: str = path.as_posix().split("/src/diffpes/", 1)[1]
+            for node in module.body:
+                names: list[str] = []
+                if isinstance(node, ast.Assign):
+                    names = [
+                        target.id
+                        for target in node.targets
+                        if isinstance(target, ast.Name)
+                    ]
+                elif isinstance(node, ast.AnnAssign) and isinstance(
+                    node.target, ast.Name
+                ):
+                    names = [node.target.id]
+                for name in names:
+                    if name == "__all__" or name in allowed.get(
+                        relative_path, set()
+                    ):
+                        continue
+                    violations.append(f"{path}:{node.lineno}:{name}")
+        self.assertEqual(violations, [])
 
 
 class TestStack(chex.TestCase):

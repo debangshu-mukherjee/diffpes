@@ -21,18 +21,17 @@ since JAX cannot trace Python strings. All numeric fields are
 stored as JAX arrays for compatibility with JAX transformations.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Tuple, Union
+from beartype.typing import Union
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, Int, jaxtyped
 
 from .aliases import ScalarNumeric
 
 
-@register_pytree_node_class
-class CrystalGeometry(NamedTuple):
+class CrystalGeometry(eqx.Module):
     """PyTree for crystal geometry from VASP POSCAR.
 
     Encapsulates the full crystal structure information parsed from a
@@ -42,7 +41,6 @@ class CrystalGeometry(NamedTuple):
     fully describe the periodic crystal needed for ARPES simulation.
 
     This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. Numeric fields (lattice,
     reciprocal_lattice, coords, atom_counts) are stored as children
     visible to JAX tracing, while the ``symbols`` tuple of Python
     strings is stored as auxiliary data because JAX cannot trace
@@ -57,16 +55,15 @@ class CrystalGeometry(NamedTuple):
     coords : Float[Array, "N 3"]
         Fractional atomic coordinates.
     symbols : tuple[str, ...]
-        Element symbols for each species.
+        Element symbols for each species. **Static** metadata; changing
+        them triggers retracing.
     atom_counts : Int[Array, " S"]
         Number of atoms per species.
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    The ``symbols`` field is a tuple of Python strings and therefore
-    must be stored as PyTree auxiliary data (not children). JAX treats
-    auxiliary data as compile-time constants: changing ``symbols``
+    The ``symbols`` field is a tuple of Python strings declared with
+    ``eqx.field(static=True)`` rather than as a traced leaf. Changing it
     triggers recompilation of any ``jit``-compiled function that
     receives this PyTree.
 
@@ -79,106 +76,8 @@ class CrystalGeometry(NamedTuple):
     lattice: Float[Array, "3 3"]
     reciprocal_lattice: Float[Array, "3 3"]
     coords: Float[Array, "N 3"]
-    symbols: tuple[str, ...]
+    symbols: tuple[str, ...] = eqx.field(static=True)
     atom_counts: Int[Array, " S"]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Int[Array, " S"],
-        ],
-        tuple[str, ...],
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For CrystalGeometry,
-        the four numeric fields are children and the ``symbols`` tuple
-        of strings is auxiliary data.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(lattice, reciprocal_lattice, coords, atom_counts)``
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``symbols`` -- a tuple of Python strings. JAX treats this
-           as a compile-time constant; any change triggers JIT
-           recompilation.
-
-        Returns
-        -------
-        children : tuple of Array
-            Tuple of ``(lattice, reciprocal_lattice, coords,
-            atom_counts)`` JAX arrays.
-        aux_data : tuple[str, ...]
-            Element symbol strings, stored outside JAX tracing.
-        """
-        return (
-            (
-                self.lattice,
-                self.reciprocal_lattice,
-                self.coords,
-                self.atom_counts,
-            ),
-            self.symbols,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: tuple[str, ...],
-        children: Tuple[
-            Float[Array, "3 3"],
-            Float[Array, "3 3"],
-            Float[Array, "N 3"],
-            Int[Array, " S"],
-        ],
-    ) -> "CrystalGeometry":
-        """Reconstruct a CrystalGeometry from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into four JAX arrays:
-           ``(lattice, reciprocal_lattice, coords, atom_counts)``.
-        2. Receive ``aux_data`` as the ``symbols`` tuple of strings.
-        3. Pass all five fields to the constructor, re-interleaving
-           ``symbols`` from ``aux_data`` into its correct position
-           between ``coords`` and ``atom_counts``.
-
-        Parameters
-        ----------
-        aux_data : tuple[str, ...]
-            Element symbol strings recovered from auxiliary data.
-        children : tuple of Array
-            Tuple of ``(lattice, reciprocal_lattice, coords,
-            atom_counts)`` JAX arrays.
-
-        Returns
-        -------
-        geometry : CrystalGeometry
-            Reconstructed instance with identical data.
-        """
-        lattice: Float[Array, "3 3"]
-        reciprocal_lattice: Float[Array, "3 3"]
-        coords: Float[Array, "N 3"]
-        atom_counts: Int[Array, " S"]
-        lattice, reciprocal_lattice, coords, atom_counts = children
-        geometry: CrystalGeometry = cls(
-            lattice=lattice,
-            reciprocal_lattice=reciprocal_lattice,
-            coords=coords,
-            symbols=aux_data,
-            atom_counts=atom_counts,
-        )
-        return geometry
 
 
 def _compute_reciprocal_lattice(
@@ -260,7 +159,7 @@ def make_crystal_geometry(
        ``_compute_reciprocal_lattice(lattice_arr)``. This derives
        ``b_i = 2 pi (a_j x a_k) / V`` from the validated
        real-space lattice.
-    5. **Construct** the ``CrystalGeometry`` NamedTuple from all
+    5. **Construct** the ``CrystalGeometry`` Equinox module from all
        five fields (including the computed reciprocal lattice) and
        return it.
 

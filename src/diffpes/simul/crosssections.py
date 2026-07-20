@@ -26,13 +26,18 @@ from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
 from diffpes.types import ScalarFloat
-
-_ENERGIES: Float[Array, " 3"] = jnp.array(
-    [20.0, 40.0, 60.0], dtype=jnp.float64
+from diffpes.types.tables import (
+    _CROSS_SECTION_ENERGIES as _ENERGIES,
 )
-_SIGMA_S: Float[Array, " 3"] = jnp.array([0.1, 0.08, 0.06], dtype=jnp.float64)
-_SIGMA_P: Float[Array, " 3"] = jnp.array([0.6, 0.9, 1.1], dtype=jnp.float64)
-_SIGMA_D: Float[Array, " 3"] = jnp.array([2.0, 1.5, 1.2], dtype=jnp.float64)
+from diffpes.types.tables import (
+    _CROSS_SECTION_SIGMA_D as _SIGMA_D,
+)
+from diffpes.types.tables import (
+    _CROSS_SECTION_SIGMA_P as _SIGMA_P,
+)
+from diffpes.types.tables import (
+    _CROSS_SECTION_SIGMA_S as _SIGMA_S,
+)
 
 
 @jaxtyped(typechecker=beartype)

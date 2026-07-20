@@ -25,6 +25,7 @@ Routine Listings
 """
 
 import chex
+import equinox as eqx
 import jax.numpy as jnp
 import matplotlib
 import pytest
@@ -130,9 +131,10 @@ class TestPlotArpesSpectrum(chex.TestCase):
         must have shape (K, E). This validates the dimension check
         inside the plotting pipeline.
         """
-        spectrum = ArpesSpectrum(
-            intensity=jnp.linspace(0.0, 1.0, 10),
-            energy_axis=jnp.linspace(-1.0, 1.0, 10),
+        spectrum: ArpesSpectrum = eqx.tree_at(
+            lambda candidate: candidate.intensity,
+            _make_spectrum(nk=5, ne=10),
+            jnp.linspace(0.0, 1.0, 10),
         )
         with pytest.raises(
             ValueError, match="Expected spectrum.intensity to have shape"
@@ -146,9 +148,10 @@ class TestPlotArpesSpectrum(chex.TestCase):
         plot_arpes_spectrum. Expects a ValueError whose message
         indicates that spectrum.energy_axis must have shape (E,).
         """
-        spectrum = ArpesSpectrum(
-            intensity=jnp.zeros((5, 10)),
-            energy_axis=jnp.zeros((10, 2)),
+        spectrum: ArpesSpectrum = eqx.tree_at(
+            lambda candidate: candidate.energy_axis,
+            _make_spectrum(nk=5, ne=10),
+            jnp.zeros((10, 2)),
         )
         with pytest.raises(
             ValueError, match="Expected spectrum.energy_axis to have shape"
@@ -162,9 +165,10 @@ class TestPlotArpesSpectrum(chex.TestCase):
         intensity.shape[1] != energy_axis.shape[0]. Expects a ValueError
         with a message about incompatible shapes.
         """
-        spectrum = ArpesSpectrum(
-            intensity=jnp.zeros((5, 10)),
-            energy_axis=jnp.linspace(-1.0, 1.0, 7),
+        spectrum: ArpesSpectrum = eqx.tree_at(
+            lambda candidate: candidate.energy_axis,
+            _make_spectrum(nk=5, ne=10),
+            jnp.linspace(-1.0, 1.0, 7),
         )
         with pytest.raises(ValueError, match="Incompatible shapes"):
             plot_arpes_spectrum(spectrum, colorbar=False)
@@ -402,14 +406,18 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
 
     def _make_bands_1d(self, nk=4, nb=2):
         """Build BandStructure with 1D eigenvalues (bypassing factory)."""
-        return BandStructure(
-            eigenvalues=jnp.zeros(
-                nk * nb, dtype=jnp.float64
-            ),  # 1D -> wrong ndim
+        valid_bands: BandStructure = make_band_structure(
+            eigenvalues=jnp.zeros((nk, nb), dtype=jnp.float64),
             kpoints=jnp.zeros((nk, 3), dtype=jnp.float64),
             kpoint_weights=jnp.zeros(nk, dtype=jnp.float64),
             fermi_energy=jnp.float64(0.0),
         )
+        malformed_bands: BandStructure = eqx.tree_at(
+            lambda candidate: candidate.eigenvalues,
+            valid_bands,
+            jnp.zeros(nk * nb, dtype=jnp.float64),
+        )
+        return malformed_bands
 
     def _make_orb_with_spin_and_oam(self, nk=4, nb=2, na=1):
         """Build OrbitalProjection with spin and OAM attached."""

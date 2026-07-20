@@ -25,7 +25,7 @@ from pathlib import Path
 
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import Literal, NamedTuple, Optional, Union, cast
+from beartype.typing import Literal, Optional, cast
 from jaxtyping import Array, Float
 
 from diffpes.inout.doscar import read_doscar
@@ -36,14 +36,15 @@ from diffpes.inout.procar import read_procar
 from diffpes.types import (
     ArpesSpectrum,
     BandStructure,
-    DensityOfStates,
-    FullDensityOfStates,
+    DosType,
     KPathInfo,
-    OrbitalProjection,
+    ProjectionType,
     SpinOrbitalProjection,
+    WorkflowContext,
     make_arpes_spectrum,
     make_orbital_projection,
     make_spin_orbital_projection,
+    make_workflow_context,
 )
 from diffpes.types.aliases import ScalarFloat
 from diffpes.utils import zscore_normalize
@@ -51,30 +52,6 @@ from diffpes.utils import zscore_normalize
 from .expanded import simulate_expanded
 from .oam import compute_oam
 from .resolution import apply_momentum_broadening
-
-ProjectionType = Union[OrbitalProjection, SpinOrbitalProjection]
-DosType = Union[DensityOfStates, FullDensityOfStates]
-
-
-class WorkflowContext(NamedTuple):
-    """Container for parsed VASP inputs used by workflow helpers.
-
-    Attributes
-    ----------
-    bands : BandStructure
-        Band eigenvalues and k-point coordinates from EIGENVAL.
-    orb_proj : OrbitalProjection or SpinOrbitalProjection
-        Orbital projections from PROCAR, optionally including spin.
-    kpath : Optional[KPathInfo]
-        Parsed KPOINTS metadata when available.
-    dos : Optional[DensityOfStates or FullDensityOfStates]
-        Parsed DOSCAR data when available.
-    """
-
-    bands: BandStructure
-    orb_proj: ProjectionType
-    kpath: Optional[KPathInfo]
-    dos: Optional[DosType]
 
 
 @beartype
@@ -179,7 +156,7 @@ def load_vasp_context(
     if check_dimensions:
         check_consistency(bands, orb_proj, kpath)
 
-    context: WorkflowContext = WorkflowContext(
+    context: WorkflowContext = make_workflow_context(
         bands=bands,
         orb_proj=orb_proj,
         kpath=kpath,
@@ -423,5 +400,4 @@ __all__: list[str] = [
     "prepare_projection",
     "run_vasp_workflow",
     "simulate_context",
-    "WorkflowContext",
 ]

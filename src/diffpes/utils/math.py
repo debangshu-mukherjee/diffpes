@@ -27,7 +27,7 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
-_N_TAYLOR: int = 64
+from diffpes.types.constants import _N_TAYLOR
 
 
 def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:

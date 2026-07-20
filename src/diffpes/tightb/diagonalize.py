@@ -31,16 +31,10 @@ from diffpes.types import (
     TBModel,
     make_diagonalized_bands,
 )
+from diffpes.types.constants import _NORM_EPS
+from diffpes.types.vasp_constants import _PHASE_LOSS_MESSAGE
 
 from .hamiltonian import build_hamiltonian_k
-
-_NORM_EPS: float = 1e-12
-
-_PHASE_LOSS_MESSAGE: str = (
-    "vasp_to_diagonalized uses sqrt(|c|^2) magnitudes from PROCAR and "
-    "cannot recover complex eigenvector phases. Matrix elements that "
-    "depend on phase interference are approximate."
-)
 
 
 @jaxtyped(typechecker=beartype)

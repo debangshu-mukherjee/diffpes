@@ -14,6 +14,8 @@ Routine Listings
     PyTree for ARPES simulation parameters.
 :func:`make_polarization_config`
     Create a validated PolarizationConfig instance.
+:func:`make_expanded_simulation_params`
+    Build simulation parameters with auto-derived energy window.
 :func:`make_simulation_params`
     Create a validated SimulationParams instance.
 
@@ -24,18 +26,16 @@ Polarization types follow standard optics conventions:
 ``"LAP"`` (linear arbitrary), ``"unpolarized"``.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Tuple
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarFloat, ScalarNumeric
 
 
-@register_pytree_node_class
-class SimulationParams(NamedTuple):
+class SimulationParams(eqx.Module):
     """PyTree for ARPES simulation parameters.
 
     Collects all scalar physical parameters that control an ARPES
@@ -44,8 +44,8 @@ class SimulationParams(NamedTuple):
     energy. These parameters are consumed by the spectral-function
     convolution and Fermi-Dirac weighting routines.
 
-    This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. All float-valued fields are
+    This class is an immutable :class:`equinox.Module` PyTree. All
+    float-valued fields are
     stored as JAX array children (visible to autodiff), while the
     ``fidelity`` field is a plain Python ``int`` stored as auxiliary
     data because it controls array shapes and must be known at
@@ -57,8 +57,6 @@ class SimulationParams(NamedTuple):
         Lower bound of energy window in eV.
     energy_max : Float[Array, " "]
         Upper bound of energy window in eV.
-    fidelity : int
-        Number of points along the energy axis.
     sigma : Float[Array, " "]
         Gaussian instrumental broadening width in eV.
     gamma : Float[Array, " "]
@@ -67,10 +65,12 @@ class SimulationParams(NamedTuple):
         Sample temperature in Kelvin.
     photon_energy : Float[Array, " "]
         Incident photon energy in eV.
+    fidelity : int
+        Number of points along the energy axis.
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Equinox derives the PyTree structure from the annotated fields.
     The ``fidelity`` field is a Python ``int`` (not a JAX array) and
     is therefore stored as auxiliary data rather than as a child. JAX
     treats auxiliary data as a compile-time constant: changing
@@ -87,129 +87,14 @@ class SimulationParams(NamedTuple):
 
     energy_min: Float[Array, " "]
     energy_max: Float[Array, " "]
-    fidelity: int
     sigma: Float[Array, " "]
     gamma: Float[Array, " "]
     temperature: Float[Array, " "]
     photon_energy: Float[Array, " "]
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-        ],
-        int,
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For SimulationParams,
-        the six float-valued scalar fields are children and the
-        ``fidelity`` Python int is auxiliary data.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(energy_min, energy_max, sigma, gamma, temperature,
-           photon_energy)`` -- six 0-D float64 arrays.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``fidelity`` -- a Python ``int`` that controls energy-axis
-           length. Stored as aux_data because JAX cannot trace Python
-           ints and because shape-determining values must be static.
-
-        Returns
-        -------
-        children : tuple of Array
-            Tuple of six 0-D float64 JAX arrays.
-        aux_data : int
-            The ``fidelity`` value, stored outside JAX tracing.
-        """
-        return (
-            (
-                self.energy_min,
-                self.energy_max,
-                self.sigma,
-                self.gamma,
-                self.temperature,
-                self.photon_energy,
-            ),
-            self.fidelity,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: int,
-        children: Tuple[
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-        ],
-    ) -> "SimulationParams":
-        """Reconstruct a SimulationParams from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into six 0-D float64 JAX arrays:
-           ``(energy_min, energy_max, sigma, gamma, temperature,
-           photon_energy)``.
-        2. Receive ``aux_data`` as the ``fidelity`` Python int.
-        3. Pass all seven fields to the constructor, restoring
-           ``fidelity`` from ``aux_data`` into its correct position.
-
-        Parameters
-        ----------
-        aux_data : int
-            The ``fidelity`` value recovered from auxiliary data.
-        children : tuple of Array
-            Tuple of six 0-D float64 JAX arrays.
-
-        Returns
-        -------
-        params : SimulationParams
-            Reconstructed instance with identical data.
-        """
-        energy_min: Float[Array, " "]
-        energy_max: Float[Array, " "]
-        sigma: Float[Array, " "]
-        gamma: Float[Array, " "]
-        temperature: Float[Array, " "]
-        photon_energy: Float[Array, " "]
-        (
-            energy_min,
-            energy_max,
-            sigma,
-            gamma,
-            temperature,
-            photon_energy,
-        ) = children
-        params: SimulationParams = cls(
-            energy_min=energy_min,
-            energy_max=energy_max,
-            fidelity=aux_data,
-            sigma=sigma,
-            gamma=gamma,
-            temperature=temperature,
-            photon_energy=photon_energy,
-        )
-        return params
+    fidelity: int = eqx.field(static=True)
 
 
-@register_pytree_node_class
-class PolarizationConfig(NamedTuple):
+class PolarizationConfig(eqx.Module):
     """PyTree for photon polarization geometry.
 
     Describes the photon polarization state and incidence geometry
@@ -218,8 +103,8 @@ class PolarizationConfig(NamedTuple):
     ``polarization_type`` selects among standard optics conventions
     (s-pol, p-pol, circular, arbitrary linear, or unpolarized).
 
-    This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. The three float-valued angular
+    This class is an immutable :class:`equinox.Module` PyTree. The three
+    float-valued angular
     fields are stored as JAX array children (visible to autodiff),
     while ``polarization_type`` is a Python string stored as
     auxiliary data because JAX cannot trace strings.
@@ -237,7 +122,7 @@ class PolarizationConfig(NamedTuple):
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
+    Equinox derives the PyTree structure from the annotated fields.
     The ``polarization_type`` field is a Python string and is
     therefore stored as auxiliary data rather than as a child. JAX
     treats auxiliary data as a compile-time constant: changing
@@ -255,98 +140,7 @@ class PolarizationConfig(NamedTuple):
     theta: Float[Array, " "]
     phi: Float[Array, " "]
     polarization_angle: Float[Array, " "]
-    polarization_type: str
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-        ],
-        str,
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For PolarizationConfig,
-        the three angular fields are children and the
-        ``polarization_type`` string is auxiliary data.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in autodiff):
-           ``(theta, phi, polarization_angle)`` -- three 0-D float64
-           arrays.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``polarization_type`` -- a Python string selecting the
-           polarization mode. Stored as aux_data because JAX cannot
-           trace strings and because the polarization type controls
-           code-path selection at compile time.
-
-        Returns
-        -------
-        children : tuple of Array
-            Tuple of three 0-D float64 JAX arrays.
-        aux_data : str
-            The ``polarization_type`` string, stored outside JAX
-            tracing.
-        """
-        return (
-            (self.theta, self.phi, self.polarization_angle),
-            self.polarization_type,
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: str,
-        children: Tuple[
-            Float[Array, " "],
-            Float[Array, " "],
-            Float[Array, " "],
-        ],
-    ) -> "PolarizationConfig":
-        """Reconstruct a PolarizationConfig from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into three 0-D float64 JAX arrays:
-           ``(theta, phi, polarization_angle)``.
-        2. Receive ``aux_data`` as the ``polarization_type`` string.
-        3. Pass all four fields to the constructor, restoring
-           ``polarization_type`` from ``aux_data`` into its correct
-           position.
-
-        Parameters
-        ----------
-        aux_data : str
-            The ``polarization_type`` string recovered from auxiliary
-            data.
-        children : tuple of Array
-            Tuple of three 0-D float64 JAX arrays.
-
-        Returns
-        -------
-        config : PolarizationConfig
-            Reconstructed instance with identical data.
-        """
-        theta: Float[Array, " "]
-        phi: Float[Array, " "]
-        polarization_angle: Float[Array, " "]
-        theta, phi, polarization_angle = children
-        config: PolarizationConfig = cls(
-            theta=theta,
-            phi=phi,
-            polarization_angle=polarization_angle,
-            polarization_type=aux_data,
-        )
-        return config
+    polarization_type: str = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -383,7 +177,7 @@ def make_simulation_params(
        array shapes.
     4. **Cast sigma, gamma, temperature, photon_energy** each to
        0-D ``jnp.float64`` arrays via ``jnp.asarray``.
-    5. **Construct** the ``SimulationParams`` NamedTuple from all
+    5. **Construct** the ``SimulationParams`` Equinox module from all
        seven fields and return it.
 
     Parameters
@@ -515,7 +309,7 @@ def make_polarization_config(
     4. **Keep polarization_type** as a Python string (not cast).
        It is stored as auxiliary data in the PyTree because it
        selects code branches at compile time.
-    5. **Construct** the ``PolarizationConfig`` NamedTuple from all
+    5. **Construct** the ``PolarizationConfig`` Equinox module from all
        four fields and return it.
 
     Parameters
@@ -588,9 +382,82 @@ def make_polarization_config(
     return config
 
 
+def make_expanded_simulation_params(
+    eigenbands: Float[Array, "K B"],
+    fidelity: int = 25000,
+    sigma: ScalarFloat = 0.04,
+    gamma: ScalarFloat = 0.1,
+    temperature: ScalarFloat = 15.0,
+    photon_energy: ScalarFloat = 11.0,
+    energy_padding: ScalarFloat = 1.0,
+) -> SimulationParams:
+    """Build simulation parameters with auto-derived energy window.
+
+    Constructs a :class:`~diffpes.types.SimulationParams` PyTree whose
+    energy window is derived from the actual band energies rather than
+    from fixed defaults.  The window spans
+    ``[min(eigenbands) - energy_padding, max(eigenbands) + energy_padding]``,
+    ensuring every band falls within the simulated range.
+
+    Implementation Logic
+    --------------------
+    1. **Cast to float64**: ``eigenbands`` is promoted to
+       ``jnp.float64`` via ``jnp.asarray``.
+    2. **Derive energy bounds**: ``energy_min`` and ``energy_max``
+       are computed from the global min/max of the band array plus
+       symmetric padding controlled by ``energy_padding``.
+    3. **Delegate**: Passes all values to
+       :func:`~diffpes.types.make_simulation_params` for final
+       construction and type validation.
+
+    Parameters
+    ----------
+    eigenbands : Float[Array, "K B"]
+        Band eigenvalues in eV, shape ``(n_kpoints, n_bands)``.
+        Used only to derive ``energy_min`` and ``energy_max``.
+    fidelity : int, optional
+        Number of points in the energy axis. Default is 25000.
+    sigma : ScalarFloat, optional
+        Gaussian broadening width in eV. Default is 0.04.
+    gamma : ScalarFloat, optional
+        Lorentzian broadening width in eV. Default is 0.1.
+    temperature : ScalarFloat, optional
+        Electronic temperature in Kelvin. Default is 15.
+    photon_energy : ScalarFloat, optional
+        Incident photon energy in eV. Default is 11.
+    energy_padding : ScalarFloat, optional
+        Symmetric padding around band extrema in eV. Default is 1.
+
+    Returns
+    -------
+    params : SimulationParams
+        Simulation parameters with data-derived energy window.
+
+    See Also
+    --------
+    make_simulation_params : Lower-level factory with explicit
+        energy bounds.
+    """
+    bands_arr: Float[Array, "K B"] = jnp.asarray(eigenbands, dtype=jnp.float64)
+    pad: Float[Array, " "] = jnp.asarray(energy_padding, dtype=jnp.float64)
+    energy_min: Float[Array, " "] = jnp.min(bands_arr) - pad
+    energy_max: Float[Array, " "] = jnp.max(bands_arr) + pad
+    params: SimulationParams = make_simulation_params(
+        energy_min=energy_min,
+        energy_max=energy_max,
+        fidelity=fidelity,
+        sigma=sigma,
+        gamma=gamma,
+        temperature=temperature,
+        photon_energy=photon_energy,
+    )
+    return params
+
+
 __all__: list[str] = [
     "PolarizationConfig",
     "SimulationParams",
+    "make_expanded_simulation_params",
     "make_polarization_config",
     "make_simulation_params",
 ]

@@ -15,16 +15,15 @@ Routine Listings
     Create a validated KPathInfo instance.
 """
 
+import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import NamedTuple, Optional, Tuple, Union
+from beartype.typing import Optional, Union
 from jax import lax
-from jax.tree_util import register_pytree_node_class
 from jaxtyping import Array, Float, Int, jaxtyped
 
 
-@register_pytree_node_class
-class KPathInfo(NamedTuple):
+class KPathInfo(eqx.Module):
     """PyTree for k-point path metadata.
 
     Extended Summary
@@ -36,7 +35,6 @@ class KPathInfo(NamedTuple):
     line-mode segment endpoints.
 
     This class is registered as a JAX PyTree via
-    ``@register_pytree_node_class``. Array-valued metadata is stored
     as children. String metadata is stored as auxiliary data because
     JAX cannot trace Python strings.
 
@@ -64,22 +62,20 @@ class KPathInfo(NamedTuple):
     shift : Optional[Float[Array, " 3"]]
         Automatic-mode grid shift (None otherwise).
     mode : str
-        KPOINTS file mode (Automatic, Line-mode, Explicit).
+        KPOINTS file mode (Automatic, Line-mode, Explicit). **Static**.
     labels : tuple[str, ...]
-        Symmetry point labels (e.g., Gamma, M, K).
+        Symmetry point labels (e.g., Gamma, M, K). **Static**.
     comment : str
-        Raw comment from KPOINTS line 1.
+        Raw comment from KPOINTS line 1. **Static**.
     coordinate_mode : str
         Coordinate/scheme line metadata:
         line/explicit -> Reciprocal/Cartesian line,
-        automatic -> scheme line (e.g., Monkhorst-Pack).
+        automatic -> scheme line (e.g., Monkhorst-Pack). **Static**.
 
     Notes
     -----
-    Registered as a JAX PyTree with ``@register_pytree_node_class``.
-    The ``mode`` string and ``labels`` tuple of strings are stored as
-    auxiliary data (not children). JAX treats auxiliary data as
-    compile-time constants: changing either value triggers
+    String metadata is declared with ``eqx.field(static=True)`` rather
+    than as traced leaves. Changing any static value triggers
     recompilation of any ``jit``-compiled function that receives
     this PyTree.
 
@@ -97,146 +93,10 @@ class KPathInfo(NamedTuple):
     weights: Optional[Float[Array, " K"]]
     grid: Optional[Int[Array, " 3"]]
     shift: Optional[Float[Array, " 3"]]
-    mode: str
-    labels: tuple[str, ...]
-    comment: str
-    coordinate_mode: str
-
-    def tree_flatten(
-        self,
-    ) -> Tuple[
-        Tuple[
-            Int[Array, " "],
-            Int[Array, " L"],
-            Int[Array, " "],
-            Int[Array, " "],
-            Optional[Float[Array, "K 3"]],
-            Optional[Float[Array, " K"]],
-            Optional[Int[Array, " 3"]],
-            Optional[Float[Array, " 3"]],
-        ],
-        Tuple[str, tuple[str, ...], str, str],
-    ]:
-        """Flatten into JAX children and auxiliary data.
-
-        Separates the PyTree into children (JAX-traced arrays) and
-        auxiliary data (static Python values). For KPathInfo, all
-        array-valued metadata is stored in children and string metadata
-        in aux_data.
-
-        Implementation Logic
-        --------------------
-        1. **Children** (JAX arrays, participate in tracing):
-           ``(num_kpoints, label_indices, points_per_segment,
-           segments, kpoints, weights, grid, shift)``.
-        2. **Auxiliary data** (static, not traced by JAX):
-           ``(mode, labels, comment, coordinate_mode)``.
-           JAX treats these as compile-time constants; any change
-           triggers JIT recompilation.
-
-        Returns
-        -------
-        children : tuple of Array
-            Tuple of array-valued metadata fields.
-        aux_data : tuple[str, tuple[str, ...], str, str]
-            String metadata stored outside JAX tracing.
-        """
-        return (
-            (
-                self.num_kpoints,
-                self.label_indices,
-                self.points_per_segment,
-                self.segments,
-                self.kpoints,
-                self.weights,
-                self.grid,
-                self.shift,
-            ),
-            (
-                self.mode,
-                self.labels,
-                self.comment,
-                self.coordinate_mode,
-            ),
-        )
-
-    @classmethod
-    def tree_unflatten(
-        cls,
-        aux_data: Tuple[str, tuple[str, ...], str, str],
-        children: Tuple[
-            Int[Array, " "],
-            Int[Array, " L"],
-            Int[Array, " "],
-            Int[Array, " "],
-            Optional[Float[Array, "K 3"]],
-            Optional[Float[Array, " K"]],
-            Optional[Int[Array, " 3"]],
-            Optional[Float[Array, " 3"]],
-        ],
-    ) -> "KPathInfo":
-        """Reconstruct a KPathInfo from flattened components.
-
-        Inverse of :meth:`tree_flatten`. JAX calls this method
-        automatically when unflattening a PyTree after a
-        transformation (e.g., inside ``jax.jit`` or ``jax.grad``).
-
-        Implementation Logic
-        --------------------
-        1. Unpack ``children`` into the eight array-valued fields.
-        2. Unpack ``aux_data`` into the four string fields.
-        3. Pass all fields to the constructor.
-
-        Parameters
-        ----------
-        aux_data : tuple[str, tuple[str, ...], str, str]
-            String metadata recovered from auxiliary data.
-        children : tuple of Array
-            Array-valued metadata tuple.
-
-        Returns
-        -------
-        kpath : KPathInfo
-            Reconstructed instance with identical data.
-        """
-        num_kpoints: Int[Array, " "]
-        label_indices: Int[Array, " L"]
-        points_per_segment: Int[Array, " "]
-        segments: Int[Array, " "]
-        kpoints: Optional[Float[Array, "K 3"]]
-        weights: Optional[Float[Array, " K"]]
-        grid: Optional[Int[Array, " 3"]]
-        shift: Optional[Float[Array, " 3"]]
-        (
-            num_kpoints,
-            label_indices,
-            points_per_segment,
-            segments,
-            kpoints,
-            weights,
-            grid,
-            shift,
-        ) = children
-        mode: str
-        labels: tuple[str, ...]
-        comment: str
-        coordinate_mode: str
-        mode, labels, comment, coordinate_mode = aux_data
-        kpath: KPathInfo = cls(
-            num_kpoints=num_kpoints,
-            label_indices=label_indices,
-            points_per_segment=points_per_segment,
-            segments=segments,
-            kpoints=kpoints,
-            weights=weights,
-            grid=grid,
-            shift=shift,
-            mode=mode,
-            labels=labels,
-            comment=comment,
-            coordinate_mode=coordinate_mode,
-        )
-        return kpath
+    mode: str = eqx.field(static=True)
+    labels: tuple[str, ...] = eqx.field(static=True)
+    comment: str = eqx.field(static=True)
+    coordinate_mode: str = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -288,7 +148,7 @@ def make_kpath_info(  # noqa: PLR0913
     4. **Pass string metadata** (``mode``, ``labels``, ``comment``,
        ``coordinate_mode``) through unchanged -- stored as auxiliary
        data in the PyTree.
-    5. **Construct** the ``KPathInfo`` NamedTuple from all validated
+    5. **Construct** the ``KPathInfo`` Equinox module from all validated
        fields and return it.
 
     Parameters

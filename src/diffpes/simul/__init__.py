@@ -52,8 +52,6 @@ Routine Listings
     Compute heuristic orbital weights based on photon energy.
 :func:`load_vasp_context`
     Load a simulation-ready context from VASP output files.
-:func:`make_expanded_simulation_params`
-    Build simulation parameters with auto-derived energy window.
 :obj:`ORBITAL_DIRS_NORMALIZED`
     Unit-normalized orbital direction vectors in VASP ordering.
 :func:`photon_wavevector`
@@ -94,8 +92,6 @@ Routine Listings
     Run the end-to-end differentiable ARPES forward model.
 :func:`voigt`
     Compute normalized Voigt profile via pseudo-Voigt approximation.
-:class:`WorkflowContext`
-    Container for parsed VASP inputs used by workflow helpers.
 :func:`yeh_lindau_weights`
     Compute Yeh-Lindau cross-section weights per orbital.
 
@@ -108,7 +104,6 @@ for vectorized evaluation across k-points and bands.
 from .broadening import fermi_dirac, gaussian, voigt
 from .crosssections import heuristic_weights, yeh_lindau_weights
 from .expanded import (
-    make_expanded_simulation_params,
     simulate_advanced_expanded,
     simulate_basic_expanded,
     simulate_basicplus_expanded,
@@ -137,7 +132,6 @@ from .spectrum import (
     simulate_soc,
 )
 from .workflow import (
-    WorkflowContext,
     load_vasp_context,
     prepare_projection,
     run_vasp_workflow,
@@ -155,7 +149,6 @@ __all__: list[str] = [
     "gaussian",
     "heuristic_weights",
     "load_vasp_context",
-    "make_expanded_simulation_params",
     "ORBITAL_DIRS_NORMALIZED",
     "photon_wavevector",
     "prepare_projection",
@@ -176,6 +169,5 @@ __all__: list[str] = [
     "simulate_soc_expanded",
     "simulate_tb_radial",
     "voigt",
-    "WorkflowContext",
     "yeh_lindau_weights",
 ]
