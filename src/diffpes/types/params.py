@@ -29,7 +29,6 @@ Polarization types follow standard optics conventions:
 import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from jax import lax
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarFloat, ScalarNumeric
@@ -214,56 +213,32 @@ def make_simulation_params(
     pe_arr: Float[Array, " "] = jnp.asarray(photon_energy, dtype=jnp.float64)
 
     def validate_and_create() -> SimulationParams:
-        def check_energy_window() -> Float[Array, " "]:
-            return lax.cond(
-                emin_arr < emax_arr,
-                lambda: emin_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: emin_arr, lambda: emin_arr)
-                ),
-            )
-
-        def check_sigma_positive() -> Float[Array, " "]:
-            return lax.cond(
-                sigma_arr > 0.0,
-                lambda: sigma_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: sigma_arr, lambda: sigma_arr)
-                ),
-            )
-
-        def check_gamma_positive() -> Float[Array, " "]:
-            return lax.cond(
-                gamma_arr > 0.0,
-                lambda: gamma_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: gamma_arr, lambda: gamma_arr)
-                ),
-            )
-
-        def check_temperature_positive() -> Float[Array, " "]:
-            return lax.cond(
-                temp_arr > 0.0,
-                lambda: temp_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: temp_arr, lambda: temp_arr)
-                ),
-            )
-
-        def check_photon_energy_positive() -> Float[Array, " "]:
-            return lax.cond(
-                pe_arr > 0.0,
-                lambda: pe_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: pe_arr, lambda: pe_arr)
-                ),
-            )
-
-        check_energy_window()
-        check_sigma_positive()
-        check_gamma_positive()
-        check_temperature_positive()
-        check_photon_energy_positive()
+        nonlocal emin_arr, gamma_arr, pe_arr, sigma_arr, temp_arr
+        emin_arr = eqx.error_if(
+            emin_arr,
+            ~(emin_arr < emax_arr),
+            "make_simulation_params: energy window",
+        )
+        sigma_arr = eqx.error_if(
+            sigma_arr,
+            ~(sigma_arr > 0.0),
+            "make_simulation_params: sigma positive",
+        )
+        gamma_arr = eqx.error_if(
+            gamma_arr,
+            ~(gamma_arr > 0.0),
+            "make_simulation_params: gamma positive",
+        )
+        temp_arr = eqx.error_if(
+            temp_arr,
+            ~(temp_arr > 0.0),
+            "make_simulation_params: temperature positive",
+        )
+        pe_arr = eqx.error_if(
+            pe_arr,
+            ~(pe_arr > 0.0),
+            "make_simulation_params: photon energy positive",
+        )
         return SimulationParams(
             energy_min=emin_arr,
             energy_max=emax_arr,
@@ -341,36 +316,22 @@ def make_polarization_config(
     )
 
     def validate_and_create() -> PolarizationConfig:
-        def check_theta_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(theta_arr),
-                lambda: theta_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: theta_arr, lambda: theta_arr)
-                ),
-            )
-
-        def check_phi_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(phi_arr),
-                lambda: phi_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: phi_arr, lambda: phi_arr)
-                ),
-            )
-
-        def check_polarization_angle_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(pol_arr),
-                lambda: pol_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: pol_arr, lambda: pol_arr)
-                ),
-            )
-
-        check_theta_finite()
-        check_phi_finite()
-        check_polarization_angle_finite()
+        nonlocal phi_arr, pol_arr, theta_arr
+        theta_arr = eqx.error_if(
+            theta_arr,
+            ~(jnp.isfinite(theta_arr)),
+            "make_polarization_config: theta finite",
+        )
+        phi_arr = eqx.error_if(
+            phi_arr,
+            ~(jnp.isfinite(phi_arr)),
+            "make_polarization_config: phi finite",
+        )
+        pol_arr = eqx.error_if(
+            pol_arr,
+            ~(jnp.isfinite(pol_arr)),
+            "make_polarization_config: polarization angle finite",
+        )
         return PolarizationConfig(
             theta=theta_arr,
             phi=phi_arr,

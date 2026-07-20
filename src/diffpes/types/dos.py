@@ -26,7 +26,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional
-from jax import lax
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
@@ -114,58 +113,27 @@ def make_density_of_states(
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
     def validate_and_create() -> DensityOfStates:
-        def check_energy_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(energy_arr)),
-                lambda: energy_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: energy_arr.sum(),
-                        lambda: energy_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_dos_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(dos_arr)),
-                lambda: dos_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: dos_arr.sum(),
-                        lambda: dos_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_dos_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(dos_arr >= 0.0),
-                lambda: dos_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: dos_arr.sum(),
-                        lambda: dos_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_fermi_energy_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(fermi_arr),
-                lambda: fermi_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: fermi_arr, lambda: fermi_arr)
-                ),
-            )
-
-        check_energy_finite()
-        check_dos_finite()
-        check_dos_non_negative()
-        check_fermi_energy_finite()
+        nonlocal dos_arr, energy_arr, fermi_arr
+        energy_arr = eqx.error_if(
+            energy_arr,
+            ~(jnp.all(jnp.isfinite(energy_arr))),
+            "make_density_of_states: energy finite",
+        )
+        dos_arr = eqx.error_if(
+            dos_arr,
+            ~(jnp.all(jnp.isfinite(dos_arr))),
+            "make_density_of_states: dos finite",
+        )
+        dos_arr = eqx.error_if(
+            dos_arr,
+            ~(jnp.all(dos_arr >= 0.0)),
+            "make_density_of_states: dos non negative",
+        )
+        fermi_arr = eqx.error_if(
+            fermi_arr,
+            ~(jnp.isfinite(fermi_arr)),
+            "make_density_of_states: fermi energy finite",
+        )
         return DensityOfStates(
             energy=energy_arr,
             total_dos=dos_arr,
@@ -350,72 +318,32 @@ def make_full_density_of_states(
         pdos_arr = jnp.asarray(pdos, dtype=jnp.float64)
 
     def validate_and_create() -> FullDensityOfStates:
-        def check_energy_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(energy_arr)),
-                lambda: energy_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: energy_arr.sum(),
-                        lambda: energy_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_dos_up_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(up_arr)),
-                lambda: up_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: up_arr.sum(),
-                        lambda: up_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_dos_up_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(up_arr >= 0.0),
-                lambda: up_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: up_arr.sum(),
-                        lambda: up_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_integrated_dos_up_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(int_up_arr)),
-                lambda: int_up_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: int_up_arr.sum(),
-                        lambda: int_up_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_fermi_energy_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(fermi_arr),
-                lambda: fermi_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: fermi_arr, lambda: fermi_arr)
-                ),
-            )
-
-        check_energy_finite()
-        check_dos_up_finite()
-        check_dos_up_non_negative()
-        check_integrated_dos_up_finite()
-        check_fermi_energy_finite()
+        nonlocal energy_arr, fermi_arr, int_up_arr, up_arr
+        energy_arr = eqx.error_if(
+            energy_arr,
+            ~(jnp.all(jnp.isfinite(energy_arr))),
+            "make_full_density_of_states: energy finite",
+        )
+        up_arr = eqx.error_if(
+            up_arr,
+            ~(jnp.all(jnp.isfinite(up_arr))),
+            "make_full_density_of_states: dos up finite",
+        )
+        up_arr = eqx.error_if(
+            up_arr,
+            ~(jnp.all(up_arr >= 0.0)),
+            "make_full_density_of_states: dos up non negative",
+        )
+        int_up_arr = eqx.error_if(
+            int_up_arr,
+            ~(jnp.all(jnp.isfinite(int_up_arr))),
+            "make_full_density_of_states: integrated dos up finite",
+        )
+        fermi_arr = eqx.error_if(
+            fermi_arr,
+            ~(jnp.isfinite(fermi_arr)),
+            "make_full_density_of_states: fermi energy finite",
+        )
         return FullDensityOfStates(
             energy=energy_arr,
             total_dos_up=up_arr,

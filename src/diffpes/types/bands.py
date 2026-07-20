@@ -40,7 +40,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional, Union
-from jax import lax
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
@@ -196,48 +195,22 @@ def make_spin_orbital_projection(
         oam_arr = jnp.asarray(oam, dtype=jnp.float64)
 
     def validate_and_create() -> SpinOrbitalProjection:
-        def check_projections_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(proj_arr)),
-                lambda: proj_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: proj_arr.sum(),
-                        lambda: proj_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_projections_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(proj_arr >= 0.0),
-                lambda: proj_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: proj_arr.sum(),
-                        lambda: proj_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_spin_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(spin_arr)),
-                lambda: spin_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: spin_arr.sum(),
-                        lambda: spin_arr.sum(),
-                    )
-                ),
-            )
-
-        check_projections_finite()
-        check_projections_non_negative()
-        check_spin_finite()
+        nonlocal proj_arr, spin_arr
+        proj_arr = eqx.error_if(
+            proj_arr,
+            ~(jnp.all(jnp.isfinite(proj_arr))),
+            "make_spin_orbital_projection: projections finite",
+        )
+        proj_arr = eqx.error_if(
+            proj_arr,
+            ~(jnp.all(proj_arr >= 0.0)),
+            "make_spin_orbital_projection: projections non negative",
+        )
+        spin_arr = eqx.error_if(
+            spin_arr,
+            ~(jnp.all(jnp.isfinite(spin_arr))),
+            "make_spin_orbital_projection: spin finite",
+        )
         return SpinOrbitalProjection(
             projections=proj_arr,
             spin=spin_arr,
@@ -385,62 +358,27 @@ def make_spin_band_structure(
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
     def validate_and_create() -> SpinBandStructure:
-        def check_eigenvalues_up_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(up_arr)),
-                lambda: up_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: up_arr.sum(),
-                        lambda: up_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_eigenvalues_down_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(down_arr)),
-                lambda: down_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: down_arr.sum(),
-                        lambda: down_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_kpoints_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(kpts_arr)),
-                lambda: kpts_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: kpts_arr.sum(),
-                        lambda: kpts_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_weights_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(weights_arr >= 0.0),
-                lambda: weights_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: weights_arr.sum(),
-                        lambda: weights_arr.sum(),
-                    )
-                ),
-            )
-
-        check_eigenvalues_up_finite()
-        check_eigenvalues_down_finite()
-        check_kpoints_finite()
-        check_weights_non_negative()
+        nonlocal down_arr, kpts_arr, up_arr, weights_arr
+        up_arr = eqx.error_if(
+            up_arr,
+            ~(jnp.all(jnp.isfinite(up_arr))),
+            "make_spin_band_structure: eigenvalues up finite",
+        )
+        down_arr = eqx.error_if(
+            down_arr,
+            ~(jnp.all(jnp.isfinite(down_arr))),
+            "make_spin_band_structure: eigenvalues down finite",
+        )
+        kpts_arr = eqx.error_if(
+            kpts_arr,
+            ~(jnp.all(jnp.isfinite(kpts_arr))),
+            "make_spin_band_structure: kpoints finite",
+        )
+        weights_arr = eqx.error_if(
+            weights_arr,
+            ~(jnp.all(weights_arr >= 0.0)),
+            "make_spin_band_structure: weights non negative",
+        )
         return SpinBandStructure(
             eigenvalues_up=up_arr,
             eigenvalues_down=down_arr,
@@ -556,48 +494,22 @@ def make_band_structure(
     fermi_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
     def validate_and_create() -> BandStructure:
-        def check_eigenvalues_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(eigenvalues_arr)),
-                lambda: eigenvalues_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: eigenvalues_arr.sum(),
-                        lambda: eigenvalues_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_kpoints_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(kpoints_arr)),
-                lambda: kpoints_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: kpoints_arr.sum(),
-                        lambda: kpoints_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_weights_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(weights_arr >= 0.0),
-                lambda: weights_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: weights_arr.sum(),
-                        lambda: weights_arr.sum(),
-                    )
-                ),
-            )
-
-        check_eigenvalues_finite()
-        check_kpoints_finite()
-        check_weights_non_negative()
+        nonlocal eigenvalues_arr, kpoints_arr, weights_arr
+        eigenvalues_arr = eqx.error_if(
+            eigenvalues_arr,
+            ~(jnp.all(jnp.isfinite(eigenvalues_arr))),
+            "make_band_structure: eigenvalues finite",
+        )
+        kpoints_arr = eqx.error_if(
+            kpoints_arr,
+            ~(jnp.all(jnp.isfinite(kpoints_arr))),
+            "make_band_structure: kpoints finite",
+        )
+        weights_arr = eqx.error_if(
+            weights_arr,
+            ~(jnp.all(weights_arr >= 0.0)),
+            "make_band_structure: weights non negative",
+        )
         return BandStructure(
             eigenvalues=eigenvalues_arr,
             kpoints=kpoints_arr,
@@ -670,34 +582,17 @@ def make_orbital_projection(
         oam_arr = jnp.asarray(oam, dtype=jnp.float64)
 
     def validate_and_create() -> OrbitalProjection:
-        def check_projections_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(proj_arr)),
-                lambda: proj_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: proj_arr.sum(),
-                        lambda: proj_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_projections_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(proj_arr >= 0.0),
-                lambda: proj_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: proj_arr.sum(),
-                        lambda: proj_arr.sum(),
-                    )
-                ),
-            )
-
-        check_projections_finite()
-        check_projections_non_negative()
+        nonlocal proj_arr
+        proj_arr = eqx.error_if(
+            proj_arr,
+            ~(jnp.all(jnp.isfinite(proj_arr))),
+            "make_orbital_projection: projections finite",
+        )
+        proj_arr = eqx.error_if(
+            proj_arr,
+            ~(jnp.all(proj_arr >= 0.0)),
+            "make_orbital_projection: projections non negative",
+        )
         return OrbitalProjection(
             projections=proj_arr,
             spin=spin_arr,
@@ -759,48 +654,17 @@ def make_arpes_spectrum(
     )
 
     def validate_and_create() -> ArpesSpectrum:
-        def check_intensity_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(intensity_arr)),
-                lambda: intensity_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: intensity_arr.sum(),
-                        lambda: intensity_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_intensity_non_negative() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(intensity_arr >= 0.0),
-                lambda: intensity_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: intensity_arr.sum(),
-                        lambda: intensity_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_energy_axis_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(energy_arr)),
-                lambda: energy_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: energy_arr.sum(),
-                        lambda: energy_arr.sum(),
-                    )
-                ),
-            )
-
-        check_intensity_finite()
-        check_intensity_non_negative()
-        check_energy_axis_finite()
+        nonlocal energy_arr, intensity_arr
+        intensity_arr = eqx.error_if(
+            intensity_arr,
+            ~(jnp.all(jnp.isfinite(intensity_arr))),
+            "make_arpes_spectrum: intensity finite",
+        )
+        energy_arr = eqx.error_if(
+            energy_arr,
+            ~(jnp.all(jnp.isfinite(energy_arr))),
+            "make_arpes_spectrum: energy axis finite",
+        )
         return ArpesSpectrum(
             intensity=intensity_arr,
             energy_axis=energy_arr,

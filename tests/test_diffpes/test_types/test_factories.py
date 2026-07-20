@@ -33,6 +33,7 @@ Routine Listings
 """
 
 import chex
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
@@ -304,6 +305,50 @@ class TestMakeBandStructure(chex.TestCase):
             fermi_energy=0.0,
         )
         chex.assert_trees_all_close(bands.kpoint_weights, weights, atol=1e-12)
+
+    def test_nonfinite_eigenvalues_raise(self):
+        """Reject non-finite eigenvalues eagerly and under JIT.
+
+        Asserts
+        -------
+        The value-threaded ``eqx.error_if`` check raises in both execution
+        modes instead of silently returning a poisoned carrier.
+        """
+        eigenvalues = jnp.array([[jnp.nan]], dtype=jnp.float64)
+        kpoints = jnp.zeros((1, 3), dtype=jnp.float64)
+
+        for under_jit in (False, True):
+            with self.subTest(under_jit=under_jit):
+                factory = (
+                    eqx.filter_jit(make_band_structure)
+                    if under_jit
+                    else make_band_structure
+                )
+                with pytest.raises(RuntimeError, match="eigenvalues finite"):
+                    factory(eigenvalues=eigenvalues, kpoints=kpoints)
+
+    def test_validation_is_gradient_transparent(self):
+        """Preserve valid values and their gradients through validation.
+
+        Asserts
+        -------
+        The validated eigenvalue leaf is bitwise equal to its input and its
+        gradient matches direct array construction.
+        """
+        eigenvalues = jnp.array([[0.25, -0.5]], dtype=jnp.float64)
+        kpoints = jnp.zeros((1, 3), dtype=jnp.float64)
+
+        def validated_sum(values):
+            bands = make_band_structure(eigenvalues=values, kpoints=kpoints)
+            result = jnp.sum(bands.eigenvalues)
+            return result
+
+        bands = make_band_structure(eigenvalues=eigenvalues, kpoints=kpoints)
+        chex.assert_trees_all_equal(bands.eigenvalues, eigenvalues)
+        chex.assert_trees_all_equal(
+            jax.grad(validated_sum)(eigenvalues),
+            jax.grad(jnp.sum)(eigenvalues),
+        )
 
 
 class TestMakeOrbitalProjection(chex.TestCase):

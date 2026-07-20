@@ -25,7 +25,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Union
-from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
 from .aliases import ScalarNumeric
@@ -192,48 +191,22 @@ def make_crystal_geometry(
     reciprocal: Float[Array, "3 3"] = _compute_reciprocal_lattice(lattice_arr)
 
     def validate_and_create() -> CrystalGeometry:
-        def check_lattice_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(lattice_arr)),
-                lambda: lattice_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: lattice_arr.sum(),
-                        lambda: lattice_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_lattice_nondegenerate() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.abs(jnp.linalg.det(lattice_arr)) > 1e-10,
-                lambda: lattice_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: lattice_arr.sum(),
-                        lambda: lattice_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_coords_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(coords_arr)),
-                lambda: coords_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: coords_arr.sum(),
-                        lambda: coords_arr.sum(),
-                    )
-                ),
-            )
-
-        check_lattice_finite()
-        check_lattice_nondegenerate()
-        check_coords_finite()
+        nonlocal coords_arr, lattice_arr
+        lattice_arr = eqx.error_if(
+            lattice_arr,
+            ~(jnp.all(jnp.isfinite(lattice_arr))),
+            "make_crystal_geometry: lattice finite",
+        )
+        lattice_arr = eqx.error_if(
+            lattice_arr,
+            ~(jnp.abs(jnp.linalg.det(lattice_arr)) > 1e-10),
+            "make_crystal_geometry: lattice nondegenerate",
+        )
+        coords_arr = eqx.error_if(
+            coords_arr,
+            ~(jnp.all(jnp.isfinite(coords_arr))),
+            "make_crystal_geometry: coords finite",
+        )
         return CrystalGeometry(
             lattice=lattice_arr,
             reciprocal_lattice=reciprocal,

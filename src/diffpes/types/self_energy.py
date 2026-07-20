@@ -23,7 +23,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional
-from jax import lax
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarFloat
@@ -185,20 +184,12 @@ def make_self_energy_config(
         raise ValueError(msg)
 
     def validate_and_create() -> SelfEnergyConfig:
-        def check_coefficients_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(coeff_arr)),
-                lambda: coeff_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: coeff_arr.sum(),
-                        lambda: coeff_arr.sum(),
-                    )
-                ),
-            )
-
-        check_coefficients_finite()
+        nonlocal coeff_arr
+        coeff_arr = eqx.error_if(
+            coeff_arr,
+            ~(jnp.all(jnp.isfinite(coeff_arr))),
+            "make_self_energy_config: coefficients finite",
+        )
         return SelfEnergyConfig(
             coefficients=coeff_arr,
             energy_nodes=nodes_arr,

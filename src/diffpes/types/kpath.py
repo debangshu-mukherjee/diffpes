@@ -19,7 +19,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional, Union
-from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
 
@@ -205,16 +204,12 @@ def make_kpath_info(  # noqa: PLR0913
         shift_arr = jnp.asarray(shift, dtype=jnp.float64)
 
     def validate_and_create() -> KPathInfo:
-        def check_num_kpoints_non_negative() -> Int[Array, " "]:
-            return lax.cond(
-                nkpts_arr >= 0,
-                lambda: nkpts_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: nkpts_arr, lambda: nkpts_arr)
-                ),
-            )
-
-        check_num_kpoints_non_negative()
+        nonlocal nkpts_arr
+        nkpts_arr = eqx.error_if(
+            nkpts_arr,
+            ~(nkpts_arr >= 0),
+            "make_kpath_info: num kpoints non negative",
+        )
         return KPathInfo(
             num_kpoints=nkpts_arr,
             label_indices=indices_arr,

@@ -36,7 +36,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional
-from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
 
@@ -197,34 +196,17 @@ def make_volumetric_data(
         counts_arr = jnp.asarray(atom_counts, dtype=jnp.int32)
 
     def validate_and_create() -> VolumetricData:
-        def check_lattice_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(lattice_arr)),
-                lambda: lattice_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: lattice_arr.sum(),
-                        lambda: lattice_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_charge_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(charge_arr)),
-                lambda: charge_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: charge_arr.sum(),
-                        lambda: charge_arr.sum(),
-                    )
-                ),
-            )
-
-        check_lattice_finite()
-        check_charge_finite()
+        nonlocal charge_arr, lattice_arr
+        lattice_arr = eqx.error_if(
+            lattice_arr,
+            ~(jnp.all(jnp.isfinite(lattice_arr))),
+            "make_volumetric_data: lattice finite",
+        )
+        charge_arr = eqx.error_if(
+            charge_arr,
+            ~(jnp.all(jnp.isfinite(charge_arr))),
+            "make_volumetric_data: charge finite",
+        )
         return VolumetricData(
             lattice=lattice_arr,
             coords=coords_arr,
@@ -398,34 +380,17 @@ def make_soc_volumetric_data(
     )
 
     def validate_and_create() -> SOCVolumetricData:
-        def check_lattice_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(soc_lattice_arr)),
-                lambda: soc_lattice_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: soc_lattice_arr.sum(),
-                        lambda: soc_lattice_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_charge_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(soc_charge_arr)),
-                lambda: soc_charge_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: soc_charge_arr.sum(),
-                        lambda: soc_charge_arr.sum(),
-                    )
-                ),
-            )
-
-        check_lattice_finite()
-        check_charge_finite()
+        nonlocal soc_charge_arr, soc_lattice_arr
+        soc_lattice_arr = eqx.error_if(
+            soc_lattice_arr,
+            ~(jnp.all(jnp.isfinite(soc_lattice_arr))),
+            "make_soc_volumetric_data: lattice finite",
+        )
+        soc_charge_arr = eqx.error_if(
+            soc_charge_arr,
+            ~(jnp.all(jnp.isfinite(soc_charge_arr))),
+            "make_soc_volumetric_data: charge finite",
+        )
         return SOCVolumetricData(
             lattice=soc_lattice_arr,
             coords=jnp.asarray(coords, dtype=jnp.float64),

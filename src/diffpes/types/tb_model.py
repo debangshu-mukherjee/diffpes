@@ -32,7 +32,6 @@ from static structural metadata (auxiliary data).
 import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from jax import lax
 from jaxtyping import Array, Complex, Float, jaxtyped
 
 from .aliases import ScalarFloat, ScalarNumeric
@@ -194,44 +193,22 @@ def make_diagonalized_bands(
     ef_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
 
     def validate_and_create() -> DiagonalizedBands:
-        def check_eigenvalues_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(eig_arr)),
-                lambda: eig_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: eig_arr.sum(),
-                        lambda: eig_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_kpoints_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(kpt_arr)),
-                lambda: kpt_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: kpt_arr.sum(),
-                        lambda: kpt_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_fermi_energy_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.isfinite(ef_arr),
-                lambda: ef_arr,
-                lambda: lax.stop_gradient(
-                    lax.cond(False, lambda: ef_arr, lambda: ef_arr)
-                ),
-            )
-
-        check_eigenvalues_finite()
-        check_kpoints_finite()
-        check_fermi_energy_finite()
+        nonlocal ef_arr, eig_arr, kpt_arr
+        eig_arr = eqx.error_if(
+            eig_arr,
+            ~(jnp.all(jnp.isfinite(eig_arr))),
+            "make_diagonalized_bands: eigenvalues finite",
+        )
+        kpt_arr = eqx.error_if(
+            kpt_arr,
+            ~(jnp.all(jnp.isfinite(kpt_arr))),
+            "make_diagonalized_bands: kpoints finite",
+        )
+        ef_arr = eqx.error_if(
+            ef_arr,
+            ~(jnp.isfinite(ef_arr)),
+            "make_diagonalized_bands: fermi energy finite",
+        )
         return DiagonalizedBands(
             eigenvalues=eig_arr,
             eigenvectors=vec_arr,
@@ -315,34 +292,17 @@ def make_tb_model(
     )
 
     def validate_and_create() -> TBModel:
-        def check_hopping_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(hop_arr)),
-                lambda: hop_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: hop_arr.sum(),
-                        lambda: hop_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_lattice_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(lat_arr)),
-                lambda: lat_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: lat_arr.sum(),
-                        lambda: lat_arr.sum(),
-                    )
-                ),
-            )
-
-        check_hopping_finite()
-        check_lattice_finite()
+        nonlocal hop_arr, lat_arr
+        hop_arr = eqx.error_if(
+            hop_arr,
+            ~(jnp.all(jnp.isfinite(hop_arr))),
+            "make_tb_model: hopping finite",
+        )
+        lat_arr = eqx.error_if(
+            lat_arr,
+            ~(jnp.all(jnp.isfinite(lat_arr))),
+            "make_tb_model: lattice finite",
+        )
         return TBModel(
             hopping_params=hop_arr,
             lattice_vectors=lat_arr,

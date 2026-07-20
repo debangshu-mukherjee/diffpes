@@ -30,7 +30,6 @@ import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional
-from jax import lax
 from jaxtyping import Array, Float, jaxtyped
 
 
@@ -303,34 +302,17 @@ def make_slater_params(
         coeff_arr = jnp.asarray(coefficients, dtype=jnp.float64)
 
     def validate_and_create() -> SlaterParams:
-        def check_zeta_finite() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(jnp.isfinite(zeta_arr)),
-                lambda: zeta_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: zeta_arr.sum(),
-                        lambda: zeta_arr.sum(),
-                    )
-                ),
-            )
-
-        def check_zeta_positive() -> Float[Array, " "]:
-            return lax.cond(
-                jnp.all(zeta_arr > 0.0),
-                lambda: zeta_arr.sum(),
-                lambda: lax.stop_gradient(
-                    lax.cond(
-                        False,
-                        lambda: zeta_arr.sum(),
-                        lambda: zeta_arr.sum(),
-                    )
-                ),
-            )
-
-        check_zeta_finite()
-        check_zeta_positive()
+        nonlocal zeta_arr
+        zeta_arr = eqx.error_if(
+            zeta_arr,
+            ~(jnp.all(jnp.isfinite(zeta_arr))),
+            "make_slater_params: zeta finite",
+        )
+        zeta_arr = eqx.error_if(
+            zeta_arr,
+            ~(jnp.all(zeta_arr > 0.0)),
+            "make_slater_params: zeta positive",
+        )
         return SlaterParams(
             zeta=zeta_arr,
             coefficients=coeff_arr,
