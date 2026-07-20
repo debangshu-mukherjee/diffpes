@@ -29,12 +29,8 @@ from diffpes.types import (
     SpinOrbitalProjection,
 )
 from diffpes.types.orbital_constants import (
-    _D_ORBITAL_SLICE as _D_SLICE,
-)
-from diffpes.types.orbital_constants import (
-    _P_ORBITAL_SLICE as _P_SLICE,
-)
-from diffpes.types.orbital_constants import (
+    _D_ORBITAL_SLICE,
+    _P_ORBITAL_SLICE,
     _S_IDX,
 )
 
@@ -203,10 +199,10 @@ def reduce_orbitals(
     """
     s_total: Float[Array, "K B A"] = projections[..., _S_IDX]
     p_total: Float[Array, "K B A"] = jnp.sum(
-        projections[..., _P_SLICE], axis=-1
+        projections[..., _P_ORBITAL_SLICE], axis=-1
     )
     d_total: Float[Array, "K B A"] = jnp.sum(
-        projections[..., _D_SLICE], axis=-1
+        projections[..., _D_ORBITAL_SLICE], axis=-1
     )
     reduced: Float[Array, "K B A 3"] = jnp.stack(
         [s_total, p_total, d_total], axis=-1

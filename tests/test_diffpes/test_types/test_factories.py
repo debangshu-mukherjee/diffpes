@@ -55,8 +55,8 @@ from diffpes.types import (
     make_orbital_projection,
     make_polarization_config,
     make_simulation_params,
+    make_slater_params,
 )
-from diffpes.types.radial_params import make_slater_params
 
 
 class TestMakeCrystalGeometry(chex.TestCase):

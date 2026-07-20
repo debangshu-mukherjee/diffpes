@@ -25,18 +25,12 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
-from diffpes.types import ScalarFloat
-from diffpes.types.tables import (
-    _CROSS_SECTION_ENERGIES as _ENERGIES,
-)
-from diffpes.types.tables import (
-    _CROSS_SECTION_SIGMA_D as _SIGMA_D,
-)
-from diffpes.types.tables import (
-    _CROSS_SECTION_SIGMA_P as _SIGMA_P,
-)
-from diffpes.types.tables import (
-    _CROSS_SECTION_SIGMA_S as _SIGMA_S,
+from diffpes.types import (
+    CROSS_SECTION_ENERGIES,
+    CROSS_SECTION_SIGMA_D,
+    CROSS_SECTION_SIGMA_P,
+    CROSS_SECTION_SIGMA_S,
+    ScalarFloat,
 )
 
 
@@ -114,8 +108,9 @@ def _interp_cross_section(
     Implementation Logic
     --------------------
     1. **Interpolate via jnp.interp**:
-       sigma = jnp.interp(photon_energy, _ENERGIES, sigma_vals)
-       - ``_ENERGIES`` = [20, 40, 60] eV are the tabulation points.
+       sigma = jnp.interp(photon_energy, CROSS_SECTION_ENERGIES, sigma_vals)
+       - ``CROSS_SECTION_ENERGIES`` = [20, 40, 60] eV are the
+         tabulation points.
        - ``sigma_vals`` are the corresponding cross-section values.
        - ``jnp.interp`` performs piecewise-linear interpolation
          between adjacent tabulation points.
@@ -136,7 +131,9 @@ def _interp_cross_section(
     sigma : Float[Array, " "]
         Interpolated cross-section value.
     """
-    sigma: Float[Array, " "] = jnp.interp(photon_energy, _ENERGIES, sigma_vals)
+    sigma: Float[Array, " "] = jnp.interp(
+        photon_energy, CROSS_SECTION_ENERGIES, sigma_vals
+    )
     return sigma
 
 
@@ -160,13 +157,14 @@ def yeh_lindau_weights(
 
     2. **Interpolate s, p, d cross-sections independently**::
 
-           s_w = _interp_cross_section(pe, _SIGMA_S)
-           p_w = _interp_cross_section(pe, _SIGMA_P)
-           d_w = _interp_cross_section(pe, _SIGMA_D)
+           s_w = _interp_cross_section(pe, CROSS_SECTION_SIGMA_S)
+           p_w = _interp_cross_section(pe, CROSS_SECTION_SIGMA_P)
+           d_w = _interp_cross_section(pe, CROSS_SECTION_SIGMA_D)
 
        Each call linearly interpolates the corresponding
        tabulated values at 20, 40, and 60 eV. The tabulated
-       data (_SIGMA_S, _SIGMA_P, _SIGMA_D) encodes simplified
+       data (``CROSS_SECTION_SIGMA_S``, ``CROSS_SECTION_SIGMA_P``,
+       ``CROSS_SECTION_SIGMA_D``) encodes simplified
        Yeh-Lindau cross-sections for s, p, and d subshells.
 
     3. **Broadcast to 9-orbital weight vector**::
@@ -195,9 +193,9 @@ def yeh_lindau_weights(
        Data and Nuclear Data Tables 32, 1-155 (1985).
     """
     pe: Float[Array, " "] = jnp.asarray(photon_energy, dtype=jnp.float64)
-    s_w: Float[Array, " "] = _interp_cross_section(pe, _SIGMA_S)
-    p_w: Float[Array, " "] = _interp_cross_section(pe, _SIGMA_P)
-    d_w: Float[Array, " "] = _interp_cross_section(pe, _SIGMA_D)
+    s_w: Float[Array, " "] = _interp_cross_section(pe, CROSS_SECTION_SIGMA_S)
+    p_w: Float[Array, " "] = _interp_cross_section(pe, CROSS_SECTION_SIGMA_P)
+    d_w: Float[Array, " "] = _interp_cross_section(pe, CROSS_SECTION_SIGMA_D)
     weights: Float[Array, " 9"] = jnp.array(
         [s_w, p_w, p_w, p_w, d_w, d_w, d_w, d_w, d_w],
         dtype=jnp.float64,

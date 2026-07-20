@@ -32,8 +32,11 @@ from beartype import beartype
 from beartype.typing import Tuple
 from jaxtyping import Array, Complex, Float, jaxtyped
 
-from diffpes.types import PolarizationConfig, ScalarFloat
-from diffpes.types.orbital_constants import ORBITAL_DIRS_NORMALIZED
+from diffpes.types import (
+    ORBITAL_DIRS_NORMALIZED,
+    PolarizationConfig,
+    ScalarFloat,
+)
 
 
 @jaxtyped(typechecker=beartype)

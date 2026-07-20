@@ -39,6 +39,7 @@ from diffpes.types import (
     DosType,
     KPathInfo,
     ProjectionType,
+    ScalarFloat,
     SpinOrbitalProjection,
     WorkflowContext,
     make_arpes_spectrum,
@@ -46,7 +47,6 @@ from diffpes.types import (
     make_spin_orbital_projection,
     make_workflow_context,
 )
-from diffpes.types.aliases import ScalarFloat
 from diffpes.utils import zscore_normalize
 
 from .expanded import simulate_expanded

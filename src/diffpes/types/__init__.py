@@ -31,7 +31,7 @@ The submodules are organized as follows:
 - :mod:`orbital_constants`
     Shared orbital ordering and direction conventions.
 - :mod:`tables`
-    Small numerical lookup tables used by simulations.
+    Small immutable numerical tables used by simulation routines.
 - :mod:`radial_params`
     Radial wavefunction parameter data structures.
 - :mod:`self_energy`
@@ -53,6 +53,14 @@ Routine Listings
     PyTree for electronic band structure.
 :obj:`BOHR_TO_ANGSTROM`
     Bohr radius in Angstrom.
+:obj:`CROSS_SECTION_ENERGIES`
+    Photon-energy tabulation grid for the cross-section tables in eV.
+:obj:`CROSS_SECTION_SIGMA_D`
+    Yeh-Lindau d-subshell cross sections on the tabulation grid.
+:obj:`CROSS_SECTION_SIGMA_P`
+    Yeh-Lindau p-subshell cross sections on the tabulation grid.
+:obj:`CROSS_SECTION_SIGMA_S`
+    Yeh-Lindau s-subshell cross sections on the tabulation grid.
 :class:`CrystalGeometry`
     PyTree for crystal geometry from VASP POSCAR.
 :class:`DensityOfStates`
@@ -233,6 +241,12 @@ from .self_energy import (
     SelfEnergyConfig,
     make_self_energy_config,
 )
+from .tables import (
+    CROSS_SECTION_ENERGIES,
+    CROSS_SECTION_SIGMA_D,
+    CROSS_SECTION_SIGMA_P,
+    CROSS_SECTION_SIGMA_S,
+)
 from .tb_model import (
     DiagonalizedBands,
     TBModel,
@@ -252,6 +266,10 @@ __all__: list[str] = [
     "ArpesSpectrum",
     "BandStructure",
     "BOHR_TO_ANGSTROM",
+    "CROSS_SECTION_ENERGIES",
+    "CROSS_SECTION_SIGMA_D",
+    "CROSS_SECTION_SIGMA_P",
+    "CROSS_SECTION_SIGMA_S",
     "CrystalGeometry",
     "DensityOfStates",
     "DiagonalizedBands",

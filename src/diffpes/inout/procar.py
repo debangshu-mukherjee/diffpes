@@ -33,13 +33,11 @@ from diffpes.types import (
     make_orbital_projection,
     make_spin_orbital_projection,
 )
-from diffpes.types.orbital_constants import _N_ORBITALS as _NORBS
+from diffpes.types.orbital_constants import _N_ORBITALS
 from diffpes.types.vasp_constants import (
     _ISPIN2_BLOCKS,
+    _N_SPIN_COMPONENTS,
     _SOC_BLOCKS,
-)
-from diffpes.types.vasp_constants import (
-    _N_SPIN_COMPONENTS as _NSPIN_COMPONENTS,
 )
 
 
@@ -178,7 +176,7 @@ def read_procar(
         avg: Float[NDArray, "K B A O"] = (proj_up + proj_down) / 2.0
         proj_arr = jnp.asarray(avg, dtype=jnp.float64)
         spin_data: Float[NDArray, "K B A 6"] = np.zeros(
-            (nkpts, nbands, natoms, _NSPIN_COMPONENTS), dtype=np.float64
+            (nkpts, nbands, natoms, _N_SPIN_COMPONENTS), dtype=np.float64
         )
         sz_diff: Float[NDArray, "K B A"] = np.sum(proj_up - proj_down, axis=-1)
         spin_data[:, :, :, 4] = np.maximum(sz_diff, 0.0)
@@ -198,7 +196,7 @@ def read_procar(
     proj_arr = jnp.asarray(proj_total, dtype=jnp.float64)
 
     spin_data = np.zeros(
-        (nkpts, nbands, natoms, _NSPIN_COMPONENTS), dtype=np.float64
+        (nkpts, nbands, natoms, _N_SPIN_COMPONENTS), dtype=np.float64
     )
     sx_sum: Float[NDArray, "K B A"] = np.sum(proj_sx, axis=-1)
     sy_sum: Float[NDArray, "K B A"] = np.sum(proj_sy, axis=-1)
@@ -290,7 +288,7 @@ def _parse_procar_blocks(
         nbands: int = params[1]
         natoms: int = params[2]
         projections: Float[NDArray, "K B A O"] = np.zeros(
-            (nkpts, nbands, natoms, _NORBS), dtype=np.float64
+            (nkpts, nbands, natoms, _N_ORBITALS), dtype=np.float64
         )
         i += 1
 
@@ -312,7 +310,7 @@ def _parse_procar_blocks(
                 i += 1  # skip orbital-name header
                 for a in range(natoms):
                     vals: list[float] = [float(x) for x in lines[i].split()]
-                    projections[k_idx, b, a, :] = vals[1 : _NORBS + 1]
+                    projections[k_idx, b, a, :] = vals[1 : _N_ORBITALS + 1]
                     i += 1
                 i += 1  # skip tot line
                 i += 1  # skip blank line

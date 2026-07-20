@@ -66,17 +66,18 @@ accepting both Python scalars and 0-d JAX arrays, so `sigma=0.04` and
 
 ## Registration: Children vs. Auxiliary Data
 
-The current implementation registers each type as a `NamedTuple` decorated
-with `@register_pytree_node_class`, with hand-written `tree_flatten` /
-`tree_unflatten` methods. The flatten step draws the most important line in
-the whole architecture:
+Every carrier is an `eqx.Module`: the field declarations drive the
+flatten/unflatten machinery automatically, with no hand-written
+registration. The field split draws the most important line in the whole
+architecture:
 
 - **Children** are JAX arrays. They are traced, differentiated, and batched.
   Eigenvalues, projections, intensities, broadening widths — anything you
   might attach a loss to.
-- **Auxiliary data** is static Python metadata. It is a compile-time
-  constant: changing it retriggers compilation of any `jit`-ted function
-  that receives the PyTree.
+- **Auxiliary data** is static Python metadata, declared with
+  `eqx.field(static=True)`. It is a compile-time constant: changing it
+  retriggers compilation of any `jit`-ted function that receives the
+  PyTree.
 
 Two deliberate examples of auxiliary data:
 
@@ -105,7 +106,9 @@ two-tier:
    `mode="tabulated"` without `energy_nodes`).
 2. **Traced checks** are data-dependent (finiteness, non-negativity) and
    cannot use Python `if` under `jit`. The current code guards them with
-   `lax.cond` constructions that keep the factory traceable.
+   `lax.cond` constructions that keep the factory traceable;
+   `equinox.error_if` is the codified replacement pattern as factories are
+   revisited.
 
 ```python
 import jax.numpy as jnp
@@ -125,11 +128,12 @@ comes back as a `float64` JAX array because diffpes enables x64 at import
 
 ## Immutability and the jit/grad/vmap Flow
 
-PyTrees are immutable — as `NamedTuple`s, field assignment raises. Updates
-are functional: `bands._replace(fermi_energy=jnp.asarray(0.1))` builds a new
-instance. This is not a style preference; it is what makes a PyTree safe to
-pass through JAX transformations, which assume values are never mutated
-behind the tracer's back.
+PyTrees are immutable — `eqx.Module` is a frozen dataclass, so field
+assignment raises. Updates are functional:
+`eqx.tree_at(lambda t: t.fermi_energy, bands, jnp.asarray(0.1))` builds a
+new instance with one leaf swapped. This is not a style preference; it is
+what makes a PyTree safe to pass through JAX transformations, which assume
+values are never mutated behind the tracer's back.
 
 Because children are ordinary leaves, a whole carrier can be the argument of
 a transformation:
@@ -182,12 +186,12 @@ raise, rather than returning a lossy dict of arrays. See
 [VASP Data Ingestion](vasp-data-ingestion.md) for the full ingest-simulate-save
 pipeline.
 
-## The Codified Direction: Equinox Modules
+## The Equinox Module Pattern
 
 The [contributing guide](https://github.com/debangshu-mukherjee/diffpes/blob/main/CONTRIBUTING.md)
-pins the target architecture for `diffpes.types`: structured types become
-**Equinox modules** (`eqx.Module`), with static metadata declared via
-`eqx.field(static=True)` and traced validation via `eqx.error_if`:
+pins the architecture for `diffpes.types`, and the codebase implements it:
+every structured type is an **Equinox module** (`eqx.Module`), with static
+metadata declared via `eqx.field(static=True)`:
 
 ```python
 import equinox as eqx
@@ -200,19 +204,16 @@ class BandStructure(eqx.Module):
     fermi_energy: Float[Array, ""]
 ```
 
-This is the same children/auxiliary split described above, minus the
-boilerplate: `eqx.Module` derives `tree_flatten`/`tree_unflatten` from field
-declarations, `eqx.field(static=True)` replaces hand-written aux plumbing
-(`fidelity`, `polarization_type`), and `eqx.error_if` replaces the `lax.cond`
-guard constructions with a purpose-built primitive that raises at runtime
-without breaking `jit`. The user-facing contract — immutable PyTrees built by
-validating `make_*` factories, imported only from `diffpes.types` — is
-unchanged by the migration; per the project's zero-legacy policy the swap
-happens in place, with no compatibility shims.
-
-Until that lands, treat what this guide describes — `NamedTuple` +
-`@register_pytree_node_class` + `lax.cond` guards — as the current reality,
-and the Equinox form as the standard new code is written against.
+This is the children/auxiliary split described above with zero
+boilerplate: `eqx.Module` derives `tree_flatten`/`tree_unflatten` from the
+field declarations, and `eqx.field(static=True)` carries the aux metadata
+(`fidelity`, `polarization_type`). The migration from the earlier
+hand-registered `NamedTuple` form is complete — per the project's
+zero-legacy policy it happened in place, with no compatibility shims — and
+the user-facing contract is unchanged: immutable PyTrees built by
+validating `make_*` factories, imported only from `diffpes.types`. The one
+remaining codified step is swapping the `lax.cond` guard constructions in
+factories for `equinox.error_if`.
 
 ## Related Reading
 

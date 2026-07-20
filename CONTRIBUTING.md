@@ -103,10 +103,10 @@ Each subpackage exposes its public API through `__init__.py` with an explicit
 **before** JAX is imported. Keep import-time side effects confined to that
 module.
 
-Some infrastructure referenced here (`CHANGELOG.md`, `docs/`, `tutorials/`,
-`.pre-commit-config.yaml`, CI workflows) is still landing as part of the
-tooling-floor work tracked in the planning repo; the conventions below are the
-standard it lands against.
+Most supporting infrastructure (`CHANGELOG.md`, `docs/`,
+`.pre-commit-config.yaml`, CI workflows) is in place; `tutorials/` (paired
+notebooks at the repo root) is still landing as part of the tooling-floor
+work tracked in the planning repo.
 
 ## Coding Standards
 
@@ -203,6 +203,17 @@ def simulate_spectrum(
   scalar arguments; these are unions accepting both Python scalars and 0-d JAX
   arrays.
 - Import shared types from `diffpes.types`, not by re-defining them.
+- **Import public names from `diffpes.types` itself, never from its
+  submodules** (`from diffpes.types import KB_EV_PER_K`, not
+  `from diffpes.types.constants import KB_EV_PER_K`) — outside the
+  `types/` subpackage, deep imports are reserved for the private
+  underscore-prefixed guards, which are deliberately not re-exported.
+- **Never rename on import** (`import ... as`) for diffpes names — no
+  `KB_EV_PER_K as _KB`, no `_N_ORBITALS as _NORBS`. An alias creates a
+  second name for the same constant that grep, listings, and reviewers
+  must chase. (Community-canonical module aliases like `jnp`/`np`/`plt`
+  and the `ndarray as NDArray` casing shim for jaxtyping are the only
+  exceptions.)
 - Import typing constructs (`Optional`, `Union`, `Tuple`, `List`, `Dict`,
   `TypeAlias`) from `beartype.typing`, not the stdlib `typing` module.
 

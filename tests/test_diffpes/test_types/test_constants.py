@@ -4,18 +4,19 @@ from types import MappingProxyType
 
 import jax.numpy as jnp
 
-from diffpes.types import L_MAX, ORBITAL_DIRS_NORMALIZED
+from diffpes.types import (
+    CROSS_SECTION_ENERGIES,
+    CROSS_SECTION_SIGMA_D,
+    CROSS_SECTION_SIGMA_P,
+    CROSS_SECTION_SIGMA_S,
+    L_MAX,
+    ORBITAL_DIRS_NORMALIZED,
+)
 from diffpes.types.orbital_constants import (
     _D_ORBITAL_SLICE,
     _N_ORBITALS,
     _ORBITAL_INDEX,
     _P_ORBITAL_SLICE,
-)
-from diffpes.types.tables import (
-    _CROSS_SECTION_ENERGIES,
-    _CROSS_SECTION_SIGMA_D,
-    _CROSS_SECTION_SIGMA_P,
-    _CROSS_SECTION_SIGMA_S,
 )
 from diffpes.types.vasp_constants import _COORDINATE_MODE_TOKENS
 
@@ -40,10 +41,10 @@ def test_lookup_tables_and_tokens_are_immutable_conventions() -> None:
         "fractional",
         "reciprocal",
     }
-    assert _CROSS_SECTION_ENERGIES.shape == (3,)
+    assert CROSS_SECTION_ENERGIES.shape == (3,)
     for values in (
-        _CROSS_SECTION_SIGMA_S,
-        _CROSS_SECTION_SIGMA_P,
-        _CROSS_SECTION_SIGMA_D,
+        CROSS_SECTION_SIGMA_S,
+        CROSS_SECTION_SIGMA_P,
+        CROSS_SECTION_SIGMA_D,
     ):
-        assert values.shape == _CROSS_SECTION_ENERGIES.shape
+        assert values.shape == CROSS_SECTION_ENERGIES.shape
