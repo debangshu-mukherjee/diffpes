@@ -38,19 +38,21 @@ every consumer at once; treat edits as physics changes requiring the
 grad-vs-finite-difference gates to be rerun, not as free refactors.
 """
 
-_EPS: float = 1e-12
-_GAUNT_IMAG_TOL: float = 1e-12
-_MIN_SUM: float = 1e-30
-_NORM_EPS: float = 1e-12
-_N_TAYLOR: int = 64
-_SMALL_ARGUMENT: float = 1e-8
+from beartype.typing import Final
 
-BOHR_TO_ANGSTROM: float = 0.529177
-HBAR_C_EV_A: float = 1973.269804
-HBAR_EV_S: float = 6.582119569e-16
-KB_EV_PER_K: float = 8.617333e-5
-L_MAX: int = 4
-ME_EV: float = 510998.95
+_EPS: Final[float] = 1e-12
+_GAUNT_IMAG_TOL: Final[float] = 1e-12
+_MIN_SUM: Final[float] = 1e-30
+_NORM_EPS: Final[float] = 1e-12
+_N_TAYLOR: Final[int] = 64
+_SMALL_ARGUMENT: Final[float] = 1e-8
+
+BOHR_TO_ANGSTROM: Final[float] = 0.529177
+HBAR_C_EV_A: Final[float] = 1973.269804
+HBAR_EV_S: Final[float] = 6.582119569e-16
+KB_EV_PER_K: Final[float] = 8.617333e-5
+L_MAX: Final[int] = 4
+ME_EV: Final[float] = 510998.95
 
 __all__: list[str] = [
     "BOHR_TO_ANGSTROM",
