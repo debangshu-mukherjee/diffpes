@@ -9,11 +9,15 @@ in git.
 :maxdepth: 1
 
 quickstart
+certified-forward-model
 ```
 
 - [Quickstart](quickstart.md) — build a synthetic band structure, simulate
   ARPES spectra at two fidelity levels, and differentiate through the
   spectrometer model with `jax.grad`.
+- [Inspect and persist a certified forward run](certified-forward-model.md) —
+  read bounded claims and differentiable evidence, save canonical JSON, and
+  attach the same record to an HDF5 result.
 
 More worked, end-to-end examples are under development, such as:
 

@@ -1,0 +1,116 @@
+"""Tests for deterministic canonical scientific records."""
+
+import subprocess
+import sys
+import unicodedata
+
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from diffpes.certify.canonical import (
+    CanonicalizationError,
+    canonical_json,
+    canonical_pytree,
+    iter_canonical_pytree_chunks,
+)
+
+
+def test_canonical_json_golden_record_and_mapping_order() -> None:
+    """Pin typed scalars, NFC text, and deterministic mapping order."""
+    value = {"b": None, "a": (1, 2.5, "e\u0301")}
+    expected_hex = (
+        "444946465045532d43414e4f4e4943414c2d4a534f4e2d563100"
+        "7b22246d6170223a5b5b7b2224737472223a2261227d2c7b2224"
+        "7475706c65223a5b7b2224696e74223a2231227d2c7b2224666c"
+        "6f61743634223a2234303034303030303030303030303030227d"
+        "2c7b2224737472223a22c3a9227d5d7d5d2c5b7b222473747222"
+        "3a2262227d2c7b22246e6f6e65223a747275657d5d5d7d"
+    )
+    assert canonical_json(value).hex() == expected_hex
+    assert canonical_json(value) == canonical_json(
+        {"a": value["a"], "b": None}
+    )
+
+
+def test_canonical_json_distinguishes_list_tuple_null_and_absent() -> None:
+    """Retain meaning-bearing container and presence distinctions."""
+    assert canonical_json([1, 2]) != canonical_json((1, 2))
+    assert canonical_json({"x": None}) != canonical_json({})
+
+
+def test_canonical_text_normalizes_unicode_and_rejects_key_collision() -> None:
+    """Normalize equivalent text while refusing ambiguous normalized keys."""
+    decomposed = "e\u0301"
+    composed = unicodedata.normalize("NFC", decomposed)
+    assert canonical_json(decomposed) == canonical_json(composed)
+    with pytest.raises(CanonicalizationError, match="collide"):
+        canonical_json({decomposed: 1, composed: 2})
+
+
+def test_numpy_and_jax_arrays_have_identical_canonical_bytes() -> None:
+    """Treat equal concrete NumPy and JAX arrays as one normalized content."""
+    numpy_value = np.array([[1.0, 2.0]], dtype=np.float64)
+    jax_value = jnp.asarray(numpy_value)
+    expected_hex = (
+        "444946465045532d43414e4f4e4943414c2d5059545245452d5631"
+        "004100000000000000033c66380000000000000002000000000000"
+        "000100000000000000020000000000000010000000000000f03f00"
+        "00000000000040"
+    )
+    assert canonical_pytree(numpy_value).hex() == expected_hex
+    assert canonical_pytree(jax_value) == canonical_pytree(numpy_value)
+
+
+def test_array_canonicalization_retains_dtype_shape_and_complex_values() -> (
+    None
+):
+    """Keep numerical layout semantics and canonical complex bytes distinct."""
+    values = np.array([1.0, 2.0], dtype=np.float64)
+    assert canonical_pytree(values) != canonical_pytree(
+        values.astype(np.float32)
+    )
+    assert canonical_pytree(values) != canonical_pytree(values.reshape(1, 2))
+    assert canonical_pytree(np.array([1.0 + 2.0j]))
+
+
+def test_streamed_and_materialized_records_are_identical() -> None:
+    """Make bounded chunks exactly reproduce the full canonical record."""
+    values = np.arange(4097, dtype=np.int64)
+    streamed = b"".join(iter_canonical_pytree_chunks(values, chunk_bytes=127))
+    assert streamed == canonical_pytree(values)
+
+
+def test_canonical_record_is_stable_in_a_fresh_process() -> None:
+    """Keep canonical content stable across independent Python processes."""
+    value = {"axis": ("energy", "momentum"), "unit": "eV"}
+    expected = canonical_pytree(value).hex()
+    code = (
+        "from diffpes.certify.canonical import canonical_pytree; "
+        "print(canonical_pytree("
+        "{'unit': 'eV', 'axis': ('energy', 'momentum')}"
+        ").hex())"
+    )
+    observed = subprocess.check_output(
+        [sys.executable, "-c", code],
+        text=True,
+    ).strip()
+    assert observed == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), np.array([1.0, np.nan])],
+)
+def test_nonfinite_values_are_rejected(value) -> None:
+    """Exclude unstable NaN and infinity encodings from scientific records."""
+    with pytest.raises(CanonicalizationError, match="NaN|nonfinite|infinity"):
+        canonical_pytree(value)
+
+
+def test_unsupported_values_and_invalid_chunk_size_are_rejected() -> None:
+    """Keep the canonical vocabulary deliberately closed and bounded."""
+    with pytest.raises(CanonicalizationError, match="unsupported"):
+        canonical_pytree({1, 2})
+    with pytest.raises(ValueError, match="positive"):
+        tuple(iter_canonical_pytree_chunks([1], chunk_bytes=0))

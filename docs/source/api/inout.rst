@@ -1,7 +1,9 @@
 diffpes.inout
 =============
 
-VASP file parsers (POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, CHGCAR), HDF5 persistence, workflow helpers, and plotting utilities for ARPES simulation input.
+VASP file parsers (POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, CHGCAR),
+typed-result HDF5 persistence, portable JSON/HDF5 forward certificates,
+workflow helpers, and plotting utilities for ARPES simulation input.
 
 .. automodule:: diffpes.inout
    :members:

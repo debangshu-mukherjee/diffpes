@@ -19,6 +19,7 @@ Submodules
    :hidden:
 
    inout
+   certify
    maths
    radial
    simul
@@ -29,6 +30,10 @@ Submodules
 :mod:`diffpes.inout`
     VASP file parsers (POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, CHGCAR),
     HDF5 persistence, and plotting helpers for ARPES simulation input.
+
+:mod:`diffpes.certify`
+    JAX-native certified forward execution, provenance, evidence, policy
+    evaluation, information-flow diagnostics, and inspection.
 
 :mod:`diffpes.maths`
     Angular matrix elements for dipole photoemission: Gaunt coefficients,

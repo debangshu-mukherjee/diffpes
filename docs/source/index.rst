@@ -16,6 +16,7 @@ diffpes
    guides/spectral-broadening-and-self-energy
    guides/pytree-architecture
    guides/jax-transformability-and-gradients
+   guides/certified-forward-models
    guides/vasp-data-ingestion
    guides/expanded-wrappers-and-conventions
 

@@ -1,0 +1,283 @@
+"""Register built-in certified DiffPES forward models.
+
+Extended Summary
+----------------
+Defines the stable scientific identity and one-PyTree executor adapter for the
+current radial tight-binding ARPES forward model. Registration is explicit and
+idempotent; importing DiffPES does not mutate the registry.
+
+Routine Listings
+----------------
+:func:`execute_tb_radial`
+    Execute the radial ARPES model from one certification input PyTree.
+:func:`register_builtin_models`
+    Register built-in models and information-loss transformations.
+:func:`tb_radial_model_spec`
+    Return the stable scientific specification for radial ARPES.
+"""
+
+import jax.numpy as jnp
+from beartype import beartype
+from beartype.typing import Any
+
+from diffpes.simul.forward import simulate_tb_radial
+from diffpes.types import ArpesSpectrum
+from diffpes.types.certification import (
+    DomainResult,
+    ForwardModelSpec,
+    make_convention_ref,
+    make_domain_predicate,
+    make_domain_result,
+    make_forward_model_spec,
+)
+
+from .checks import list_checks, register_check
+from .contracts import make_transformation_contract
+from .registry import (
+    list_models,
+    list_transformations,
+    register_model,
+    register_transformation,
+)
+
+TB_RADIAL_MODEL_ID: str = "org.diffpes.model.arpes.tb_radial"
+TB_RADIAL_MODEL_VERSION: str = "0.1.0"
+_TB_RADIAL_INPUT_COUNT: int = 8
+
+
+@beartype
+def execute_tb_radial(inputs: tuple[Any, ...]) -> ArpesSpectrum:
+    """Execute the radial ARPES model from one certification input PyTree.
+
+    The tuple order is ``(bands, radial, simulation, polarization,
+    work_function, self_energy, radial_grid, momentum_width)``. Optional
+    entries use ``None`` and therefore become empty JAX subtrees.
+    """
+    if len(inputs) != _TB_RADIAL_INPUT_COUNT:
+        msg: str = "tb_radial certification inputs must contain eight entries"
+        raise ValueError(msg)
+    (
+        bands,
+        radial,
+        simulation,
+        polarization,
+        work_function,
+        self_energy,
+        grid,
+        dk,
+    ) = inputs
+    spectrum: ArpesSpectrum = simulate_tb_radial(
+        bands,
+        radial,
+        simulation,
+        polarization,
+        work_function=work_function,
+        self_energy=self_energy,
+        r_grid=grid,
+        dk=dk,
+    )
+    return spectrum
+
+
+@beartype
+def tb_radial_model_spec() -> ForwardModelSpec:
+    """Return the stable scientific specification for radial ARPES."""
+    conventions = (
+        make_convention_ref(
+            "org.diffpes.convention.energy.fermi_referenced_ev",
+            "1.0.0",
+            "{}",
+        ),
+        make_convention_ref(
+            "org.diffpes.convention.length.angstrom",
+            "1.0.0",
+            "{}",
+        ),
+        make_convention_ref(
+            "org.diffpes.convention.orbital.real_harmonics",
+            "1.0.0",
+            "{}",
+        ),
+    )
+    domain = (
+        make_domain_predicate(
+            "org.diffpes.domain.photon_energy.positive",
+            "photon_energy_ev > 0",
+            "eV",
+            "error",
+        ),
+        make_domain_predicate(
+            "org.diffpes.domain.radial_grid.positive",
+            "all(r_grid > 0)",
+            "bohr",
+            "error",
+        ),
+    )
+    spec: ForwardModelSpec = make_forward_model_spec(
+        model_id=TB_RADIAL_MODEL_ID,
+        model_version=TB_RADIAL_MODEL_VERSION,
+        observable_id="org.diffpes.observable.arpes.intensity",
+        implementation_ref="diffpes.simul.forward.simulate_tb_radial",
+        assumptions=(
+            "dipole_approximation",
+            "independent_particle_initial_state",
+            "free_electron_final_state",
+            "slater_radial_basis",
+            "fermi_dirac_occupation",
+            "voigt_energy_resolution",
+        ),
+        conventions=conventions,
+        domain=domain,
+        differentiable_paths=(
+            "bands.eigenvalues",
+            "bands.eigenvectors",
+            "radial.zeta",
+            "simulation.sigma",
+            "simulation.gamma",
+            "simulation.temperature",
+            "simulation.photon_energy",
+            "polarization.theta",
+            "polarization.phi",
+            "work_function",
+        ),
+        nondifferentiable_paths=(
+            "simulation.fidelity",
+            "polarization.polarization_type",
+        ),
+    )
+    return spec
+
+
+def _register_transformations() -> None:
+    """Register built-in semantic and information-loss contracts."""
+    contracts = (
+        make_transformation_contract(
+            "org.diffpes.transform.amplitude.intensity",
+            "1.0.0",
+            requires=("complex_photoemission_amplitude",),
+            produces=("arpes_intensity",),
+            preserves=("energy_reference", "momentum_coordinates"),
+            destroys=("overall_matrix_element_phase",),
+            invalidates_claims=("claim.amplitude.phase_recoverable",),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.band.incoherent_sum",
+            "1.0.0",
+            requires=("band_resolved_intensity",),
+            produces=("summed_intensity",),
+            preserves=("energy_reference", "momentum_coordinates"),
+            destroys=("band_component_attribution",),
+            invalidates_claims=("claim.band.attribution_preserved",),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.resolution.energy_voigt",
+            "1.0.0",
+            requires=("unbroadened_spectrum",),
+            produces=("energy_broadened_spectrum",),
+            preserves=("energy_reference", "momentum_coordinates"),
+            introduces=("finite_energy_resolution",),
+            destroys=("unresolved_energy_information",),
+            invalidates_claims=("claim.spectrum.unbroadened",),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.normalization.zscore",
+            "1.0.0",
+            requires=("absolute_intensity",),
+            produces=("standardized_intensity",),
+            preserves=("energy_reference", "momentum_coordinates"),
+            introduces=("dimensionless_standardization",),
+            destroys=("absolute_intensity_calibration",),
+            invalidates_claims=("claim.intensity.absolute_calibration",),
+        ),
+    )
+    existing: set[tuple[str, str]] = {
+        (item.transformation_id, item.transformation_version)
+        for item in list_transformations()
+    }
+    for contract in contracts:
+        key: tuple[str, str] = (
+            contract.transformation_id,
+            contract.transformation_version,
+        )
+        if key not in existing:
+            register_transformation(contract)
+
+
+def _check_positive_photon_energy(inputs: tuple[Any, ...]) -> DomainResult:
+    """Check that the radial model uses a positive photon energy."""
+    photon_energy = inputs[2].photon_energy
+    margin = photon_energy
+    result: DomainResult = make_domain_result(
+        predicate_id="org.diffpes.domain.photon_energy.positive",
+        measured=photon_energy,
+        reference=jnp.zeros(()),
+        residual=photon_energy,
+        tolerance=jnp.zeros(()),
+        margin=margin,
+        passed=margin > 0.0,
+        in_domain=margin > 0.0,
+        severity_code=jnp.asarray(2, dtype=jnp.int32),
+    )
+    return result
+
+
+def _check_positive_radial_grid(inputs: tuple[Any, ...]) -> DomainResult:
+    """Check that every explicit radial-grid point is positive."""
+    radial_grid = inputs[6]
+    margin = (
+        jnp.asarray(1e-6, dtype=jnp.float64)
+        if radial_grid is None
+        else jnp.min(radial_grid)
+    )
+    result: DomainResult = make_domain_result(
+        predicate_id="org.diffpes.domain.radial_grid.positive",
+        measured=margin,
+        reference=jnp.zeros(()),
+        residual=margin,
+        tolerance=jnp.zeros(()),
+        margin=margin,
+        passed=margin > 0.0,
+        in_domain=margin > 0.0,
+        severity_code=jnp.asarray(2, dtype=jnp.int32),
+    )
+    return result
+
+
+def _register_checks() -> None:
+    """Register built-in radial-model domain checks idempotently."""
+    registered: set[str] = set(list_checks())
+    checks: tuple[tuple[str, Any], ...] = (
+        (
+            "org.diffpes.domain.photon_energy.positive",
+            _check_positive_photon_energy,
+        ),
+        (
+            "org.diffpes.domain.radial_grid.positive",
+            _check_positive_radial_grid,
+        ),
+    )
+    for check_id, check_fn in checks:
+        if check_id not in registered:
+            register_check(check_id, check_fn)
+
+
+@beartype
+def register_builtin_models() -> None:
+    """Register built-in models and information-loss transformations."""
+    existing: set[tuple[str, str]] = {
+        (item.model_id, item.model_version) for item in list_models()
+    }
+    key: tuple[str, str] = (TB_RADIAL_MODEL_ID, TB_RADIAL_MODEL_VERSION)
+    if key not in existing:
+        register_model(tb_radial_model_spec(), execute_tb_radial)
+    _register_transformations()
+    _register_checks()
+
+
+__all__: list[str] = [
+    "execute_tb_radial",
+    "register_builtin_models",
+    "TB_RADIAL_MODEL_ID",
+    "TB_RADIAL_MODEL_VERSION",
+    "tb_radial_model_spec",
+]

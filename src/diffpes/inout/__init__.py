@@ -11,6 +11,8 @@ The submodules are organized as follows:
 
 - :mod:`chgcar`
     VASP CHGCAR file parser.
+- :mod:`certificate`
+    Portable JSON and HDF5 persistence for forward certificates.
 - :mod:`doscar`
     VASP DOSCAR file parser.
 - :mod:`eigenval`
@@ -31,8 +33,18 @@ The submodules are organized as follows:
 
 Routine Listings
 ----------------
+:obj:`CERTIFICATE_FORMAT`
+    Stable portable forward-certificate format identifier.
+:obj:`CERTIFICATE_SCHEMA_MAJOR`
+    Supported portable certificate schema major version.
+:obj:`CERTIFICATE_SCHEMA_MINOR`
+    Current portable certificate schema minor version.
+:class:`CertificateFormatError`
+    Error raised for malformed or unsupported certificate records.
 :func:`aggregate_atoms`
     Sum orbital projections over a set of atoms.
+:func:`attach_certificate_h5`
+    Atomically attach a forward certificate to an HDF5 result file.
 :func:`apply_kpath_ticks`
     Apply symmetry-point ticks/labels from KPathInfo to an axis.
 :func:`check_consistency`
@@ -42,6 +54,10 @@ Routine Listings
     plots.
 :func:`load_from_h5`
     Load PyTrees from an HDF5 file.
+:func:`load_certificate_h5`
+    Load a forward certificate embedded in an HDF5 result file.
+:func:`load_certificate_json`
+    Load a forward certificate from its portable JSON record.
 :func:`plot_arpes_spectrum`
     Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 :func:`plot_arpes_with_kpath`
@@ -67,6 +83,8 @@ Routine Listings
     Reduce 9 orbital channels to s/p/d totals.
 :func:`save_to_h5`
     Save one or more named PyTrees to an HDF5 file.
+:func:`save_certificate_json`
+    Atomically save a portable forward-certificate JSON record.
 :func:`select_atoms`
     Extract orbital projections for a subset of atoms.
 
@@ -77,6 +95,16 @@ parsing is inherently sequential. They convert parsed data
 to JAX arrays via factory functions.
 """
 
+from .certificate import (
+    CERTIFICATE_FORMAT,
+    CERTIFICATE_SCHEMA_MAJOR,
+    CERTIFICATE_SCHEMA_MINOR,
+    CertificateFormatError,
+    attach_certificate_h5,
+    load_certificate_h5,
+    load_certificate_json,
+    save_certificate_json,
+)
 from .chgcar import read_chgcar
 from .doscar import read_doscar
 from .eigenval import read_eigenval
@@ -100,10 +128,17 @@ from .poscar import read_poscar
 from .procar import read_procar
 
 __all__: list[str] = [
+    "CERTIFICATE_FORMAT",
+    "CERTIFICATE_SCHEMA_MAJOR",
+    "CERTIFICATE_SCHEMA_MINOR",
+    "CertificateFormatError",
     "aggregate_atoms",
     "apply_kpath_ticks",
+    "attach_certificate_h5",
     "check_consistency",
     "list_band_scatter_presets",
+    "load_certificate_h5",
+    "load_certificate_json",
     "load_from_h5",
     "plot_arpes_spectrum",
     "plot_arpes_with_kpath",
@@ -116,6 +151,7 @@ __all__: list[str] = [
     "read_poscar",
     "read_procar",
     "reduce_orbitals",
+    "save_certificate_json",
     "save_to_h5",
     "select_atoms",
 ]

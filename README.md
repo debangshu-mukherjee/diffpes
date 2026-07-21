@@ -13,7 +13,12 @@
 [![jax_badge](https://tinyurl.com/mucknrvu)](https://docs.jax.dev/)
 [![Lines of Code](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/debangshu-mukherjee/diffpes/main/.github/badges/loc.json)](https://github.com/debangshu-mukherjee/diffpes)
 
-JAX-based ARPES simulation toolkit with Python-native APIs.
+JAX-based ARPES simulation toolkit with Python-native APIs and certified
+forward execution. A certified run carries bounded physics claims, provenance,
+domain margins, derivative evidence, local information-flow diagnostics, and a
+named assurance policy in the same differentiable PyTree as its observable.
+The numerical certification path compiles and batches with JAX; portable
+serialization stays at the filesystem boundary.
 
 ## Expanded-input workflows
 

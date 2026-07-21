@@ -16,6 +16,8 @@ Routine Listings
 ----------------
 :mod:`inout`
     VASP file parsers for ARPES simulation input.
+:mod:`certify`
+    JAX-native scientific assurance for differentiable forward models.
 :mod:`maths`
     Angular matrix elements for dipole photoemission.
 :mod:`radial`
@@ -66,11 +68,21 @@ import jax  # noqa: E402
 
 jax.config.update("jax_enable_x64", True)
 
-from . import inout, maths, radial, simul, tightb, types, utils  # noqa: E402
+from . import (  # noqa: E402
+    certify,
+    inout,
+    maths,
+    radial,
+    simul,
+    tightb,
+    types,
+    utils,
+)
 
 __version__: str = version("diffpes")
 
 __all__: list[str] = [
+    "certify",
     "inout",
     "maths",
     "radial",

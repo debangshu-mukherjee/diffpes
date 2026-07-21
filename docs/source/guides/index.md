@@ -28,6 +28,7 @@ These guides are written for **physics researchers** working with ARPES who want
 |-------|-------------|
 | [PyTree Architecture](pytree-architecture.md) | Equinox data structures enabling GPU acceleration and autodiff |
 | [JAX Transformability and Gradients](jax-transformability-and-gradients.md) | Which of `grad`/`vmap`/`jit` are supported where, and gradient flow through the forward model |
+| [Certified Forward Models](certified-forward-models.md) | Bounded scientific claims, provenance, differentiable evidence, information flow, and portable records |
 | [VASP Data Ingestion](vasp-data-ingestion.md) | Parsing POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, and CHGCAR into PyTrees |
 | [Expanded Wrappers and Conventions](expanded-wrappers-and-conventions.md) | The `simulate_*_expanded` wrapper family and its argument conventions |
 
