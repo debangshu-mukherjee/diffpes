@@ -1,4 +1,4 @@
-r"""Energy-dependent self-energy evaluation for ARPES simulations.
+r"""Evaluate energy-dependent self-energy for ARPES simulations.
 
 Extended Summary
 ----------------
@@ -8,13 +8,13 @@ determines the Lorentzian component of the spectral linewidth
 and is critical for modelling correlated materials where
 quasiparticle lifetimes vary strongly with energy.
 
-Three parametric models are supported:
+The function supports three parametric models:
 
 - **constant**: Uniform broadening at all energies.
-- **polynomial**: Polynomial expansion in energy (e.g., Fermi-liquid
+- **polynomial**: Polynomial expansion in energy, for example Fermi-liquid
   quadratic dependence).
 - **tabulated**: Piecewise-linear interpolation from user-supplied
-  (energy, gamma) pairs (e.g., from GW or DMFT calculations).
+  (energy, gamma) pairs, for example from GW or DMFT computations.
 
 All modes are JAX-differentiable with respect to the model
 coefficients, enabling gradient-based fitting of self-energy
@@ -27,8 +27,8 @@ Routine Listings
 
 Notes
 -----
-The mode string is a Python-level dispatch (not JAX-traced),
-so only one code path is compiled per JIT invocation.
+The mode string controls Python dispatch outside JAX tracing. Therefore, JAX
+compiles one code path for each invocation.
 """
 
 import jax.numpy as jnp
@@ -45,26 +45,25 @@ def evaluate_self_energy(
 ) -> Float[Array, " ..."]:
     r"""Evaluate the imaginary self-energy :math:`\Gamma(E)`.
 
-    Computes the energy-dependent Lorentzian broadening width from
-    the specified self-energy model. The result replaces the constant
-    ``params.gamma`` in the Voigt profile when energy-dependent
-    lifetime effects are important (e.g., near the Fermi level or in
-    correlated materials).
+    The function computes an energy-dependent Lorentzian broadening width from
+    the specified self-energy model. The result replaces ``params.gamma`` in
+    the Voigt profile when the lifetime changes with energy. This behavior can
+    occur near the Fermi level or in correlated materials.
 
     The imaginary part of the electron self-energy determines the
     quasiparticle lifetime and thus the Lorentzian component of the
-    spectral linewidth. Three parametric models are supported:
+    spectral linewidth. The function supports three parametric models:
 
     - **constant**: A single scalar broadening applied uniformly at
       all energies. Equivalent to using ``params.gamma`` directly.
-    - **polynomial**: :math:`\Gamma(E) = \sum_n c_n E^n` where
-      ``coefficients`` are ordered highest-degree first (as expected
-      by ``jnp.polyval``). Useful for capturing the quadratic
+    - **polynomial**: :math:`\Gamma(E) = \sum_n c_n E^n`. Store
+      ``coefficients`` in descending degree order for ``jnp.polyval``. This
+      model can represent the quadratic
       Fermi-liquid self-energy :math:`\Gamma \propto (E - E_F)^2`.
     - **tabulated**: Piecewise-linear interpolation of user-supplied
       :math:`(\varepsilon_i, \Gamma_i)` pairs via ``jnp.interp``.
       Suitable for self-energies obtained from many-body calculations
-      (e.g., GW or DMFT).
+      such as GW or DMFT.
 
     :see: :class:`~.test_self_energy.TestEvaluateSelfEnergy`
 
@@ -94,7 +93,7 @@ def evaluate_self_energy(
     ----------
     energy : Float[Array, " ..."]
         Energy values in eV at which to evaluate the self-energy.
-        Can be any shape; the output will match.
+        Any shape. The output has the same shape.
     config : SelfEnergyConfig
         Self-energy model specification containing:
 

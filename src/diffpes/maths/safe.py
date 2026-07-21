@@ -27,9 +27,9 @@ Routine Listings
 
 Notes
 -----
-These helpers choose explicit subgradients on guarded sets. They are intended
-for numerical guards whose boundary convention is part of the caller's
-contract, not for replacing a known nonzero analytic limiting derivative.
+These helpers choose explicit subgradients on guarded sets. Use them when the
+boundary convention belongs to the caller's contract. Do not use them to
+replace a known nonzero analytic limiting derivative.
 """
 
 import jax.numpy as jnp
@@ -68,10 +68,10 @@ def safe_divide(
 
     Notes
     -----
-    The denominator is replaced by one before evaluating the inactive
-    division branch. At a zero denominator the selected subgradient with
-    respect to both quotient operands is zero; a traced ``fallback`` retains
-    its ordinary selected-value gradient.
+    The function replaces a zero denominator with one before it evaluates the
+    inactive division branch. At this boundary, both quotient operands have
+    zero selected subgradients. A traced ``fallback`` retains its usual
+    selected-value gradient.
     """
     nonzero: Bool[Array, " ..."] = denominator != 0.0
     sanitized_denominator: Float[Array, " ..."] = jnp.where(
@@ -103,9 +103,8 @@ def safe_sqrt(x: Float[Array, " ..."]) -> Float[Array, " ..."]:
 
     Notes
     -----
-    Non-positive inputs are replaced by one before the square root is
-    evaluated. The value and selected subgradient are both zero for
-    ``x <= 0``.
+    The function replaces nonpositive inputs with one before it computes the
+    square root. The selected value and subgradient are zero for ``x <= 0``.
     """
     positive: Bool[Array, " ..."] = x > 0.0
     sanitized_x: Float[Array, " ..."] = jnp.where(positive, x, 1.0)
@@ -145,8 +144,8 @@ def safe_norm(
 
     Notes
     -----
-    The squared norm is routed through :func:`safe_sqrt`. A zero vector has
-    value zero and the selected gradient is the zero vector.
+    The function passes the squared norm to :func:`safe_sqrt`. A zero vector
+    has value zero and a zero selected gradient.
     """
     squared_norms: Float[Array, " ..."] = jnp.sum(
         x * x, axis=axis, keepdims=keepdims
@@ -176,9 +175,9 @@ def safe_arccos(x: Float[Array, " ..."]) -> Float[Array, " ..."]:
 
     Notes
     -----
-    Inputs strictly inside ``(-1, 1)`` use ordinary ``arccos``. Values at
-    or beyond either endpoint are selected from constants, giving zero
-    subgradients while avoiding the infinite endpoint derivative.
+    Inputs strictly inside ``(-1, 1)`` use the ordinary ``arccos`` operation.
+    Constants supply values at or beyond either endpoint. This selection gives
+    zero subgradients and avoids the infinite endpoint derivative.
     """
     interior: Bool[Array, " ..."] = jnp.abs(x) < 1.0
     sanitized_x: Float[Array, " ..."] = jnp.where(interior, x, 0.0)
@@ -256,8 +255,9 @@ def safe_log(
 
     Notes
     -----
-    Inputs at or below the positive floor are replaced before logarithm
-    evaluation. Their selected subgradient with respect to ``x`` is zero.
+    The function replaces inputs at or below the positive floor before it
+    computes the logarithm. Their selected subgradient with respect to ``x``
+    is zero.
     """
     above_floor: Bool[Array, " ..."] = x > floor
     sanitized_x: Float[Array, " ..."] = jnp.where(above_floor, x, floor)
@@ -290,10 +290,9 @@ def safe_power(
 
     Notes
     -----
-    Non-positive bases are replaced by one before exponentiation, which
-    prevents fractional powers from entering the complex plane or producing
-    NaNs. The selected subgradient with respect to both inputs is zero on
-    the guarded set.
+    The function replaces nonpositive bases with one before exponentiation.
+    This replacement prevents complex or invalid results from fractional
+    powers. Both inputs have zero selected subgradients on the guarded set.
     """
     positive: Bool[Array, " ..."] = x > 0.0
     sanitized_x: Float[Array, " ..."] = jnp.where(positive, x, 1.0)

@@ -1,35 +1,32 @@
-"""Differentiable ARPES simulations in JAX.
+"""Provide differentiable ARPES simulations in JAX.
 
 Extended Summary
 ----------------
-A comprehensive toolkit for Angle-Resolved PhotoEmission
-Spectroscopy (ARPES) simulations using JAX for automatic
-differentiation and GPU acceleration. The package is built
-around a bidirectional thesis: the same differentiable physics
-that maps electronic structure forward to ARPES spectra also
-supports gradient-based inverse recovery of band-structure
-parameters from measured spectra. Supports six levels of
-physical sophistication from basic Gaussian convolution to full
-polarization-dependent dipole matrix element calculations.
+The package provides Angle-Resolved PhotoEmission Spectroscopy (ARPES)
+simulations with JAX automatic differentiation and GPU acceleration.
+The same differentiable physics maps an electronic structure to ARPES
+spectra and supports inverse recovery of band-structure parameters.
+The package provides six physics levels. These levels range from Gaussian
+convolution to polarization-dependent dipole matrix element computations.
 
 Routine Listings
 ----------------
 :mod:`inout`
-    VASP file parsers for ARPES simulation input.
+    Parse VASP files for ARPES simulation input.
 :mod:`certify`
     JAX-native scientific assurance for differentiable forward models.
 :mod:`maths`
-    Angular matrix elements for dipole photoemission.
+    Compute angular matrix elements for dipole photoemission.
 :mod:`radial`
-    Differentiable radial primitives for ARPES matrix elements.
+    Provide differentiable radial primitives for ARPES matrix elements.
 :mod:`simul`
-    ARPES simulation functions at six complexity levels.
+    Provide ARPES simulation functions at six complexity levels.
 :mod:`tightb`
     Provide native tight-binding tools and ARPES-side adapters.
 :mod:`types`
-    Type definitions and factory functions for diffpes.
+    Define types and factory functions for diffpes.
 :mod:`utils`
-    Utility functions for ARPES simulations.
+    Provide utility functions for ARPES simulations.
 
 Examples
 --------
@@ -41,11 +38,9 @@ Examples
 
 Notes
 -----
-All computations are JAX-compatible and support automatic
-differentiation for gradient-based optimization of ARPES
-simulation parameters. 64-bit precision is enabled at import,
-and XLA CPU threading flags are set before the JAX import so
-CPU execution uses multi-threaded kernels.
+All computations support JAX transformations and automatic differentiation
+of ARPES simulation parameters. The package enables 64-bit precision during
+import. It also sets the XLA CPU threading flags before it imports JAX.
 """
 
 import collections.abc

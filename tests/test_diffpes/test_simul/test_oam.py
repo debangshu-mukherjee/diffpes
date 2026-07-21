@@ -1,12 +1,10 @@
-"""Tests for orbital angular momentum calculation.
+"""Validate orbital angular momentum calculation.
 
 Extended Summary
 ----------------
-Exercises :func:`diffpes.simul.compute_oam`. Verifies that the output
-array has shape (K, B, A, 3) with channels [p_oam, d_oam, total_oam],
-that all values are finite, and that the third channel equals the sum
-of the first two. All test logic and assertions are documented in the
-docstrings of each test class and method.
+The tests exercise :func:`diffpes.simul.compute_oam`. They verify the
+``(K, B, A, 3)`` output shape and finite values. They also verify that the
+total channel equals the sum of the p and d channels.
 
 """
 
@@ -18,10 +16,9 @@ from diffpes.simul import compute_oam
 
 
 class TestComputeOam(chex.TestCase):
-    """Tests for :func:`diffpes.simul.oam.compute_oam`.
+    """Validate :func:`diffpes.simul.oam.compute_oam`.
 
-    Verifies output shape (K, B, A, 3) and that p/d/total
-    contributions are computed and finite.
+    The tests verify the output shape and finite p, d, and total contributions.
 
     :see: :func:`~diffpes.simul.compute_oam`
     """
@@ -29,7 +26,7 @@ class TestComputeOam(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify OAM array has shape (K, B, A, 3).
 
-        This case establishes the output shape contract for compute oam with the
+        The test establishes the output shape contract for compute oam with the
         concrete values and array shapes described below.
 
         Notes
@@ -58,7 +55,7 @@ class TestComputeOam(chex.TestCase):
     def test_total_is_p_plus_d(self) -> None:
         """Verify that the total OAM channel equals the sum of p and d channels.
 
-        This case establishes the total is p plus d contract for compute oam with the
+        The test establishes the total is p plus d contract for compute oam with the
         concrete values and array shapes described below.
 
         Notes

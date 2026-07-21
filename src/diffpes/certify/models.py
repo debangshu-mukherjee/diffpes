@@ -2,9 +2,10 @@
 
 Extended Summary
 ----------------
-Defines the stable scientific identity and one-PyTree executor adapter for the
-current radial tight-binding ARPES forward model. Registration is explicit and
-idempotent; importing DiffPES does not mutate the registry.
+This module defines the stable scientific identity for the current radial
+tight-binding ARPES forward model. It also defines the one-PyTree executor
+adapter. Registration is explicit and idempotent. Importing DiffPES does not
+mutate the registry.
 
 Routine Listings
 ----------------
@@ -71,8 +72,8 @@ def execute_tb_radial(inputs: tuple[Any, ...]) -> ArpesSpectrum:
                    dk=dk,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

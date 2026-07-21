@@ -1,8 +1,8 @@
-"""VASP CHGCAR file parser.
+"""Parse a VASP CHGCAR file.
 
 Extended Summary
 ----------------
-Reads VASP CHGCAR volumetric files and returns a carrier with the crystal
+The module reads VASP CHGCAR files and returns a carrier with the crystal
 geometry, charge density, and optional magnetization density.
 Scalar data uses :class:`~diffpes.types.VolumetricData`.
 Four-block vector data uses :class:`~diffpes.types.SOCVolumetricData`.
@@ -40,7 +40,7 @@ def read_chgcar(
 ) -> VolumetricData | SOCVolumetricData:
     r"""Parse a VASP CHGCAR file.
 
-    Supports three layouts:
+    The parser supports three layouts:
 
     - **ISPIN=1**: 1 grid block (charge only).
     - **ISPIN=2**: 2 grid blocks (charge + scalar magnetization).
@@ -213,30 +213,29 @@ def _read_poscar_header(
 
     Extended Summary
     ----------------
-    The first section of a CHGCAR file is identical to a POSCAR file:
-    comment, scaling factor, 3x3 lattice matrix, optional species names,
-    atom counts, optional selective-dynamics flag, coordinate type, and
-    atomic positions. This helper reads all of those fields from the
-    already-opened file handle and returns them as NumPy arrays / Python
+    A CHGCAR file starts with a POSCAR-compatible section. This section
+    contains a comment, a scale, lattice vectors, atom data, and coordinates.
+    It can also contain species names and a selective-dynamics flag. The helper
+    reads these fields from the open file. It returns NumPy arrays and Python
     containers.
 
     Implementation Logic
     --------------------
     1. Read and discard the comment line.
     2. Read the universal scaling factor (float).
-    3. Read three lines of three floats each for the lattice vectors and
-       multiply by the scaling factor.
-    4. Read the next line. If it contains no digits, treat it as the
-       VASP-5 element-symbol line and advance to the following line for
-       atom counts. Otherwise parse atom counts directly.
-    5. Compute total atom count as the sum of per-species counts.
-    6. Read the coordinate-type line. If it starts with ``'s'`` or
-       ``'S'``, selective dynamics is present; consume it and read the
-       next line for the actual coordinate type.
-    7. Determine whether coordinates are Cartesian (``'c'``/``'k'``)
+    3. Read three lattice vectors with three values each.
+    4. Multiply the lattice vectors by the scaling factor.
+    5. Read the next line.
+    6. If the line contains no digits, read it as the VASP-5 symbol line.
+    7. Read the atom counts from the next line.
+    8. Otherwise, read the current line as the atom counts.
+    9. Compute the total atom count as the sum of the species counts.
+    10. Read the coordinate-type line.
+    11. If the line starts with ``'s'`` or ``'S'``, read the next line.
+    12. Determine whether coordinates are Cartesian (``'c'``/``'k'``)
        or direct (fractional).
-    8. Read ``natoms`` coordinate lines of three floats each.
-    9. If Cartesian, scale by the scaling factor and convert to
+    13. Read ``natoms`` coordinate lines with three values each.
+    14. If Cartesian, apply the scaling factor and convert to
        fractional via ``np.linalg.solve(lattice.T, coords.T).T``.
 
     Parameters
@@ -324,10 +323,9 @@ def _find_next_grid_line(
 
     Extended Summary
     ----------------
-    Scans forward through ``lines`` starting at ``start_idx`` to locate
-    the next FFT grid-dimension header. In CHGCAR files, each
-    volumetric data block is preceded by a single line of three positive
-    integers ``NGX NGY NGZ``.
+    The helper scans ``lines`` from ``start_idx`` for the next FFT grid
+    header. One line with three positive integers precedes each CHGCAR
+    volumetric block.
 
     Implementation Logic
     --------------------
@@ -338,13 +336,12 @@ def _find_next_grid_line(
        fails to convert, skip the line.
     4. If all three integers are positive, return the line index and the
        ``(NGX, NGY, NGZ)`` tuple.
-    5. If no matching line is found, return ``(None, (0, 0, 0))``.
+    5. Return ``(None, (0, 0, 0))`` if no line matches.
 
     Parameters
     ----------
     lines : list[str]
-        All remaining lines of the CHGCAR file (after the POSCAR
-        header has been consumed).
+        All CHGCAR lines after the parser consumes the POSCAR header.
     start_idx : int
         Index within ``lines`` at which to begin scanning.
 
@@ -393,11 +390,9 @@ def _parse_float_block(
 
     Extended Summary
     ----------------
-    Reads a contiguous block of floating-point values spread across
-    multiple lines in the CHGCAR file. VASP writes volumetric data in
-    rows of typically 5 or 10 values per line, but the exact count can
-    vary. This function consumes lines until exactly ``nvals`` values
-    have been collected.
+    The helper reads a continuous block of floating-point values from multiple
+    CHGCAR lines. VASP usually writes 5 or 10 values per line. The exact count
+    can vary. The helper reads lines until it collects ``nvals`` values.
 
     Implementation Logic
     --------------------
@@ -406,14 +401,12 @@ def _parse_float_block(
 
        a. Skip blank lines.
        b. Attempt to parse every whitespace-separated token as a float.
-       c. If any token fails to parse, treat the entire line as
-          non-data (e.g., an augmentation-charge header) and stop
-          consuming from it.
-       d. Append parsed floats to the collection, taking at most as
-          many as needed to reach ``nvals``.
+       c. If one token is invalid, treat the complete line as non-data.
+       d. Stop before the invalid line.
+       e. Append only the values that the collection still needs.
 
-    3. After the loop, verify that exactly ``nvals`` values were
-       collected. Raise ``ValueError`` on a short read.
+    3. Verify that the collection contains exactly ``nvals`` values.
+    4. Raise ``ValueError`` after a short read.
 
     Parameters
     ----------
@@ -435,8 +428,8 @@ def _parse_float_block(
     Raises
     ------
     ValueError
-        If the end of ``lines`` is reached before ``nvals`` floats
-        have been collected.
+        If the helper reaches the end of ``lines`` before it collects
+        ``nvals`` floats.
     """
     token: str
 

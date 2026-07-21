@@ -127,14 +127,14 @@ class TestTBRadialCarrierGradients:
 
         Extended Summary
         ----------------
-        Differentiates one scalar spectrum observable jointly with respect to
-        eigenvalues, generic complex eigenvectors, Slater exponents, all three
-        polarization angles, and every continuous simulation parameter. Every
-        selected leaf must retain finite, nonzero, FD-correct sensitivity.
+        The test differentiates one scalar spectrum observable. It covers
+        eigenvalues, eigenvectors, Slater exponents, polarization angles,
+        and continuous simulation parameters. Every selected leaf must
+        retain finite, nonzero, FD-correct sensitivity.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.DiagonalizedBands
         slater: diffpes.types.SlaterParams
         params: diffpes.types.SimulationParams
@@ -218,14 +218,14 @@ class TestTBRadialBaselineGradient:
 
         Extended Summary
         ----------------
-        Uses the graphene fixture fully specified by the v0.1 forward tests:
-        three Gamma/K/M points, carbon 2p orbitals, a 300-point energy grid,
-        and a 2,000-point explicit radial grid. The expected derivative was
-        independently rerun against tag ``v0.1`` before being pinned here.
+        The test uses the v0.1 graphene fixture. It contains three Gamma/K/M
+        points, carbon 2p orbitals, 300 energies, and 2,000 radial points.
+        An independent run against tag ``v0.1`` supplies the expected
+        derivative.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         model: TBModel = make_graphene_model(t=-2.7)
         kpoints: Float[Array, "3 3"] = jnp.array(
             [

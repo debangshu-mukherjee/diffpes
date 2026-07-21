@@ -1,9 +1,9 @@
 # Inspect and persist a certified forward run
 
-This tutorial starts after a call to
-{func}`diffpes.certify.certify_forward`, which returns a
-{class}`~diffpes.types.CertifiedResult`. Its `value` is the ordinary JAX
-forward result; its `certificate` is the scientific-assurance record.
+This tutorial starts after you call {func}`diffpes.certify.certify_forward`.
+The function returns a {class}`~diffpes.types.CertifiedResult`. Its `value`
+contains the ordinary JAX result. Its `certificate` contains the scientific
+assurance record.
 
 ```python
 from diffpes.certify import (
@@ -56,24 +56,22 @@ model_inputs = (
 run = certify_forward(context, model_inputs)
 ```
 
-The forward model and its scientific checks run together through JAX. The
-envelope does not change the spectrum, JVP, or VJP produced by the ordinary
-model path.
+JAX runs the forward model and its scientific checks together. The envelope
+does not change the spectrum, JVP, or VJP from the ordinary model path.
 
 ## Read the record
 
-Start with the stable text summary rather than inspecting the PyTree fields by
-hand:
+Start with the stable text summary:
 
 ```python
 print(summarize_certificate(run.certificate))
 ```
 
-The summary identifies the model and implementation, policy outcome, input
-artifacts, assumptions and conventions, transformations and information
-losses, claims by status, and derivative/information diagnostics.
+The summary identifies the model, implementation, policy outcome, and input
+artifacts. It also lists conventions, transformations, information losses,
+claim states, derivatives, and information diagnostics.
 
-To see why a particular claim passed or failed, request it by its stable ID:
+Request a claim by its stable ID to examine its result:
 
 ```python
 print(
@@ -85,8 +83,8 @@ print(
 ```
 
 The explanation includes the subject, continuous margin, evidence method,
-reference values, residuals, and tolerances. A zero local sensitivity is
-reported as a local observation, never as global independence.
+reference values, residuals, and tolerances. The report treats zero local
+sensitivity as a local observation. It does not claim global independence.
 
 ## Save beside the result
 
@@ -98,8 +96,7 @@ from diffpes.inout import save_certificate_json
 save_certificate_json(run.certificate, "tb-radial.certificate.json")
 ```
 
-Use HDF5 attachment when the numerical result is already stored in an HDF5
-file:
+Use an HDF5 attachment when an HDF5 file already stores the numerical result:
 
 ```python
 from diffpes.inout import attach_certificate_h5, save_to_h5
@@ -109,7 +106,7 @@ attach_certificate_h5("tb-radial.h5", "spectrum", run.certificate)
 ```
 
 The HDF5 attachment contains the exact authoritative JSON bytes. Both forms
-load to the same {class}`~diffpes.types.ForwardCertificate`:
+load as the same {class}`~diffpes.types.ForwardCertificate`:
 
 ```python
 from diffpes.inout import load_certificate_h5, load_certificate_json
@@ -119,9 +116,9 @@ from_h5 = load_certificate_h5("tb-radial.h5", "spectrum")
 ```
 
 The stored consistency marker detects accidental storage mismatches only. It
-provides no security or physical-assurance claim. Scientific assurance comes
-from the explicit contracts, differentiable diagnostics, evidence, and policy
-evaluation recorded in the certificate.
+does not provide security or physical assurance. The certificate records the
+contracts, differentiable diagnostics, evidence, and policy evaluation that
+provide scientific assurance.
 
 ## Compare reruns
 
@@ -132,7 +129,7 @@ change = diff_certificates(from_json, later_run.certificate)
 print(change.summary)
 ```
 
-The comparison distinguishes model/input/semantic changes from numerical,
-environment, and audit-only differences. Review scientific differences before
-comparing spectra: identical array shapes do not imply identical physical
-meaning.
+The comparison separates model, input, and semantic changes from numerical,
+environmental, and audit-only differences. Review the scientific differences
+before you compare spectra. Identical array shapes do not imply identical
+physical meaning.

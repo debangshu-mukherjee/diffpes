@@ -1,4 +1,4 @@
-"""Types-owned carriers for artifact provenance and information flow.
+"""Store types-owned carriers for artifact provenance and information flow.
 
 Extended Summary
 ----------------
@@ -348,8 +348,8 @@ def make_provenance_graph(  # noqa: PLR0913
     TypeError
         If ``records`` or ``information`` contains the wrong carrier type.
     ValueError
-        If text values are blank or duplicated, initial semantics do not cover
-        every external input, or information-state node IDs are duplicated.
+        If text values are blank or duplicated. The function also rejects
+        incomplete initial semantics or duplicate information-state node IDs.
 
     Notes
     -----

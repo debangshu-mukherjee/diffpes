@@ -34,7 +34,7 @@ class TestVolumetricData:
 
         Notes
         -----
-        Constructs the scalar carrier through its factory, uses JAX tree
+        The test constructs the scalar carrier through its factory, uses JAX tree
         utilities for reconstruction, and compares numerical and static fields.
         """
         volume: VolumetricData = make_volumetric_data(
@@ -71,7 +71,7 @@ class TestSOCVolumetricData:
 
         Notes
         -----
-        Constructs the SOC carrier, applies a JAX flatten and unflatten round
+        The test constructs the SOC carrier, applies a JAX flatten and unflatten round
         trip, and compares all numerical grid leaves with Chex.
         """
         volume: SOCVolumetricData = make_soc_volumetric_data(
@@ -113,7 +113,7 @@ class TestMakeVolumetricData:
 
         Notes
         -----
-        Constructs a one-species volume without ``atom_counts`` and uses Chex
+        The test constructs a one-species volume without ``atom_counts`` and uses Chex
         to compare the resulting array shape and dtype.
         """
         volume: VolumetricData = make_volumetric_data(
@@ -130,8 +130,8 @@ class TestMakeVolumetricData:
     def test_rejects_grid_shape_mismatch(self) -> None:
         """Reject charge data inconsistent with the declared grid shape.
 
-        The check verifies that a ``2 x 2 x 2`` charge array cannot be labeled
-        as a ``1 x 1 x 1`` grid.
+        The check verifies that a ``2 x 2 x 2`` charge array cannot have a
+        ``1 x 1 x 1`` grid label.
 
         Notes
         -----
@@ -151,8 +151,8 @@ class TestMakeVolumetricData:
 class TestMakeSOCVolumetricData:
     """Validate :func:`~diffpes.types.make_soc_volumetric_data`.
 
-    The SOC factory must provide the same atom-count sentinel and require the
-    vector magnetization spatial dimensions to match the static grid.
+    The SOC factory must provide the same atom-count sentinel. It must require
+    vector magnetization dimensions that match the static grid.
 
     :see: :func:`~diffpes.types.make_soc_volumetric_data`
     """
@@ -165,7 +165,7 @@ class TestMakeSOCVolumetricData:
 
         Notes
         -----
-        Constructs a one-point SOC volume without ``atom_counts`` and checks
+        The test constructs a one-point SOC volume without ``atom_counts`` and checks
         the resulting array dtype and shape.
         """
         volume: SOCVolumetricData = make_soc_volumetric_data(

@@ -1,8 +1,8 @@
-"""Band structure and orbital projection data structures.
+"""Define band-structure and orbital-projection data structures.
 
 Extended Summary
 ----------------
-Defines PyTree types for electronic band structure data and
+This module defines PyTree types for electronic band-structure data and
 orbital-resolved projections from VASP calculations. These are
 the primary inputs to all ARPES simulation functions.
 
@@ -49,17 +49,15 @@ from .constants import N_ORBITALS, N_SPIN_COMPONENTS
 class BandStructure(eqx.Module):
     """Store electronic band-structure data in a JAX PyTree.
 
-    Stores the core outputs of a DFT band structure calculation: the
-    eigenvalue spectrum E_n(k), the k-point mesh in reciprocal space, the
-    integration weights for each k-point, and the Fermi energy. Together
-    these fields fully describe the single-particle electronic structure
-    needed to simulate angle-resolved photoemission spectra.
+    This type stores the core outputs of a DFT band-structure calculation.
+    The outputs include E_n(k), the reciprocal-space k-point mesh, the
+    k-point integration weights, and the Fermi energy. These fields describe
+    the single-particle electronic structure for ARPES simulations.
 
-    This type exists as a JAX-compatible PyTree so that band structure data
-    can flow through ``jax.jit``, ``jax.vmap``, and ``jax.grad``
-    transformations without manual flattening. All four fields are
-    JAX-traced arrays (no static auxiliary data), which means the entire
-    object is differentiable with respect to any of its fields.
+    This JAX-compatible PyTree passes through ``jax.jit``, ``jax.vmap``, and
+    ``jax.grad`` without manual flattening. All four fields contain JAX-traced
+    arrays and no static auxiliary data. JAX can differentiate the object
+    with respect to each field.
 
 
     :see: :class:`~.test_bands.TestBandStructure`
@@ -145,19 +143,17 @@ def make_spin_orbital_projection(  # noqa: DOC503
 ) -> SpinOrbitalProjection:
     """Create a validated ``SpinOrbitalProjection`` instance.
 
-    Factory function that validates and normalises orbital projection
+    The factory validates and normalizes orbital projection
     data with mandatory spin before constructing a
-    ``SpinOrbitalProjection`` PyTree. This is the spin-orbit coupling
-    counterpart to :func:`make_orbital_projection`: it requires the
-    ``spin`` field and therefore guarantees that downstream SOC
-    simulation kernels receive complete spin data without runtime
-    checks.
+    ``SpinOrbitalProjection`` PyTree. This factory supports spin-orbit
+    coupling. Unlike :func:`make_orbital_projection`, it requires the ``spin``
+    field. Therefore, downstream SOC simulation kernels receive complete spin
+    data without runtime checks.
 
-    All non-None arrays are cast to ``float64`` for numerical
-    stability. The function is decorated with
-    ``@jaxtyped(typechecker=beartype)`` so that shape constraints
-    (K, B, A dimensions must agree across all provided arrays) are
-    checked at call time.
+    The factory casts all present arrays to ``float64`` for numerical
+    stability. ``@jaxtyped(typechecker=beartype)`` checks the shape
+    constraints at call time. The K, B, and A dimensions must agree across
+    all arrays.
 
     :see: :class:`~.test_bands.TestMakeSpinOrbitalProjection`
 
@@ -210,9 +206,9 @@ def make_spin_orbital_projection(  # noqa: DOC503
     Raises
     ------
     ValueError
-        If the projection, spin, and optional OAM axes disagree, the
-        projection orbital axis does not contain 9 columns, or the spin
-        component axis does not contain 6 columns.
+        If the projection, spin, and optional OAM axes disagree. The function
+        also rejects an orbital axis without 9 columns or a spin axis without
+        6 columns.
     EquinoxRuntimeError
         If projection values are non-finite or negative, or spin values are
         non-finite.
@@ -287,16 +283,14 @@ def make_spin_orbital_projection(  # noqa: DOC503
 class SpinBandStructure(eqx.Module):
     """Store spin-resolved electronic band-structure data in a JAX PyTree.
 
-    Stores eigenvalues for both spin channels from an ISPIN=2 VASP
+    This type stores eigenvalues for both spin channels from an ISPIN=2 VASP
     calculation. The two spin channels share the same k-point mesh
-    and weights. This type is returned by ``read_eigenval`` when
-    ``return_mode="full"`` and the EIGENVAL file contains spin-
-    polarized data.
+    and weights. ``read_eigenval`` returns this type when
+    ``return_mode="full"`` and the EIGENVAL file contains spin-polarized data.
 
-    This class is an immutable :class:`equinox.Module` PyTree. All five
-    fields are dense JAX
-    arrays stored as children (no auxiliary data), making the entire
-    object fully differentiable with respect to any of its fields.
+    This class is an immutable :class:`equinox.Module` PyTree. JAX stores all
+    five dense array fields as children and uses no auxiliary data. JAX can
+    differentiate the complete object with respect to each field.
 
 
     :see: :class:`~.test_bands.TestSpinBandStructure`
@@ -350,19 +344,17 @@ def make_spin_band_structure(  # noqa: DOC503
 ) -> SpinBandStructure:
     """Create a validated ``SpinBandStructure`` instance.
 
-    Factory function that validates and normalises raw spin-resolved
+    The factory validates and normalizes raw spin-resolved
     band structure data before constructing a ``SpinBandStructure``
     PyTree. This is the spin-polarized (ISPIN=2) counterpart to
-    :func:`make_band_structure`. All input arrays are cast to
-    ``float64`` for numerical stability. Missing k-point weights are
-    replaced by uniform weights so that callers do not need to handle
-    the common equal-weight case explicitly.
+    :func:`make_band_structure`. The factory casts all input arrays to
+    ``float64`` for numerical stability. It replaces missing k-point weights
+    with uniform weights. Callers therefore do not handle the common
+    equal-weight case explicitly.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape and dtype constraints on the inputs are checked at
-    call time, catching mismatched dimensions (e.g. different K or B
-    between the two spin channels) before they propagate into the
-    simulation pipeline.
+    ``@jaxtyped(typechecker=beartype)`` checks the input shapes and dtypes at
+    call time. This check finds different K or B dimensions before the
+    simulation uses them.
 
     :see: :class:`~.test_bands.TestMakeSpinBandStructure`
 
@@ -509,17 +501,17 @@ def make_spin_band_structure(  # noqa: DOC503
 class ArpesSpectrum(eqx.Module):
     """Store ARPES simulation output in a JAX PyTree.
 
-    Stores the result of an ARPES simulation: a two-dimensional
-    photoemission intensity map I(k, E) together with its energy axis.
+    This type stores an ARPES simulation result. The result contains a
+    two-dimensional photoemission intensity map I(k, E) and its energy axis.
     The k-point dimension indexes the momentum-resolved detector
     channels, and the energy dimension indexes the binding-energy grid
-    on which the spectral function was evaluated.
+    for the spectral function.
 
-    This type exists as a JAX-compatible PyTree so that simulated
-    spectra can be compared to experimental data inside ``jit``-compiled
-    loss functions and differentiated with ``grad`` for parameter
-    fitting. Both fields are dense JAX arrays with no static auxiliary
-    data, making the entire object fully differentiable.
+    This JAX-compatible PyTree lets ``jit``-compiled loss functions compare
+    simulated spectra with experimental data. ``grad`` can differentiate
+    these functions during parameter fitting. Both fields contain dense JAX
+    arrays and no static auxiliary data. JAX can differentiate the complete
+    object.
 
 
     :see: :class:`~.test_bands.TestArpesSpectrum`
@@ -551,18 +543,17 @@ def make_band_structure(  # noqa: DOC503
 ) -> BandStructure:
     """Create a validated ``BandStructure`` instance.
 
-    Factory function that validates and normalises raw band structure
-    data before constructing a ``BandStructure`` PyTree. All input
-    arrays are cast to ``float64`` for numerical stability in
-    downstream ARPES simulations (energy differences and Lorentzian
-    broadening are sensitive to precision). Missing k-point weights
-    are replaced by uniform weights so that callers do not need to
-    handle the common equal-weight case explicitly.
+    The factory validates and normalizes raw band-structure
+    data before it constructs a ``BandStructure`` PyTree. The factory casts
+    all input arrays to ``float64`` for numerical stability. Energy
+    differences and Lorentzian broadening depend on precision. The factory
+    replaces missing k-point
+    weights with uniform weights. Callers therefore do not handle the common
+    equal-weight case explicitly.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape and dtype constraints on the inputs are checked at
-    call time, catching mismatched dimensions before they propagate
-    into the simulation pipeline.
+    ``@jaxtyped(typechecker=beartype)`` checks input shapes and dtypes at call
+    time. This check finds different dimensions before the simulation uses
+    them.
 
     :see: :class:`~.test_bands.TestMakeBandStructure`
 
@@ -690,16 +681,15 @@ def make_orbital_projection(  # noqa: DOC503
 ) -> OrbitalProjection:
     """Create a validated ``OrbitalProjection`` instance.
 
-    Factory function that validates and normalises raw orbital
+    The factory validates and normalizes raw orbital
     projection data before constructing an ``OrbitalProjection``
-    PyTree. The mandatory ``projections`` array is cast to ``float64``;
-    the optional ``spin`` and ``oam`` arrays are cast only when they
-    are not ``None``, preserving the sentinel meaning of ``None`` for
-    calculations without spin-orbit coupling.
+    PyTree. The factory casts the mandatory ``projections`` array to
+    ``float64``. It casts the optional ``spin`` and ``oam`` arrays only when
+    they are present. Thus, ``None`` continues to identify calculations
+    without spin-orbit coupling.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape constraints (K, B, A dimensions must agree across
-    all provided arrays) are checked at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the shape constraints at call
+    time. The K, B, and A dimensions must agree across all arrays.
 
     :see: :class:`~.test_bands.TestMakeOrbitalProjection`
 
@@ -823,15 +813,13 @@ def make_arpes_spectrum(  # noqa: DOC503
 ) -> ArpesSpectrum:
     """Create a validated ``ArpesSpectrum`` instance.
 
-    Factory function that validates and normalises simulated ARPES
-    data before constructing an ``ArpesSpectrum`` PyTree. Both input
-    arrays are cast to ``float64`` so that downstream loss functions
-    (e.g. mean-squared error against experimental data) maintain full
-    double-precision accuracy.
+    The factory validates and normalizes simulated ARPES
+    data before it constructs an ``ArpesSpectrum`` PyTree. The factory casts
+    both input arrays to ``float64``. Downstream loss functions therefore
+    maintain double-precision accuracy.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that the energy dimension *E* is checked for consistency
-    between ``intensity`` and ``energy_axis`` at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the energy dimension *E* at call
+    time. This dimension must agree between ``intensity`` and ``energy_axis``.
 
     :see: :class:`~.test_bands.TestMakeArpesSpectrum`
 

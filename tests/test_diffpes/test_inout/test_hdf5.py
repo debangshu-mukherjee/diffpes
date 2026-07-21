@@ -1,16 +1,12 @@
-"""Tests for HDF5 PyTree save/load.
+"""Validate HDF5 PyTree save/load.
 
 Extended Summary
 ----------------
-Exercises save_to_h5 and load_from_h5 for the core registered PyTree types:
-DensityOfStates, BandStructure, CrystalGeometry, KPathInfo,
-SimulationParams, PolarizationConfig, ArpesSpectrum, OrbitalProjection
-(variants with spin/oam), and multi-PyTree save/load. Round-trip tests
-assert numerical equality within tolerance; error-handling tests assert
-raises for unknown types, missing groups, and invalid options.
-Compression and dataset flags are tested where applicable. All test
-logic and assertions are documented in the docstrings of each test
-class and method.
+The tests exercise ``save_to_h5`` and ``load_from_h5`` for all registered
+PyTree types. They cover spin and OAM variants and files with multiple
+PyTrees. Round-trip tests compare numerical values within tolerance.
+Error tests cover unknown types, missing groups, and invalid options.
+The tests also verify applicable compression and data set options.
 
 """
 
@@ -56,7 +52,7 @@ class TestDensityOfStates(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify DensityOfStates survives HDF5 round-trip.
 
-        This case establishes the round trip contract for density of states with the
+        The test establishes the round trip contract for density of states with the
         concrete values and array shapes described below.
 
         Notes
@@ -101,8 +97,8 @@ class TestDensityOfStates(chex.TestCase):
 class TestBandStructure(chex.TestCase):
     """Round-trip tests for BandStructure HDF5 serialization.
 
-    Verifies eigenvalues, kpoints, weights, and Fermi energy
-    are preserved through save/load.
+    The tests verify preservation of the eigenvalues, k-points, weights,
+    and Fermi energy through save and load operations.
 
     :see: :func:`~diffpes.inout.save_to_h5`
     :see: :func:`~diffpes.inout.load_from_h5`
@@ -111,7 +107,7 @@ class TestBandStructure(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify BandStructure survives HDF5 round-trip.
 
-        This case establishes the round trip contract for band structure with the
+        The test establishes the round trip contract for band structure with the
         concrete values and array shapes described below.
 
         Notes
@@ -172,7 +168,7 @@ class TestArpesSpectrum(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify ArpesSpectrum survives HDF5 round-trip.
 
-        This case establishes the round trip contract for arpes spectrum with the
+        The test establishes the round trip contract for arpes spectrum with the
         concrete values and array shapes described below.
 
         Notes
@@ -223,7 +219,7 @@ class TestOrbitalProjection(chex.TestCase):
     def test_round_trip_none_optionals(self) -> None:
         """Verify OrbitalProjection with None spin/oam.
 
-        This case establishes the round trip none optionals contract for orbital
+        The test establishes the round trip none optionals contract for orbital
         projection with the concrete values and array shapes described below.
 
         Notes
@@ -264,7 +260,7 @@ class TestOrbitalProjection(chex.TestCase):
     def test_round_trip_with_spin(self) -> None:
         """Verify OrbitalProjection with non-None spin.
 
-        This case establishes the round trip with spin contract for orbital projection
+        The test establishes the round trip with spin contract for orbital projection
         with the concrete values and array shapes described below.
 
         Notes
@@ -305,7 +301,7 @@ class TestOrbitalProjection(chex.TestCase):
     def test_round_trip_with_all(self) -> None:
         """Verify OrbitalProjection with spin and oam.
 
-        This case establishes the round trip with all contract for orbital projection
+        The test establishes the round trip with all contract for orbital projection
         with the concrete values and array shapes described below.
 
         Notes
@@ -358,7 +354,7 @@ class TestSimulationParams(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify SimulationParams survives HDF5 round-trip.
 
-        This case establishes the round trip contract for simulation params with the
+        The test establishes the round trip contract for simulation params with the
         concrete values and array shapes described below.
 
         Notes
@@ -368,7 +364,7 @@ class TestSimulationParams(chex.TestCase):
 
         **Expected assertions**
 
-        All float fields match; fidelity int is preserved.
+        All float fields match, and the integer fidelity matches.
         """
         td: str
 
@@ -416,7 +412,7 @@ class TestPolarizationConfig(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify PolarizationConfig survives HDF5 round-trip.
 
-        This case establishes the round trip contract for polarization config with the
+        The test establishes the round trip contract for polarization config with the
         concrete values and array shapes described below.
 
         Notes
@@ -426,7 +422,7 @@ class TestPolarizationConfig(chex.TestCase):
 
         **Expected assertions**
 
-        Float angles match; polarization_type string preserved.
+        The float angles and the ``polarization_type`` string match.
         """
         td: str
 
@@ -462,7 +458,7 @@ class TestKPathInfo(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify KPathInfo survives HDF5 round-trip.
 
-        This case establishes the round trip contract for k path info with the concrete
+        The test establishes the round trip contract for k path info with the concrete
         values and array shapes described below.
 
         Notes
@@ -472,7 +468,7 @@ class TestKPathInfo(chex.TestCase):
 
         **Expected assertions**
 
-        Integer arrays match; mode and labels strings preserved.
+        The integer arrays, mode, and label strings match.
         """
         td: str
 
@@ -507,12 +503,12 @@ class TestKPathInfo(chex.TestCase):
     def test_loads_pre_migration_aux_format(self) -> None:
         """Load K-path metadata written by the NamedTuple-era codec.
 
-        This case establishes the loads pre migration aux format contract for k path
+        The test establishes the loads pre migration aux format contract for k path
         info with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         temporary_directory: str
         h5_file: h5py.File
         field: Field[Any]
@@ -575,7 +571,7 @@ class TestCrystalGeometry(chex.TestCase):
     def test_round_trip(self) -> None:
         """Verify CrystalGeometry survives HDF5 round-trip.
 
-        This case establishes the round trip contract for crystal geometry with the
+        The test establishes the round trip contract for crystal geometry with the
         concrete values and array shapes described below.
 
         Notes
@@ -585,7 +581,7 @@ class TestCrystalGeometry(chex.TestCase):
 
         **Expected assertions**
 
-        All four arrays match; symbols tuple preserved.
+        All four arrays and the symbols tuple match.
         """
         td: str
 
@@ -623,7 +619,7 @@ class TestCrystalGeometry(chex.TestCase):
 
 
 class TestSaveToH5(chex.TestCase):
-    """Tests for saving/loading multiple PyTrees in one file.
+    """Validate saving/loading multiple PyTrees in one file.
 
     Verifies multi-group HDF5 files and both loading modes
     (by name, load all).
@@ -634,7 +630,7 @@ class TestSaveToH5(chex.TestCase):
     def test_save_load_multiple(self) -> None:
         """Verify two PyTrees coexist in one HDF5 file.
 
-        This case establishes the save load multiple contract for multi py tree with the
+        The test establishes the save load multiple contract for multi py tree with the
         concrete values and array shapes described below.
 
         Notes
@@ -685,7 +681,7 @@ class TestSaveToH5(chex.TestCase):
     def test_load_all_returns_dict(self) -> None:
         """Verify load_from_h5 without name returns dict.
 
-        This case establishes the load all returns dict contract for multi py tree with
+        The test establishes the load all returns dict contract for multi py tree with
         the concrete values and array shapes described below.
 
         Notes
@@ -763,10 +759,10 @@ class TestLoadFromH5(chex.TestCase):
 
 
 class TestErrorHandling(chex.TestCase):
-    """Tests for error conditions in save/load functions.
+    """Validate error conditions in save/load functions.
 
-    Verifies that appropriate exceptions are raised for
-    invalid inputs and missing data.
+    The tests verify the applicable exceptions for invalid inputs and
+    missing data.
 
     :see: :func:`~diffpes.inout.save_to_h5`
     :see: :func:`~diffpes.inout.load_from_h5`
@@ -775,7 +771,7 @@ class TestErrorHandling(chex.TestCase):
     def test_no_pytrees_raises(self) -> None:
         """Verify save_to_h5 with no kwargs raises ValueError.
 
-        This case establishes the no pytrees raises contract for error handling with the
+        The test establishes the no pytrees raises contract for error handling with the
         concrete values and array shapes described below.
 
         Notes
@@ -784,7 +780,7 @@ class TestErrorHandling(chex.TestCase):
 
         **Expected assertions**
 
-        ValueError is raised.
+        The function raises ``ValueError``.
         """
         td: str
 
@@ -798,7 +794,7 @@ class TestErrorHandling(chex.TestCase):
     def test_unsupported_type_raises(self) -> None:
         """Verify unregistered type raises TypeError.
 
-        This case establishes the unsupported type raises contract for error handling
+        The test establishes the unsupported type raises contract for error handling
         with the concrete values and array shapes described below.
 
         Notes
@@ -808,7 +804,7 @@ class TestErrorHandling(chex.TestCase):
 
         **Expected assertions**
 
-        TypeError is raised.
+        The function raises ``TypeError``.
         """
         td: str
 
@@ -822,7 +818,7 @@ class TestErrorHandling(chex.TestCase):
     def test_missing_group_raises(self) -> None:
         """Verify load with nonexistent name raises KeyError.
 
-        This case establishes the missing group raises contract for error handling with
+        The test establishes the missing group raises contract for error handling with
         the concrete values and array shapes described below.
 
         Notes
@@ -832,7 +828,7 @@ class TestErrorHandling(chex.TestCase):
 
         **Expected assertions**
 
-        KeyError is raised.
+        The function raises ``KeyError``.
         """
         td: str
 
@@ -852,7 +848,7 @@ class TestErrorHandling(chex.TestCase):
     def test_load_unknown_pytree_type_raises(self) -> None:
         """Verify loading a group with unknown _pytree_type raises TypeError.
 
-        This case establishes the load unknown pytree type raises contract for error
+        The test establishes the load unknown pytree type raises contract for error
         handling with the concrete values and array shapes described below.
 
         Notes
@@ -863,7 +859,7 @@ class TestErrorHandling(chex.TestCase):
 
         **Expected assertions**
 
-        TypeError is raised with message referring to unknown type.
+        The function raises ``TypeError`` with the unknown type in its message.
         """
         td: str
         f: h5py.File
@@ -883,15 +879,15 @@ class TestErrorHandling(chex.TestCase):
 
 
 class TestDatasetFlags(chex.TestCase):
-    """Tests for HDF5 dataset storage flags in save_to_h5.
+    """Validate HDF5 dataset storage flags in save_to_h5.
 
     :see: :func:`~diffpes.inout.save_to_h5`
     """
 
     def test_compression_flags_applied_to_arrays(self) -> None:
-        """Verify storage flags are applied to non-scalar datasets.
+        """Verify application of storage flags to non-scalar data sets.
 
-        This case establishes the compression flags applied to arrays contract for
+        The test establishes the compression flags applied to arrays contract for
         dataset flags with the concrete values and array shapes described below.
 
         Notes
@@ -960,7 +956,7 @@ class TestDatasetFlags(chex.TestCase):
     def test_compression_opts_without_compression_raises(self) -> None:
         """Verify invalid compression flag combination raises ValueError.
 
-        This case establishes the compression opts without compression raises contract
+        The test establishes the compression opts without compression raises contract
         for dataset flags with the concrete values and array shapes described below.
 
         Notes
@@ -970,7 +966,7 @@ class TestDatasetFlags(chex.TestCase):
 
         **Expected assertions**
 
-        ValueError is raised with explanatory message.
+        The function raises ``ValueError`` with an explanatory message.
         """
         td: str
 
@@ -992,7 +988,7 @@ class TestDatasetFlags(chex.TestCase):
 
 
 class TestStaticMetadataEncoding:
-    """Tests for generic static Equinox metadata encoding.
+    """Validate generic static Equinox metadata encoding.
 
     :see: :func:`~diffpes.inout.save_to_h5`
     :see: :func:`~diffpes.inout.load_from_h5`
@@ -1001,12 +997,12 @@ class TestStaticMetadataEncoding:
     def test_encode_and_decode_round_trip(self) -> None:
         """Preserve nested tuple types through the generic JSON codec.
 
-        This case establishes the encode and decode round trip contract for static
+        The test establishes the encode and decode round trip contract for static
         metadata encoding with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         aux: tuple[tuple[int, int, int], tuple[str, str]]
         encoded: Any
         decoded: Any
@@ -1019,12 +1015,12 @@ class TestStaticMetadataEncoding:
     def test_encode_returns_tagged_json_mapping(self) -> None:
         """Encode tuples as JSON-compatible tagged mappings.
 
-        This case establishes the encode returns tagged json mapping contract for static
+        The test establishes the encode returns tagged json mapping contract for static
         metadata encoding with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         aux: tuple[tuple[int, int, int], tuple[str, str]]
         encoded: Any
 

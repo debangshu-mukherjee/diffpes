@@ -1,7 +1,7 @@
 """Validate the shared invalid-input assertion helper.
 
-The tests exercise successful eager and compiled rejection checks and the
-failure raised when an invalid value is unexpectedly accepted.
+The tests exercise successful eager and compiled rejection checks.
+They also verify the failure for an accepted invalid value.
 """
 
 import equinox as eqx
@@ -25,7 +25,7 @@ class TestAssertRejects:
     def test_assert_rejects_eager_and_jit(self) -> None:
         """Accept a value-threaded eager and compiled rejection.
 
-        Confirms the helper recognizes the same Equinox runtime error with and
+        The test confirms the helper recognizes the same Equinox runtime error with and
         without JIT compilation for the scalar value ``-1``.
 
         Notes
@@ -54,12 +54,12 @@ class TestAssertRejects:
     def test_assert_rejects_fails_for_passing_callable(self) -> None:
         """Fail when a callable accepts invalid test data.
 
-        Confirms the helper raises ``AssertionError`` instead of silently
+        The test confirms the helper raises ``AssertionError`` instead of silently
         accepting a callable with no validation behavior.
 
         Notes
         -----
-        Passes the scalar ``-1`` through an identity function, disables the
+        The test passes the scalar ``-1`` through an identity function, disables the
         redundant JIT repeat, and matches the missing-exception diagnostic.
         """
 

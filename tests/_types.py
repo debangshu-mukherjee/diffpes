@@ -2,9 +2,9 @@
 
 Extended Summary
 ----------------
-Centralizes annotations used by the differentiability test harness. Numerical
-aliases are imported from :mod:`diffpes.types` or :mod:`jaxtyping`; this module
-does not duplicate production type definitions.
+This module centralizes annotations for the differentiability test harness.
+It imports numerical aliases from :mod:`diffpes.types` or :mod:`jaxtyping`.
+It does not duplicate production type definitions.
 """
 
 from beartype.typing import Callable, Literal, TypeAlias

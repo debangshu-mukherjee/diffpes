@@ -1,16 +1,15 @@
-"""Volumetric data structures for VASP CHGCAR files.
+"""Define volumetric data structures for VASP CHGCAR files.
 
 Extended Summary
 ----------------
-Defines PyTree types for storing real-space volumetric grid data
-parsed from VASP CHGCAR files. Two variants are provided:
+This module defines PyTree types for real-space volumetric grid data from VASP
+CHGCAR files. It provides two variants:
 
 - :class:`VolumetricData` -- for non-SOC calculations (ISPIN=1 or
   ISPIN=2), with an optional scalar magnetization density.
-- :class:`SOCVolumetricData` -- for spin-orbit coupling calculations
-  where VASP writes four grid blocks (total charge, mx, my, mz),
-  storing both the scalar mz and the full 3-component magnetization
-  vector.
+- :class:`SOCVolumetricData` -- for spin-orbit coupling calculations.
+  VASP writes four grid blocks: total charge, mx, my, and mz. This type stores
+  scalar mz and the complete 3-component magnetization vector.
 
 Routine Listings
 ----------------
@@ -25,11 +24,9 @@ Routine Listings
 
 Notes
 -----
-All real-space grid data is stored in units consistent with VASP
-output: charge density in electrons per unit cell volume (not per
-Angstrom^3). The ``grid_shape`` and ``symbols`` fields are stored
-as auxiliary data because JAX cannot trace Python tuples of ints
-or strings.
+All real-space grid data uses the VASP output units. The charge density uses
+electrons per unit cell volume, not per Angstrom^3. JAX stores ``grid_shape``
+and ``symbols`` as auxiliary data because it cannot trace their Python tuples.
 """
 
 import equinox as eqx
@@ -42,20 +39,16 @@ from jaxtyping import Array, Float, Int, jaxtyped
 class VolumetricData(eqx.Module):
     """Store CHGCAR volumetric-grid data in a JAX PyTree.
 
-    Stores the charge density on a 3-D real-space grid together with
+    This type stores the charge density on a 3-D real-space grid together with
     the crystal lattice needed to interpret the grid coordinates.
-    An optional magnetization density grid is included when the
-    CHGCAR comes from a spin-polarized (ISPIN=2) calculation, where
-    the magnetization is the difference between spin-up and spin-down
-    charge densities.
+    It includes an optional magnetization density grid for a spin-polarized
+    CHGCAR calculation (ISPIN=2). The magnetization equals the difference
+    between spin-up and spin-down charge densities.
 
-    This class is an immutable :class:`equinox.Module` PyTree. Numeric
-    fields (``lattice``,
-    ``coords``, ``charge``, ``magnetization``, ``atom_counts``) are
-    stored as children visible to JAX tracing, while ``grid_shape``
-    (a Python tuple of ints) and ``symbols`` (a Python tuple of
-    strings) are stored as auxiliary data because JAX cannot trace
-    these types.
+    This class is an immutable :class:`equinox.Module` PyTree. JAX stores the
+    numerical fields as children that support tracing. It stores
+    ``grid_shape`` and ``symbols`` as auxiliary data because JAX cannot trace
+    their Python tuples.
 
 
     :see: :class:`~.test_volumetric.TestVolumetricData`
@@ -91,8 +84,8 @@ class VolumetricData(eqx.Module):
     Notes
     -----
     Equinox derives the PyTree structure from the annotated fields.
-    The ``grid_shape`` and ``symbols`` fields are Python tuples and
-    therefore must be stored as PyTree auxiliary data. JAX treats
+    JAX stores the Python tuples ``grid_shape`` and ``symbols`` as PyTree
+    auxiliary data. JAX treats
     auxiliary data as compile-time constants: changing them triggers
     recompilation of any ``jit``-compiled function.
 
@@ -125,16 +118,15 @@ def make_volumetric_data(  # noqa: DOC503
 ) -> VolumetricData:
     """Create a validated ``VolumetricData`` instance.
 
-    Factory function that validates and normalises CHGCAR volumetric
-    data before constructing a ``VolumetricData`` PyTree. All numeric
-    arrays are cast to ``float64`` (or ``int32`` for atom counts).
-    The optional ``magnetization`` field is cast only when present,
-    preserving ``None`` for non-spin-polarized calculations. When
-    ``atom_counts`` is ``None``, an empty int32 array is created as
-    a placeholder.
+    The factory validates and normalizes CHGCAR volumetric
+    data before it constructs a ``VolumetricData`` PyTree. It casts numerical
+    arrays to ``float64`` and atom counts to ``int32``. The factory casts
+    ``magnetization`` only when it is present. Thus, ``None`` continues to
+    identify non-spin-polarized calculations. The factory substitutes an empty
+    int32 array when ``atom_counts`` is ``None``.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape and dtype constraints are checked at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the shape and dtype constraints
+    at call time.
 
     :see: :class:`~.test_volumetric.TestMakeVolumetricData`
 
@@ -270,18 +262,16 @@ def make_volumetric_data(  # noqa: DOC503
 class SOCVolumetricData(eqx.Module):
     """Store SOC CHGCAR volumetric-grid data in a JAX PyTree.
 
-    Variant of :class:`VolumetricData` for spin-orbit coupling
-    calculations where VASP writes 4 grid blocks in the CHGCAR:
-    total charge, mx, my, mz magnetization components. The
-    ``magnetization`` field holds the mz component for backward
-    compatibility with ISPIN=2 consumers, while
-    ``magnetization_vector`` holds the full 3-component
-    magnetization vector ``(mx, my, mz)`` at each grid point.
+    This type is a :class:`VolumetricData` variant for spin-orbit coupling
+    calculations. VASP writes four CHGCAR grid blocks: total charge, mx, my,
+    and mz magnetization components. The
+    ``magnetization`` contains the mz component for compatibility with ISPIN=2
+    consumers. ``magnetization_vector`` contains the complete 3-component
+    vector ``(mx, my, mz)`` at each grid point.
 
-    This class is an immutable :class:`equinox.Module` PyTree. Numeric
-    fields are stored as
-    children visible to JAX tracing, while ``grid_shape`` and
-    ``symbols`` are stored as auxiliary data.
+    This class is an immutable :class:`equinox.Module` PyTree. JAX stores
+    numerical fields as children that support tracing. It stores
+    ``grid_shape`` and ``symbols`` as auxiliary data.
 
 
     :see: :class:`~.test_volumetric.TestSOCVolumetricData`
@@ -318,8 +308,8 @@ class SOCVolumetricData(eqx.Module):
     Notes
     -----
     Equinox derives the PyTree structure from the annotated fields.
-    Six numeric fields are children; ``grid_shape`` and ``symbols``
-    are auxiliary data. Unlike :class:`VolumetricData`, both
+    JAX stores six numerical fields as children. It stores ``grid_shape`` and
+    ``symbols`` as auxiliary data. Unlike :class:`VolumetricData`, both
     ``magnetization`` and ``magnetization_vector`` are mandatory
     (non-optional) because SOC calculations always produce all four
     grid blocks.
@@ -355,17 +345,16 @@ def make_soc_volumetric_data(  # noqa: DOC503
 ) -> SOCVolumetricData:
     """Create a validated ``SOCVolumetricData`` instance.
 
-    Factory function that validates and normalises SOC CHGCAR
+    The factory validates and normalizes SOC CHGCAR
     volumetric data before constructing a ``SOCVolumetricData``
-    PyTree. All numeric arrays are cast to ``float64`` (or ``int32``
-    for atom counts). Unlike :func:`make_volumetric_data`, both
+    PyTree. It casts numerical arrays to ``float64`` and atom counts to
+    ``int32``. Unlike :func:`make_volumetric_data`, both
     ``magnetization`` and ``magnetization_vector`` are mandatory
     because SOC calculations always produce all four grid blocks.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape constraints (grid dimensions must match across
-    ``charge``, ``magnetization``, and ``magnetization_vector``) are
-    checked at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks shape constraints at call time.
+    The grid dimensions must agree across ``charge``, ``magnetization``, and
+    ``magnetization_vector``.
 
     :see: :class:`~.test_volumetric.TestMakeSOCVolumetricData`
 

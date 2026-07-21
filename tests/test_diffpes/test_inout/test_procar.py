@@ -36,7 +36,7 @@ _FIXTURES_DIR: Path = Path(__file__).resolve().parent / "fixtures"
 
 
 class TestReadProcar(chex.TestCase):
-    """Tests for :func:`diffpes.inout.read_procar`.
+    """Validate :func:`diffpes.inout.read_procar`.
 
     Verifies that the PROCAR parser produces an OrbitalProjection
     with correct projection array shape and optional spin/oam
@@ -48,14 +48,14 @@ class TestReadProcar(chex.TestCase):
     def test_parses_minimal_procar(self) -> None:
         """Read minimal PROCAR and assert OrbitalProjection shape and sample values.
 
-        Loads the minimal PROCAR fixture. Asserts projections shape
+        The test loads the minimal PROCAR fixture. Asserts projections shape
         (2, 2, 1, 9), selected projection values (0.1 and 0.18),
         and that spin and oam are None. Validates k-point/band/ion
         block parsing and orbital channel ordering.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         orb: (
             diffpes.types.OrbitalProjection
@@ -78,15 +78,14 @@ class TestReadProcar(chex.TestCase):
         """Read spin-polarized PROCAR in legacy mode and verify only first spin block.
 
         Parses the PROCAR_spin fixture with ``return_mode="legacy"``,
-        which extracts only the first (spin-up) block. Asserts
-        projections shape is (2, 2, 1, 9), the s-orbital value at
-        [0, 0, 0, 0] equals 0.1 (matching the fixture's spin-up data),
-        and ``spin`` is ``None`` (no spin decomposition in legacy mode).
+        which extracts only the first spin-up block. The test checks the
+        projection shape and the selected s-orbital value. It also verifies
+        that ``spin`` is ``None`` in legacy mode.
         This exercises the backward-compatible single-block extraction.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         orb: (
             diffpes.types.OrbitalProjection
@@ -107,15 +106,13 @@ class TestReadProcar(chex.TestCase):
 
         Parses the PROCAR_spin fixture with ``return_mode="full"``,
         returning a ``SpinOrbitalProjection`` with both ``projections``
-        and ``spin`` arrays. Asserts the result type is
-        ``SpinOrbitalProjection``, projections shape is (2, 2, 1, 9),
-        spin shape is (2, 2, 1, 6), and the averaged s-orbital value
-        at [0, 0, 0, 0] equals 0.09 (the mean of spin-up 0.1 and
-        spin-down 0.08), verified to within ``atol=1e-12``.
+        and ``spin`` arrays. The test checks the result type and both shapes.
+        It compares the averaged s-orbital value with 0.09. This value is
+        the mean of the two spin values. The comparison uses ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         orb: (
             diffpes.types.OrbitalProjection
@@ -134,21 +131,21 @@ class TestReadProcar(chex.TestCase):
 
 
 class TestReadProcarErrors(chex.TestCase):
-    """Tests for error handling in :func:`read_procar`.
+    """Validate error handling in :func:`read_procar`.
 
     :see: :func:`~diffpes.inout.read_procar`
     """
 
     def test_empty_procar_raises(self) -> None:
-        """An empty PROCAR file raises ValueError (procar.py lines 155-156).
+        """Verify that an empty PROCAR file raises ``ValueError``.
 
-        Writes a file with no valid k-points block and calls
+        The test writes a file with no valid k-points block and calls
         ``read_procar``. Asserts a ``ValueError`` matching
         ``"No valid PROCAR blocks found"``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fh: TextIO
 
         tmpname: str
@@ -168,7 +165,7 @@ class TestReadProcarErrors(chex.TestCase):
 
 
 class TestReadProcarSOC(chex.TestCase):
-    """Tests for SOC PROCAR parsing (procar.py lines 191-210, 282-283, 307).
+    """Validate SOC PROCAR parsing (procar.py lines 191-210, 282-283, 307).
 
     :see: :func:`~diffpes.inout.read_procar`
     """
@@ -176,16 +173,15 @@ class TestReadProcarSOC(chex.TestCase):
     def test_soc_procar_full(self) -> None:
         """Read SOC PROCAR (4 blocks) in full mode and verify spin components.
 
-        Uses the PROCAR_soc fixture which has a title line before the
-        first "k-points" block (covers lines 282-283), a blank line
-        between the k-point header and the band header (covers line 307),
-        and 4 blocks (covers lines 191-210). Asserts the result is a
+        The test uses the ``PROCAR_soc`` fixture. It has a title before the
+        first k-point block and a blank line before the band header.
+        The fixture contains four blocks. The test checks a
         ``SpinOrbitalProjection`` with projections shape (1, 1, 1, 9)
         and spin shape (1, 1, 1, 6).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         orb: (
             diffpes.types.OrbitalProjection

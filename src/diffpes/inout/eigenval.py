@@ -1,9 +1,9 @@
-"""VASP EIGENVAL file parser.
+"""Parse a VASP EIGENVAL file.
 
 Extended Summary
 ----------------
-Reads VASP EIGENVAL files containing electronic band energies and returns a
-band carrier. The :class:`~diffpes.types.BandStructure` carrier represents
+The module reads VASP EIGENVAL files with electronic band energies. It returns
+a band carrier. The :class:`~diffpes.types.BandStructure` carrier represents
 non-spin data. The :class:`~diffpes.types.SpinBandStructure` carrier represents
 spin data selected by the ``return_mode`` parameter.
 
@@ -14,8 +14,8 @@ Routine Listings
 
 Notes
 -----
-Handles both spin-polarized (ISPIN=2) and non-polarized (ISPIN=1)
-calculations. Bands are sorted by energy within each k-point.
+The parser supports spin-polarized and nonpolarized computations. It sorts the
+bands by energy within each k-point.
 """
 
 from pathlib import Path
@@ -50,9 +50,9 @@ def read_eigenval(  # noqa: PLR0915
 ) -> Union[BandStructure, SpinBandStructure]:
     """Parse a VASP EIGENVAL file.
 
-    Reads a VASP EIGENVAL file that contains electronic eigenvalues
-    (band energies) at each k-point. Supports both ISPIN=1 (non-
-    polarized) and ISPIN=2 (spin-polarized) calculations.
+    The function reads the electronic eigenvalues at each k-point from a VASP
+    EIGENVAL file. It supports nonpolarized ISPIN=1 and spin-polarized ISPIN=2
+    computations.
 
     The EIGENVAL file format written by VASP consists of:
 
@@ -83,7 +83,8 @@ def read_eigenval(  # noqa: PLR0915
                first_line: list[str] = fid.readline().split()
                ispin: int = int(first_line[3])
 
-       This fixes the static file layout before band arrays are allocated.
+       This step fixes the static file layout before the function allocates
+       the band arrays.
 
     2. **Sort each spin channel by band energy**::
 
@@ -103,7 +104,8 @@ def read_eigenval(  # noqa: PLR0915
         Path to EIGENVAL file. Default is ``"EIGENVAL"``.
     fermi_energy : ScalarFloat, optional
         Fermi level in eV used to reference the eigenvalues.
-        Python scalars and traced scalar arrays are accepted. Default is 0.0.
+        The function accepts Python scalars and traced scalar arrays. The
+        default is 0.0.
     return_mode : Literal["legacy", "full"], optional
         ``"legacy"`` (default) returns a ``BandStructure`` with only
         spin-up eigenvalues (backward-compatible). ``"full"`` returns
@@ -119,22 +121,19 @@ def read_eigenval(  # noqa: PLR0915
     Raises
     ------
     ValueError
-        If a k-point line has fewer than 4 values, or a band line
-        has fewer values than expected for the given ISPIN, or if
-        EOF is encountered before all blocks are read.
+        If a k-point line has fewer than four values.
+        If a band line has fewer values than the selected ISPIN mode requires.
+        If the parser reaches EOF before it reads all blocks.
 
     Notes
     -----
-    For spin-polarized calculations (ISPIN=2), each eigenvalue line
-    contains three columns (index, energy-up, energy-down). In
-    ``"legacy"`` mode only the spin-up energy is extracted. In
-    ``"full"`` mode both channels are preserved in a
-    ``SpinBandStructure``. The Fermi energy is **not** embedded in
-    the EIGENVAL file; it must be obtained separately (e.g. from
-    DOSCAR or OUTCAR). Eigenvalues are stored as-is from the file
-    (not shifted by ``fermi_energy``); the Fermi energy is carried
-    alongside the eigenvalues in the returned PyTree for downstream
-    consumers to apply the shift if needed.
+    For ISPIN=2 computations, each eigenvalue line contains the index and two
+    energy columns. In ``"legacy"`` mode, the parser reads only the spin-up
+    energy. In ``"full"`` mode, the parser retains both channels in a
+    ``SpinBandStructure``. The EIGENVAL file does not contain the Fermi energy.
+    Read it separately from a DOSCAR or OUTCAR file. The parser retains the
+    eigenvalues without a ``fermi_energy`` shift. It stores the Fermi energy in
+    the returned PyTree for downstream shifts.
     """
     fid: TextIO
     k: int
@@ -231,16 +230,14 @@ def _read_next_nonempty_line(fid: TextIO) -> str:
 
     Extended Summary
     ----------------
-    Helper that skips blank lines in the EIGENVAL file. VASP separates
-    k-point blocks with empty lines; this function transparently
-    consumes them so that the main parsing loop does not need to handle
-    blank-line logic.
+    The helper skips blank lines in the EIGENVAL file. VASP separates k-point
+    blocks with empty lines. The helper consumes them before the main parsing
+    loop processes the data.
 
     Implementation Logic
     --------------------
     1. Call ``fid.readline()`` in a loop.
-    2. If the returned string is falsy (empty string ``""``), EOF has
-       been reached -- return ``""``.
+    2. If the returned string is empty, return ``""`` for EOF.
     3. If the stripped line is non-empty, return the original
        (unstripped) line.
     4. Otherwise continue to the next line.
@@ -253,8 +250,7 @@ def _read_next_nonempty_line(fid: TextIO) -> str:
     Returns
     -------
     line : str
-        The next non-empty line (with trailing newline), or ``""`` if
-        the end of the file is reached.
+        The next nonempty line with its trailing newline, or ``""`` at EOF.
     """
     result: str = ""
     while True:

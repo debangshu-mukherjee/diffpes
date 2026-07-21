@@ -2,30 +2,31 @@
 
 diffpes certification is a scientific-assurance record for one execution of a
 forward model. It records the model, semantic conventions, normalized inputs,
-ordered transformations, validity checks, derivative evidence, information
-losses, and policy outcome that accompany an observable.
+and ordered transformations. It also records validity checks, derivative
+evidence, information losses, and the policy outcome for an observable.
 
-Certification does **not** assert that a model is universally correct or that
-an input artifact is truthful. A statement such as "validated under
-`org.diffpes.policy.research.v1`" is bounded by the recorded model domain,
-checks, evidence, and numerical tolerances.
+Certification does **not** assert universal model correctness or input
+artifact truthfulness. The recorded model domain, checks, evidence, and
+numerical tolerances bound a statement such as "validated under
+`org.diffpes.policy.research.v1`."
 
 ## The JAX-native assurance path
 
 The scientific part of certification executes through the same JAX program as
-the ordinary forward model. Contract predicates are array functions, domain
-margins and residuals remain differentiable leaves, and information-flow
-evidence is computed with JVPs and VJPs. The discrete pass/fail fields are views
-of those continuous quantities.
+the ordinary forward model. Contract predicates are array functions. Domain
+margins and residuals remain differentiable leaves. JVPs and VJPs compute the
+information-flow evidence. The discrete pass/fail fields show views of those
+continuous quantities.
 
-This separation matters during optimization. A policy may report that a point
-is outside a verified photon-energy domain, while the algebraic domain margin
-still supplies a useful gradient back toward the domain. Likewise, a small VJP
-reports local first-order insensitivity at the evaluation point; it is not
-treated as proof of global independence.
+This separation matters during optimization. A policy can report a point
+outside a verified photon-energy domain. The algebraic domain margin can still
+supply a useful gradient toward the domain. Likewise, a small VJP reports
+local first-order insensitivity at the evaluation point. It does not prove
+global independence.
 
-Filesystem discovery and persistence sit at the JAX-to-world boundary. They
-cannot satisfy physics, numerical, or differentiability claims.
+diffpes performs filesystem discovery and persistence outside the JAX
+program. These operations cannot satisfy physics, numerical, or
+differentiability claims.
 
 ## What a certificate records
 
@@ -41,23 +42,23 @@ A {class}`~diffpes.types.ForwardCertificate` contains:
   diagnostics;
 - the evaluated policy report and any unmet requirements.
 
-The graphs answer different questions and are intentionally kept distinct.
-Provenance records how a result was produced. Structural dependency records
-which input leaves occur in the traced program. JVP/VJP evidence records local
-first-order information flow. Transformation records say what interpretation
-was preserved or lost, such as absolute intensity calibration after
-normalization or high-frequency structure after convolution.
+The graphs answer different questions and remain distinct. Provenance records
+the process that produced a result. Structural dependency records which input
+leaves occur in the traced program. JVP/VJP evidence records local first-order
+information flow. Transformation records identify preserved or lost
+interpretations. Examples include absolute intensity calibration after
+normalization and high-frequency structure after convolution.
 
 ## Certification levels
 
-Levels are recomputed from claims under a named policy. They are not a stored
-`certified=True` flag.
+A named policy recomputes levels from claims. A stored `certified=True` flag
+does not define a level.
 
 | Level | Bounded meaning |
 | --- | --- |
-| `identified` | Model, inputs, conventions, environment, and output are identified. |
+| `identified` | The certificate identifies the model, inputs, conventions, environment, and output. |
 | `validated` | Required contracts and in-domain runtime checks passed. |
-| `differentiable` | Declared derivatives were evaluated and met their evidence tolerances. |
+| `differentiable` | The evaluator computed the declared derivatives, which met their evidence tolerances. |
 | `verified` | Required analytic or external-reference comparisons passed. |
 | `benchmarked` | A named independent model or dataset comparison passed in its declared domain. |
 | `reproducible` | Resolver-backed re-execution met the recorded reproduction tolerance. |
@@ -68,8 +69,8 @@ turns the corresponding claim into a pass.
 
 ## Inspection
 
-The inspection API is designed to answer scientific questions without loading
-the result arrays:
+The inspection API answers scientific questions without loading the result
+arrays:
 
 ```python
 from diffpes.certify import (
@@ -84,15 +85,16 @@ comparison = diff_certificates(reference, candidate)
 ```
 
 `diff_certificates` separates scientific model, input, transformation,
-evidence, numerical, environment, and audit-time differences. This makes a
-timestamp-only rerun visibly different from a model or convention change.
+evidence, numerical, environment, and audit-time differences. The comparison
+therefore distinguishes a timestamp-only rerun from a model or convention
+change.
 
 ## Portable records
 
-Canonical JSON is the authoritative portable representation. Numeric arrays
-are stored losslessly with dtype and shape metadata; they are not rounded into
-decimal lists. HDF5 stores the exact JSON record and a small set of convenience
-attributes next to a numerical result:
+Canonical JSON is the authoritative portable representation. The serializer
+stores numeric arrays losslessly with dtype and shape metadata. It does not
+round arrays into decimal lists. HDF5 stores the exact JSON record and several
+convenience attributes next to a numerical result:
 
 ```python
 from diffpes.inout import (
@@ -111,15 +113,15 @@ restored_from_h5 = load_certificate_h5("spectrum.h5", "spectrum")
 
 The record includes a consistency marker that detects accidental storage
 mismatches. This bookkeeping value provides no security, authenticity, or
-physical-validity claim. Unknown schema major versions are rejected. Unknown
-minor extension data is retained in the certificate's extension object so a
-load/save cycle does not silently discard it.
+physical-validity claim. The loader rejects unknown schema major versions.
+It retains unknown minor extension data in the certificate extension object.
+A load and save cycle therefore preserves that data.
 
 ## Reading claims responsibly
 
-A certificate can establish that the declared implementation ran with the
-recorded inputs and met named tests in a declared domain. It cannot determine
-whether the chosen approximation is suitable for an unrecorded experiment,
-prove that an upstream DFT or instrument file is truthful, or turn local
-Jacobian rank into global identifiability. Those conclusions require upstream
-evidence and scientific judgment.
+A certificate can establish that the declared implementation used the
+recorded inputs. It can also establish that the implementation met named tests
+in a declared domain. It cannot assess an approximation for an unrecorded
+experiment. It cannot prove that an upstream DFT file or instrument file is
+truthful. Local Jacobian rank cannot establish global identifiability. Those
+conclusions require upstream evidence and scientific judgment.

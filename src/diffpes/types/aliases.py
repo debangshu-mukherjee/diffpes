@@ -1,8 +1,8 @@
-"""Scalar type aliases for JAX-compatible numeric types.
+"""Define scalar type aliases for JAX-compatible numeric types.
 
 Extended Summary
 ----------------
-Provides type aliases that accept both native Python scalars and
+This module provides type aliases that accept both native Python scalars and
 zero-dimensional JAX arrays, enabling flexible function signatures
 that work seamlessly with JAX transformations.
 

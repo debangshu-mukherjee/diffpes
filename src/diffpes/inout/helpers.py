@@ -1,8 +1,8 @@
-"""Parser-adjacent workflow helpers for assembling simulation-ready arrays.
+"""Provide workflow helpers for simulation-ready parser arrays.
 
 Extended Summary
 ----------------
-Provides utilities for atom-subset aggregation, orbital channel
+The module provides utilities for atom-subset aggregation, orbital channel
 reductions, and cross-file consistency checks between EIGENVAL,
 PROCAR, and KPOINTS parsed data.
 
@@ -41,10 +41,9 @@ def select_atoms(
 ) -> Union[OrbitalProjection, SpinOrbitalProjection]:
     """Extract orbital projections for a subset of atoms.
 
-    Creates a new projection object containing only the atoms at the
-    requested indices. This is the primary mechanism for isolating the
-    contribution of specific atomic sites (e.g. surface atoms, a
-    particular element) to the simulated ARPES spectrum.
+    The function creates a projection object that contains only the requested
+    atoms. Use it to isolate contributions from specified sites. Examples
+    include surface atoms and atoms of one element.
 
     :see: :class:`~.test_helpers.TestSelectAtoms`
 
@@ -85,9 +84,9 @@ def select_atoms(
 
     Notes
     -----
-    The returned object shares no memory with the original because
-    JAX fancy-indexing always produces a copy. The function is
-    pure and can be safely used inside ``jax.jit``-compiled code.
+    The returned object shares no memory with the original because JAX
+    advanced indexing always produces a copy. The pure function works inside
+    code that ``jax.jit`` compiles.
     """
     idx: Int[Array, " N"] = jnp.asarray(atom_indices, dtype=jnp.int32)
     proj_sub: Float[Array, "K B N 9"] = orb.projections[:, :, idx, :]
@@ -121,12 +120,10 @@ def aggregate_atoms(
 ) -> Float[Array, "K B 9"]:
     """Sum orbital projections over a set of atoms.
 
-    Produces a ``(K, B, 9)`` array where the atom axis has been
-    summed out, giving the total orbital weight at each (k-point,
-    band) pair. This is the standard reduction used before computing
-    cross-section-weighted ARPES intensities, because the simulation
-    only needs the aggregate orbital character rather than per-atom
-    contributions.
+    The function sums the atom axis and produces a ``(K, B, 9)`` array.
+    Therefore, each k-point and band pair contains the total orbital weight.
+    The ARPES intensity computation uses this reduction because it needs the
+    aggregate orbital character instead of individual atom contributions.
 
     :see: :class:`~.test_helpers.TestAggregateAtoms`
 
@@ -182,7 +179,7 @@ def reduce_orbitals(
     Collapses the 9-channel VASP orbital decomposition
     (``s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2``) into three
     angular-momentum shell totals. This is useful for coarse-grained
-    orbital-character analysis (e.g. fat-band coloring by s/p/d
+    orbital-character analysis, for example fat-band colors from s/p/d
     weight).
 
     :see: :class:`~.test_helpers.TestReduceOrbitals`

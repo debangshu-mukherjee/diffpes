@@ -1,10 +1,10 @@
-"""Human-readable inspection of forward-model certificates.
+"""Render forward-model certificates in a human-readable form.
 
 Extended Summary
 ----------------
-Provides deterministic, compact views of the scientific model, provenance,
-claims, differentiability evidence, and policy outcome recorded by a
-``ForwardCertificate``. Inspection is deliberately an eager boundary utility:
+This module provides deterministic, compact views of a ``ForwardCertificate``.
+The views cover the model, provenance, claims, differentiability evidence, and
+policy outcome. Inspection is deliberately an eager boundary utility:
 it formats already-computed certificate leaves and never evaluates a physics
 claim or loads the associated forward result.
 
@@ -131,8 +131,8 @@ def summarize_certificate(certificate: ForwardCertificate) -> str:
 
            summary: str = "\n".join(lines)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -312,8 +312,8 @@ def explain_claim(
 
            explanation: str = "\n".join(lines)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -440,8 +440,8 @@ def diff_certificates(
                    audit=tuple(audit),
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

@@ -1,10 +1,10 @@
-r"""Angular matrix elements for dipole photoemission.
+r"""Compute angular matrix elements for dipole photoemission.
 
 Extended Summary
 ----------------
-Provides Gaunt coefficients, real spherical harmonics, and full
-dipole matrix element assembly for the differentiable ARPES
-forward model.  The dipole matrix element for orbital
+The subpackage provides Gaunt coefficients and real spherical harmonics. It
+also assembles the full dipole matrix element for the differentiable ARPES
+forward model. The dipole matrix element for orbital
 :math:`(n, l, m)` combines radial integrals, Gaunt coefficients,
 and spherical harmonics of the photoelectron direction:
 
@@ -14,16 +14,16 @@ and spherical harmonics of the photoelectron direction:
         \cdot G(l, m, l', m') \cdot Y_{l'}^{m'}(\hat{k})
         \cdot \hat{e}_{q(m'-m)}
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`dipole`
-    Full dipole matrix element assembly.
+    Assemble full dipole matrix elements.
 - :mod:`gaunt`
-    Gaunt coefficient table for dipole transitions.
+    Build the Gaunt coefficient table for dipole transitions.
 - :mod:`safe`
     Provide named gradient-safe elementary operations.
 - :mod:`spherical_harmonics`
-    Real spherical harmonics in JAX.
+    Compute real spherical harmonics in JAX.
 
 Routine Listings
 ----------------
@@ -60,10 +60,9 @@ Routine Listings
 
 Notes
 -----
-All functions are JAX-compatible and support JIT compilation and
-automatic differentiation.  The Gaunt table is computed once at
-import time using pure Python and stored as a JAX array for O(1)
-lookup during traced computation.
+All functions support JAX transformations and automatic differentiation. Pure
+Python computes the Gaunt table once during import. The module stores the
+table as a JAX array for constant-time lookup during traced computation.
 """
 
 from .dipole import (

@@ -3,26 +3,26 @@
 Extended Summary
 ----------------
 The certification package combines static scientific identity and provenance
-with numerical evidence computed through the actual JAX forward program.
+with numerical evidence from the actual JAX forward program.
 Canonical records and CRC32 checksums provide non-security bookkeeping at the
 I/O boundary; they do not establish physical validity.  Runtime claims,
 derivative checks, dependency maps, sensitivities, and information spectra are
 JAX-native numerical carriers.
 
-The submodules are organized as follows:
+The package contains these submodules:
 
 - :mod:`canonical`
-    Canonical scientific-record representations for certification.
+    Represent scientific records canonically for certification.
 - :mod:`checksums`
-    Non-security consistency checksums for scientific records.
+    Compute non-security consistency checksums for scientific records.
 - :mod:`checks`
     Register pure JAX scientific certification checks.
 - :mod:`contracts`
-    Semantic contracts for composable certified transformations.
+    Define semantic contracts for composable certified transformations.
 - :mod:`registry`
-    Deterministic registries for certified models and transformations.
+    Register certified models and transformations deterministically.
 - :mod:`provenance`
-    Artifact lineage and semantic information-loss graphs.
+    Trace artifact lineage and semantic information loss.
 - :mod:`dependencies`
     Trace differentiable information flow through forward models.
 - :mod:`evidence`
@@ -32,7 +32,7 @@ The submodules are organized as follows:
 - :mod:`execution`
     Execute JAX-native certified forward models.
 - :mod:`inspect`
-    Human-readable inspection of forward-model certificates.
+    Render forward-model certificates in a human-readable form.
 - :mod:`models`
     Register built-in certified DiffPES forward models.
 
@@ -59,7 +59,7 @@ Routine Listings
 :func:`checksum_pytree`
     Stream a canonical carrier into a consistency checksum.
 :func:`compose_transformations`
-    Compose contracts and raise if any requirement is unsatisfied.
+    Compose contracts and raise for unsatisfied requirements.
 :func:`dependency_map`
     Trace leaf-level structural and local numerical dependencies.
 :func:`derivative_evidence`
@@ -135,7 +135,7 @@ Routine Listings
 :func:`validate_contract`
     Return structural errors for a raw or deserialized contract.
 :func:`validate_provenance`
-    Independently re-evaluate graph structure and derived state.
+    Re-evaluate graph structure and derived state independently.
 :func:`validate_registry`
     Recompute registry structure and consistency checksums.
 :func:`verify_certificate`

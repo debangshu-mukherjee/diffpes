@@ -1,10 +1,10 @@
-"""Density of states data structures.
+"""Define density-of-states data structures.
 
 Extended Summary
 ----------------
-Defines the :class:`DensityOfStates` and :class:`FullDensityOfStates`
-PyTrees for storing total and projected density of states from
-VASP DOSCAR files.
+This module defines the :class:`DensityOfStates` and
+:class:`FullDensityOfStates` PyTrees. These types store total and projected
+density of states from VASP DOSCAR files.
 
 Routine Listings
 ----------------
@@ -34,14 +34,13 @@ from .aliases import ScalarNumeric
 class DensityOfStates(eqx.Module):
     """Store density-of-states data in a JAX PyTree.
 
-    Stores total density of states (DOS) data parsed from VASP DOSCAR
-    files. The DOS is represented as a pair of 1-D arrays sharing the
-    same energy axis, together with a scalar Fermi energy reference.
+    This type stores total density-of-states (DOS) data from VASP DOSCAR
+    files. Two 1-D arrays share the same energy axis. A scalar value specifies
+    the Fermi energy.
 
-    This class is registered as a JAX PyTree via
-    through ``jax.jit``, ``jax.grad``, ``jax.vmap``, and other JAX
-    transformations. All fields are JAX arrays (no auxiliary data),
-    so every field participates in autodiff tracing.
+    This JAX PyTree passes through ``jax.jit``, ``jax.grad``, ``jax.vmap``,
+    and other JAX transformations. All fields contain JAX arrays and no
+    auxiliary data. Therefore, every field participates in autodiff tracing.
 
 
     :see: :class:`~.test_dos.TestDensityOfStates`
@@ -57,9 +56,8 @@ class DensityOfStates(eqx.Module):
 
     Notes
     -----
-    All three fields are JAX arrays and stored as children (no
-    auxiliary data). This means every field is visible to JAX's
-    tracing and transformation machinery.
+    JAX stores all three array fields as children and uses no auxiliary data.
+    Therefore, JAX tracing and transformations can access every field.
 
     See Also
     --------
@@ -80,10 +78,10 @@ def make_density_of_states(  # noqa: DOC503
 ) -> DensityOfStates:
     """Create a validated DensityOfStates instance.
 
-    Validates and normalises the inputs before constructing the
-    DensityOfStates PyTree. All numeric inputs are cast to float64
-    JAX arrays so that downstream JAX transformations operate at
-    double precision without silent dtype promotion surprises.
+    The factory validates and normalizes the inputs before it constructs the
+    DensityOfStates PyTree. It casts all numerical inputs to float64 JAX
+    arrays. Downstream JAX transformations therefore use double precision
+    without silent dtype promotion.
 
     :see: :class:`~.test_dos.TestMakeDensityOfStates`
 
@@ -184,18 +182,16 @@ def make_density_of_states(  # noqa: DOC503
 class FullDensityOfStates(eqx.Module):
     """Store spin-resolved total and projected DOS data in a JAX PyTree.
 
-    Stores the full DOS data from a VASP DOSCAR file including
+    This type stores the full DOS data from a VASP DOSCAR file, including
     spin-resolved total DOS, integrated DOS, and per-atom
-    site-projected DOS. Returned by ``read_doscar`` when
-    ``return_mode="full"``. This is the comprehensive counterpart to
+    site-projected DOS. ``read_doscar`` returns this type when
+    ``return_mode="full"``. This type is the comprehensive counterpart to
     the simpler :class:`DensityOfStates`, which only stores a single
     total-DOS channel.
 
-    This class is registered as a JAX PyTree via
-    arrays, some optional) are stored as children visible to JAX
-    tracing, while ``natoms`` is a plain Python ``int`` stored as
-    auxiliary data because it is a structural constant that JAX
-    cannot trace.
+    JAX stores the array fields as PyTree children. JAX tracing can access
+    these required and optional fields. JAX stores ``natoms`` as auxiliary
+    data because this Python ``int`` is a structural constant.
 
 
     :see: :class:`~.test_dos.TestFullDensityOfStates`
@@ -220,9 +216,9 @@ class FullDensityOfStates(eqx.Module):
         Integrated DOS for spin-down channel, or ``None`` if
         ISPIN=1. JAX-traced when present.
     pdos : Optional[Float[Array, "A E C"]]
-        Per-atom site-projected DOS. A is the number of atoms, E the
-        number of energy points, and C the number of orbital columns
-        (depends on LORBIT setting in VASP, typically 9 or 16).
+        Per-atom site-projected DOS. A specifies the atom count. E specifies
+        the energy-point count. C specifies the orbital-column count, which
+        depends on the VASP LORBIT setting.
         ``None`` if no PDOS blocks are present in the DOSCAR file.
         JAX-traced when present.
     fermi_energy : Float[Array, " "]
@@ -274,17 +270,15 @@ def make_full_density_of_states(  # noqa: DOC503
 ) -> FullDensityOfStates:
     """Create a validated ``FullDensityOfStates`` instance.
 
-    Factory function that validates and normalises full density of
+    The factory validates and normalizes full density-of-states
     states data before constructing a ``FullDensityOfStates`` PyTree.
-    All non-None numeric arrays are cast to ``float64`` for numerical
-    stability. Optional fields (``total_dos_down``,
-    ``integrated_dos_down``, ``pdos``) are cast only when present,
-    preserving the ``None`` sentinel for non-spin-polarized or
-    non-projected calculations.
+    The factory casts all present numerical arrays to ``float64`` for
+    numerical stability. It casts optional fields only when they are present.
+    Thus, ``None`` continues to identify non-spin-polarized or non-projected
+    calculations.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that the energy dimension *E* is checked for consistency
-    across all provided arrays at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the energy dimension *E* across
+    all provided arrays at call time.
 
     Use this factory when you need the complete DOSCAR output
     including spin-resolved channels and site-projected DOS. For the

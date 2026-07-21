@@ -54,10 +54,10 @@ def assert_x64_enabled() -> Iterator[None]:
 def rss_leak_guard(request: pytest.FixtureRequest) -> Iterator[None]:
     """Reject process memory growth beyond the test-specific RSS limit.
 
-    The default limit is 500 MiB. ``@pytest.mark.rss_limit_mb(limit)`` may be
-    used for a test whose expected retained allocation needs a different bound.
-    JAX caches are cleared both before the baseline and before the final
-    measurement, so compiled executables do not hide application-level leaks.
+    The default limit is 500 MiB. Use
+    ``@pytest.mark.rss_limit_mb(limit)`` for a different expected allocation.
+    The fixture clears JAX caches before the baseline and final measurement.
+    Thus, compiled executables do not hide application-level leaks.
 
     Parameters
     ----------

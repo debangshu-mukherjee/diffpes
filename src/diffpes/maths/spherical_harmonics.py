@@ -1,11 +1,10 @@
-r"""Real spherical harmonics in JAX.
+r"""Compute real spherical harmonics in JAX.
 
 Extended Summary
 ----------------
-Implements real spherical harmonics :math:`Y_l^m(\theta, \varphi)`
-via associated Legendre polynomial recurrence, JIT-compatible and
-differentiable in :math:`(\theta, \varphi)`. Supports l = 0..4
-(s, p, d, f, g orbitals).
+The module computes real spherical harmonics with an associated Legendre
+polynomial recurrence. JAX can transform and differentiate the computation in
+:math:`(\theta, \varphi)`. The module supports l = 0..4.
 
 The convention follows the Condon-Shortley phase:
 
@@ -42,8 +41,8 @@ def _normalization(l: int, m: int) -> float:
 
     Extended Summary
     ----------------
-    Computes the normalization constant that ensures the real spherical
-    harmonics satisfy the orthonormality relation:
+    The function computes the normalization constant that makes the real
+    spherical harmonics satisfy the orthonormality relation:
 
     .. math::
 
@@ -56,15 +55,15 @@ def _normalization(l: int, m: int) -> float:
 
         N_l^m = \sqrt{\frac{2l+1}{4\pi} \cdot \frac{(l - |m|)!}{(l + |m|)!}}
 
-    This factor absorbs the factorial ratio that arises from the
+    This factor includes the factorial ratio that arises from the
     integral of the squared associated Legendre polynomial
     :math:`[P_l^{|m|}(\cos\theta)]^2` over :math:`\sin\theta \, d\theta`.
     The ``(2l+1)/(4pi)`` prefactor provides the correct solid-angle
     normalization.
 
-    The computation uses Python's ``math.factorial`` (arbitrary precision
-    integers) to avoid overflow for large l + |m|, then takes a
-    floating-point square root at the end.
+    The function uses Python's ``math.factorial`` with arbitrary-precision
+    integers. This operation avoids overflow for large l + |m|. The function
+    then computes a floating-point square root.
 
     Parameters
     ----------
@@ -97,9 +96,9 @@ def _associated_legendre_plm(
 
     Extended Summary
     ----------------
-    Computes the associated Legendre polynomial :math:`P_l^m(x)` using
-    a three-step recurrence that is numerically stable for upward
-    iteration in l at fixed m:
+    The function computes :math:`P_l^m(x)` with a three-step recurrence. This
+    recurrence remains numerically stable during upward iteration in l at
+    fixed m:
 
     **Step 1 -- Sectoral seed** :math:`P_m^m(x)`:
 
@@ -107,13 +106,12 @@ def _associated_legendre_plm(
 
         P_m^m(x) = (-1)^m \, (2m-1)!! \, (1 - x^2)^{m/2}
 
-    The Condon-Shortley phase :math:`(-1)^m` is included here,
-    consistent with the physics convention used by Condon & Shortley
-    (1935) and adopted in most quantum mechanics textbooks. The
-    double factorial :math:`(2m-1)!!` is computed iteratively to
-    avoid large intermediate values.
+    The seed includes the Condon-Shortley phase :math:`(-1)^m`. This phase
+    follows the physics convention from Condon and Shortley (1935). The
+    function computes :math:`(2m-1)!!` iteratively to avoid large intermediate
+    values.
 
-    The factor :math:`(1 - x^2)^{m/2}` is computed as
+    The function computes :math:`(1 - x^2)^{m/2}` as
     ``sqrt(max(1 - x^2, 0))^m`` to guard against numerical issues
     when :math:`|x| \approx 1` (near the poles).
 
@@ -130,8 +128,8 @@ def _associated_legendre_plm(
         (l - m) \, P_l^m(x) = (2l - 1) \, x \, P_{l-1}^m(x)
                               - (l + m - 1) \, P_{l-2}^m(x)
 
-    This recurrence is implemented via ``jax.lax.fori_loop`` for
-    JIT compatibility. The loop carries two consecutive values
+    The function implements this recurrence with ``jax.lax.fori_loop``. The
+    loop carries two consecutive values
     :math:`(P_{l-2}^m, P_{l-1}^m)` and advances one step per
     iteration.
 
@@ -151,11 +149,10 @@ def _associated_legendre_plm(
 
     Notes
     -----
-    Upward recurrence in l at fixed m is the standard stable direction
-    for associated Legendre polynomials. Downward recurrence in l is
-    unstable and is not used here. The function does not support
-    negative m directly; the caller should pass ``|m|`` and apply
-    the appropriate sign/phase correction externally.
+    Upward recurrence in l at fixed m gives the stable direction for associated
+    Legendre polynomials. The function does not use the unstable downward
+    recurrence. Pass ``|m|`` because the function does not accept a negative
+    m. Apply the required sign or phase correction separately.
     """
     i: int
 
@@ -210,9 +207,9 @@ def real_spherical_harmonic(
 ) -> Float[Array, " ..."]:
     r"""Evaluate a single real spherical harmonic.
 
-    Computes :math:`Y_l^m(\theta, \varphi)`.
+    The function computes :math:`Y_l^m(\theta, \varphi)`.
 
-    Computes the real-valued spherical harmonic using the
+    The function computes the real-valued spherical harmonic with the
     Condon-Shortley phase convention:
 
     .. math::
@@ -227,21 +224,17 @@ def real_spherical_harmonic(
             P_l^{|m|}(\cos\theta) \, \sin(|m|\varphi)
             \quad (m < 0)
 
-    The :math:`(-1)^{|m|}` factor for negative m cancels the
-    Condon-Shortley phase :math:`(-1)^{|m|}` already embedded in
-    :math:`P_l^{|m|}` by `_associated_legendre_plm`, yielding the
-    sign convention consistent with the real-to-complex transformation
-    used in the Gaunt coefficient table. This ensures that the Gaunt
-    coefficients computed via the complex basis match the angular
-    integrals evaluated directly with these real harmonics.
+    For negative m, the :math:`(-1)^{|m|}` factor cancels the
+    Condon-Shortley phase. The `_associated_legendre_plm` function includes
+    this phase in :math:`P_l^{|m|}`. The result follows the real-to-complex
+    convention of the Gaunt table. Consequently, the complex-basis Gaunt
+    coefficients match direct integrals of these real harmonics.
 
-    The normalization factor :math:`N_l^{|m|}` is computed by
-    `_normalization` using exact integer arithmetic for the
-    factorial ratio.
+    The `_normalization` function computes :math:`N_l^{|m|}`. It uses exact
+    integer arithmetic for the factorial ratio.
 
-    This function is JIT-compatible and differentiable with respect
-    to both ``theta`` and ``phi`` through JAX automatic
-    differentiation.
+    JAX can transform this function and differentiate it with respect to
+    ``theta`` and ``phi``.
 
     :see: :class:`~.test_spherical_harmonics.TestRealSphericalHarmonic`
 
@@ -317,8 +310,9 @@ def real_spherical_harmonics_all(
 ) -> Float[Array, " ... N"]:
     r"""Evaluate all real spherical harmonics up to l_max.
 
-    Computes every real spherical harmonic :math:`Y_l^m(\theta, \varphi)`
-    for :math:`0 \le l \le l_{\max}` and :math:`-l \le m \le l`,
+    The function computes every real spherical harmonic
+    :math:`Y_l^m(\theta, \varphi)` for :math:`0 \le l \le l_{\max}` and
+    :math:`-l \le m \le l`,
     returning them stacked along a new trailing axis.
 
     The ordering is the standard "degree-then-order" layout:
@@ -331,12 +325,11 @@ def real_spherical_harmonics_all(
     :math:`l^2 + l + m`. The total number of harmonics is
     :math:`(l_{\max}+1)^2`.
 
-    The loop over (l, m) is unrolled at Python trace time. Each
-    harmonic is computed independently via `real_spherical_harmonic`,
-    and the results are concatenated with ``jnp.stack``. This approach
-    is simple and correct but means that each l value triggers its own
-    Legendre recurrence chain; no cross-l recurrence sharing is
-    exploited.
+    Python unrolls the loop over (l, m) during tracing. The
+    `real_spherical_harmonic` function computes each harmonic independently.
+    ``jnp.stack`` joins the results. Each l value therefore starts a separate
+    Legendre recurrence chain. The implementation does not share recurrence
+    values across l values.
 
     :see: :class:`~.test_spherical_harmonics.TestRealSphericalHarmonicsAll`
 

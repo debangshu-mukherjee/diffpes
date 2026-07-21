@@ -26,7 +26,7 @@ class TestCertificateDiff:
 
         Notes
         -----
-        Constructs a difference through the public factory, then evaluates the
+        The test constructs a difference through the public factory, then evaluates the
         two derived properties without rerunning any physical model.
         """
         difference: CertificateDiff = make_certificate_diff(
@@ -57,7 +57,7 @@ class TestMakeCertificateDiff:
 
         Notes
         -----
-        Calls the factory with no categories and compares both public derived
+        The test calls the factory with no categories and compares both public derived
         properties with their independently expected values.
         """
         difference: CertificateDiff = make_certificate_diff()

@@ -1,11 +1,10 @@
-"""K-point path information data structure.
+"""Define the k-point path information data structure.
 
 Extended Summary
 ----------------
-Defines the :class:`KPathInfo` PyTree for storing Brillouin-zone
-metadata parsed from VASP KPOINTS files, including both plotting
-labels and mode-specific metadata (automatic grids, explicit weights,
-line-mode segments/endpoints).
+This module defines the :class:`KPathInfo` PyTree for Brillouin-zone metadata
+from VASP KPOINTS files. The metadata includes plotting labels, automatic
+grids, explicit weights, and line-mode segments.
 
 Routine Listings
 ----------------
@@ -28,15 +27,13 @@ _KPATH_MODES: tuple[str, ...] = ("Automatic", "Line-mode", "Explicit")
 class KPathInfo(eqx.Module):
     """Store k-point path metadata in a JAX PyTree.
 
-    Stores Brillouin-zone path information parsed from VASP KPOINTS
-    files. Includes plotting fields (labels + label indices) and
-    mode-specific metadata needed for full parser completeness:
-    automatic-mode grid/shift, explicit-mode k-points/weights, and
+    This type stores Brillouin-zone path information from VASP KPOINTS files.
+    It includes plotting labels and label indices. Mode-specific metadata
+    includes an automatic grid and shift, explicit k-points and weights, and
     line-mode segment endpoints.
 
-    This class is registered as a JAX PyTree via
-    as children. String metadata is stored as auxiliary data because
-    JAX cannot trace Python strings.
+    JAX stores numerical fields as PyTree children. It stores string metadata
+    as auxiliary data because JAX cannot trace Python strings.
 
 
     :see: :class:`~.test_kpath.TestKPathInfo`
@@ -81,8 +78,8 @@ class KPathInfo(eqx.Module):
 
     Notes
     -----
-    String metadata is declared with ``eqx.field(static=True)`` rather
-    than as traced leaves. Changing any static value triggers
+    ``eqx.field(static=True)`` declares string metadata as auxiliary data
+    instead of traced leaves. Changing any static value triggers
     recompilation of any ``jit``-compiled function that receives
     this PyTree.
 
@@ -123,17 +120,15 @@ def make_kpath_info(  # noqa: DOC503, PLR0913
 ) -> KPathInfo:
     """Create a validated KPathInfo instance.
 
-    Factory function that validates and normalises raw k-path
+    The factory validates and normalizes raw k-path
     metadata before constructing a ``KPathInfo`` PyTree. Integer
-    scalars and arrays are cast to ``int32``; float arrays are cast
-    to ``float64``. Optional fields (``kpoints``, ``weights``,
-    ``grid``, ``shift``) are cast only when present, preserving
-    ``None`` for modes that do not use them.
+    The factory casts integer scalars and arrays to ``int32``. It casts float
+    arrays to ``float64``. The factory casts optional fields only when they
+    are present. Thus, ``None`` continues to identify modes that omit them.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape constraints are checked at call time. String
-    metadata (``mode``, ``labels``, ``comment``, ``coordinate_mode``)
-    is passed through unchanged and stored as PyTree auxiliary data.
+    ``@jaxtyped(typechecker=beartype)`` checks shape constraints at call time.
+    The factory passes string metadata unchanged and stores it as PyTree
+    auxiliary data.
 
     Use this factory when constructing ``KPathInfo`` from parsed
     KPOINTS data or when building synthetic k-paths for testing. The
@@ -211,8 +206,8 @@ def make_kpath_info(  # noqa: DOC503, PLR0913
     Raises
     ------
     ValueError
-        If ``mode`` is unsupported, or if line mode has no label index,
-        mismatched labels and label indices, or fewer than one segment.
+        If ``mode`` has an unsupported value. The function also rejects
+        incomplete or inconsistent line-mode metadata.
     EquinoxRuntimeError
         If ``num_kpoints`` is negative, a traced line-mode segment count is
         less than one, or supplied ``kpoints``, ``weights``, or ``shift``
@@ -220,9 +215,8 @@ def make_kpath_info(  # noqa: DOC503, PLR0913
 
     Notes
     -----
-    Static validation raises ``ValueError`` before traced construction when
-    the mode is unsupported, line-mode labels are absent or inconsistent, or
-    a concrete line-mode segment count is less than one. Traced validation
+    Static validation raises ``ValueError`` before traced construction for an
+    unsupported mode or inconsistent line-mode metadata. Traced validation
     uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for negative
     k-point counts, invalid traced segment counts, and non-finite optional
     floating-point arrays.

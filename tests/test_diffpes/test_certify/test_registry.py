@@ -1,4 +1,4 @@
-"""Tests for deterministic immutable certification registries.
+"""Validate deterministic immutable certification registries.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

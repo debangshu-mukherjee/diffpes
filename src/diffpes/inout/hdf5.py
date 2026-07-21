@@ -1,11 +1,10 @@
-"""HDF5 serializer and deserializer for diffpes PyTrees.
+"""Serialize and deserialize diffpes PyTrees in HDF5.
 
 Extended Summary
 ----------------
-Provides functions for saving and loading diffpes Equinox PyTree objects
-to and from HDF5 files via ``h5py``. Each module's named array fields
-become HDF5 datasets, and static metadata is
-stored as HDF5 group attributes in JSON format.
+The module saves and loads diffpes Equinox PyTrees in HDF5 files through
+``h5py``. Each named array field becomes an HDF5 dataset. The codec stores
+static metadata as JSON in HDF5 group attributes.
 
 Routine Listings
 ----------------
@@ -16,10 +15,10 @@ Routine Listings
 
 Notes
 -----
-All nineteen types-owned Equinox carriers are supported. Serialization
-metadata is derived from dataclass fields: non-static fields are stored as
-datasets or recursive module groups, while ``eqx.field(static=True)`` values
-are encoded as tuple-preserving JSON.
+The codec supports all nineteen types-owned Equinox carriers. Dataclass fields
+define the serialization metadata. The codec stores dynamic fields as datasets
+or recursive module groups. It encodes ``eqx.field(static=True)`` values as
+tuple-preserving JSON.
 """
 
 import json
@@ -210,10 +209,9 @@ def _dataset_write_kwargs(
 
     Extended Summary
     ----------------
-    HDF5 storage filters (compression, shuffle, checksums) and chunking
-    are only valid for datasets with non-scalar dataspace. This helper
-    inspects the array dimensionality and returns the appropriate
-    keyword dictionary for ``h5py.Group.create_dataset``.
+    HDF5 storage filters and chunking apply only to datasets with nonscalar
+    dataspaces. This helper checks the array dimensions. It returns the
+    applicable keyword dictionary for ``h5py.Group.create_dataset``.
 
     Implementation Logic
     --------------------
@@ -227,12 +225,12 @@ def _dataset_write_kwargs(
     Parameters
     ----------
     data : Shaped[NDArray, "..."]
-        The NumPy array to be written. Its ``ndim`` determines whether
-        filters are applicable.
+        The NumPy array for the dataset. Its ``ndim`` determines whether the
+        filters apply.
     compression : Optional[str]
-        HDF5 compression filter name (e.g. ``"gzip"``, ``"lzf"``).
+        HDF5 compression filter name, for example ``"gzip"`` or ``"lzf"``.
     compression_opts : Any
-        Compression-specific options (e.g. gzip level 1-9).
+        Compression-specific options, for example a gzip level from 1 to 9.
     shuffle : bool
         Whether to enable the HDF5 byte-shuffle filter.
     fletcher32 : bool
@@ -276,10 +274,9 @@ def save_to_h5(  # noqa: DOC503 -- recursive helper raises TypeError.
 ) -> None:
     """Save one or more named PyTrees to an HDF5 file.
 
-    Serializes each keyword-argument PyTree into a named HDF5
-    group. JAX array fields become HDF5 datasets (named by the
-    Equinox field name), and static metadata is stored as a
-    JSON-encoded group attribute.
+    The function serializes each keyword PyTree into a named HDF5 group. JAX
+    array fields become datasets with their Equinox field names. The codec
+    stores static metadata in a JSON group attribute.
 
     :see: :class:`~.test_hdf5.TestSaveToH5`
 
@@ -309,10 +306,10 @@ def save_to_h5(  # noqa: DOC503 -- recursive helper raises TypeError.
     path : Union[str, Path]
         File path for the HDF5 file to create.
     compression : Optional[str], optional
-        HDF5 compression filter name (e.g. ``"gzip"``, ``"lzf"``).
+        HDF5 compression filter name, for example ``"gzip"`` or ``"lzf"``.
         Applied to non-scalar datasets only.
     compression_opts : Any, optional
-        Compression options passed through to h5py (e.g. gzip level).
+        Compression options for h5py, for example the gzip level.
         Must be ``None`` when ``compression`` is ``None``.
     shuffle : bool, optional
         If True, enable HDF5 shuffle filter on non-scalar datasets.
@@ -328,9 +325,9 @@ def save_to_h5(  # noqa: DOC503 -- recursive helper raises TypeError.
     Raises
     ------
     ValueError
-        If no PyTrees are provided.
+        If the caller provides no PyTrees.
     ValueError
-        If ``compression_opts`` is provided without ``compression``.
+        If the caller provides ``compression_opts`` without ``compression``.
     TypeError
         If a PyTree's class is not in the registry.
 
@@ -409,9 +406,9 @@ def load_from_h5(  # noqa: DOC502 -- raises occur under the HDF5 context.
 ) -> Any:  # noqa: ANN401
     """Load PyTrees from an HDF5 file.
 
-    Deserializes HDF5 groups back into diffpes PyTree objects
-    by reading datasets as JAX arrays and reconstructing the
-    Equinox module with keyword arguments.
+    The function deserializes HDF5 groups into diffpes PyTrees. It reads the
+    datasets as JAX arrays and reconstructs each Equinox module with keyword
+    arguments.
 
     :see: :class:`~.test_hdf5.TestLoadFromH5`
 
@@ -442,19 +439,19 @@ def load_from_h5(  # noqa: DOC502 -- raises occur under the HDF5 context.
     path : Union[str, Path]
         File path to the HDF5 file to read.
     name : Optional[str], optional
-        Name of a specific group to load. If ``None``, all
-        groups are loaded and returned as a dict.
+        Name of a specific group to load. If ``None``, the function loads all
+        groups and returns a dictionary.
 
     Returns
     -------
     loaded : PyTree or dict[str, PyTree]
-        A single PyTree if ``name`` is given, otherwise a dict
-        mapping group names to PyTree instances.
+        One PyTree when ``name`` identifies a group. Otherwise, a dictionary
+        that maps group names to PyTree instances.
 
     Raises
     ------
     KeyError
-        If ``name`` is specified but does not exist in the file.
+        If ``name`` identifies no group in the file.
     TypeError
         If a group's ``_pytree_type`` is not in the registry.
     """

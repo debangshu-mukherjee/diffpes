@@ -1,16 +1,14 @@
-"""Tests for the end-to-end differentiable forward model.
+"""Validate the end-to-end differentiable forward model.
 
 Extended Summary
 ----------------
 Validates :func:`diffpes.simul.forward.simulate_tb_radial`, the Chinook-style
 tight-binding forward model that combines tight-binding diagonalization,
 Slater radial wavefunctions, dipole matrix elements, and Voigt broadening
-into a single differentiable pipeline. Tests cover output shape and value
-constraints (finiteness, non-negativity), polarization modes (LHP,
-unpolarized), self-energy and momentum-broadening extensions, sensitivity
-to the work function parameter, and -- critically -- end-to-end
-differentiability with respect to Slater exponents and hopping parameters
-via ``jax.grad``. The graphene model test verifies a multi-orbital,
+into a single differentiable pipeline. The tests cover shapes, value
+constraints, polarization modes, and optional broadening. They verify work
+function sensitivity and derivatives for Slater exponents and hopping
+parameters. The graphene model test verifies a multi-orbital,
 multi-atom system runs end-to-end without error.
 
 """
@@ -54,18 +52,15 @@ def chain_setup() -> tuple[
 ]:
     """Provide a 1D chain tight-binding model with a single Slater s-orbital.
 
-    Constructs the simplest possible tight-binding system: a 1D chain with
-    nearest-neighbour hopping t = -1.0 eV, diagonalized at 10 k-points along
-    the x-axis from -0.4 to 0.4 (in reciprocal lattice units). The orbital
+    The fixture constructs a 1D chain with -1.0 eV nearest-neighbor hopping.
+    It diagonalizes the model at ten k-points along the x-axis. The orbital
     basis is a single hydrogen-like 1s orbital (n=1, l=0, m=0) with Slater
-    exponent zeta = 1.0. Simulation parameters use a wide energy window
-    [-3, 3] eV, fidelity 500, Voigt broadening (sigma=0.1, gamma=0.1),
-    temperature 30 K, and photon energy 21.2 eV (He-I). Polarization is
-    set to LHP (linear horizontal).
+    exponent zeta = 1.0. The simulation uses a [-3, 3] eV energy window,
+    fidelity 500, Voigt broadening, 30 K, and 21.2 eV photons. The fixture
+    uses LHP polarization.
 
-    This fixture is shared across most tests in ``TestSimulateTBRadial``
-    because the 1D chain model is analytically tractable (cosine band)
-    and fast to diagonalize, while still exercising all stages of the
+    Most tests in ``TestSimulateTBRadial`` share this fixture. The analytical
+    cosine band keeps diagonalization fast while exercising the complete
     forward pipeline.
 
     Returns
@@ -115,15 +110,14 @@ def chain_setup() -> tuple[
 
 
 class TestSimulateTBRadial:
-    """Tests for :func:`diffpes.simul.forward.simulate_tb_radial`.
+    """Validate :func:`diffpes.simul.forward.simulate_tb_radial`.
 
     Validates the Chinook-style differentiable forward model that computes
     ARPES spectra from tight-binding Hamiltonians and Slater radial
-    wavefunctions. Tests cover basic output correctness (shape, finiteness,
-    non-negativity), multiple polarization modes, optional self-energy and
-    momentum broadening extensions, work-function sensitivity, and -- most
-    importantly -- end-to-end differentiability via ``jax.grad`` with respect
-    to both Slater exponents (zeta) and tight-binding hopping parameters.
+    wavefunctions. The tests cover shapes, finite nonnegative values, and
+    polarization modes. They cover optional broadening and work-function
+    sensitivity. They also verify derivatives for Slater exponents and
+    tight-binding hopping parameters.
     A graphene test confirms multi-orbital, multi-atom generality.
 
     :see: :func:`~diffpes.simul.simulate_tb_radial`
@@ -132,7 +126,7 @@ class TestSimulateTBRadial:
     def test_output_shape(self, chain_setup) -> None:
         """Verify that the spectrum intensity and energy axis have expected shapes.
 
-        This case establishes the output shape contract for simulate t b radial with the
+        The test establishes the output shape contract for simulate t b radial with the
         concrete values and array shapes described below.
 
         Notes
@@ -164,17 +158,14 @@ class TestSimulateTBRadial:
     def test_output_finite(self, chain_setup) -> None:
         """Verify that all intensity and energy axis values are finite.
 
-        This case establishes the output finite contract for simulate t b radial with
+        The test establishes the output finite contract for simulate t b radial with
         the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Setup**: Use the ``chain_setup`` fixture (1D chain, LHP).
         2. **Simulate**: Call ``simulate_tb_radial`` to produce a spectrum.
-        3. **Check finiteness**: Assert every element of both ``intensity``
-           and ``energy_axis`` is finite (no NaN or Inf), which could arise
-           from overflow in the Slater radial integration or division by
-           zero in the Voigt profile evaluation.
+        3. **Check finiteness**: Check every intensity and energy-axis value.
 
         **Expected assertions**
 
@@ -196,7 +187,7 @@ class TestSimulateTBRadial:
     def test_output_non_negative(self, chain_setup) -> None:
         """Verify that the simulated ARPES intensity is non-negative.
 
-        This case establishes the output non negative contract for simulate t b radial
+        The test establishes the output non negative contract for simulate t b radial
         with the concrete values and array shapes described below.
 
         Notes
@@ -225,7 +216,7 @@ class TestSimulateTBRadial:
     def test_unpolarized(self, chain_setup) -> None:
         """Verify that unpolarized light mode produces finite intensity.
 
-        This case establishes the unpolarized contract for simulate t b radial with the
+        The test establishes the unpolarized contract for simulate t b radial with the
         concrete values and array shapes described below.
 
         Notes
@@ -239,10 +230,8 @@ class TestSimulateTBRadial:
 
         **Expected assertions**
 
-        All intensity values are finite under the unpolarized code path,
-        confirming that the polarization-averaging branch does not
-        introduce numerical instabilities in the dipole matrix element
-        computation.
+        The unpolarized path produces finite intensity values. This result
+        verifies stable averaging of the polarization contributions.
         """
         diag: diffpes.types.DiagonalizedBands
         slater: diffpes.types.SlaterParams
@@ -258,24 +247,20 @@ class TestSimulateTBRadial:
     def test_with_self_energy(self, chain_setup) -> None:
         """Verify that the optional self-energy extension produces finite output.
 
-        This case establishes the with self energy contract for simulate t b radial with
+        The test establishes the with self energy contract for simulate t b radial with
         the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Use the ``chain_setup`` fixture and create a
-           constant-mode self-energy config with gamma=0.15 eV, which
-           adds an energy-independent imaginary part to the Green's
-           function, broadening the spectral features.
+        1. **Setup**: Use the fixture and a constant 0.15 eV self-energy.
         2. **Simulate**: Call ``simulate_tb_radial`` with the
            ``self_energy`` keyword argument.
         3. **Check finiteness**: Assert all intensity values are finite.
 
         **Expected assertions**
 
-        All intensity values are finite when a constant self-energy is
-        applied, confirming that the self-energy evaluation integrates
-        correctly with the forward model pipeline.
+        A constant self-energy produces finite intensity values. This result
+        verifies its integration with the forward model.
         """
         diag: diffpes.types.DiagonalizedBands
         slater: diffpes.types.SlaterParams
@@ -294,24 +279,20 @@ class TestSimulateTBRadial:
     def test_with_momentum_broadening(self, chain_setup) -> None:
         """Verify that the optional momentum-broadening extension produces finite output.
 
-        This case establishes the with momentum broadening contract for simulate t b
+        The test establishes the with momentum broadening contract for simulate t b
         radial with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Use the ``chain_setup`` fixture and pass dk=0.05
-           (inverse angstroms), which applies Gaussian broadening along
-           the k-axis to simulate finite angular resolution of the
-           analyser.
+        1. **Setup**: Use the fixture and ``dk=0.05`` inverse Angstrom.
         2. **Simulate**: Call ``simulate_tb_radial`` with the ``dk``
            keyword argument.
         3. **Check finiteness**: Assert all intensity values are finite.
 
         **Expected assertions**
 
-        All intensity values are finite when momentum broadening is
-        applied, confirming that ``apply_momentum_broadening`` integrates
-        correctly with the forward model without introducing NaN or Inf.
+        Momentum broadening produces finite intensity values. This result
+        verifies its integration with the forward model.
         """
         diag: diffpes.types.DiagonalizedBands
         slater: diffpes.types.SlaterParams
@@ -326,7 +307,7 @@ class TestSimulateTBRadial:
     def test_work_function_effect(self, chain_setup) -> None:
         """Verify that different work function values produce different spectra.
 
-        This case establishes the work function effect contract for simulate t b radial
+        The test establishes the work function effect contract for simulate t b radial
         with the concrete values and array shapes described below.
 
         Notes
@@ -345,10 +326,8 @@ class TestSimulateTBRadial:
 
         **Expected assertions**
 
-        The intensity maps differ for different work functions,
-        confirming that the work function parameter propagates through
-        the radial matrix element calculation and affects the final
-        ARPES intensity.
+        Different work functions produce different intensity maps. This
+        result verifies propagation through the radial matrix element.
         """
         diag: diffpes.types.DiagonalizedBands
         slater: diffpes.types.SlaterParams
@@ -370,28 +349,21 @@ class TestSimulateTBRadial:
     def test_gradient_wrt_zeta(self, chain_setup) -> None:
         """Verify that the gradient of total intensity w.r.t. Slater exponent is finite.
 
-        This case establishes the gradient wrt zeta contract for simulate t b radial
+        The test establishes the gradient wrt zeta contract for simulate t b radial
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Use the ``chain_setup`` fixture (discarding its
-           slater params) and define a scalar loss function that creates
-           new ``SlaterParams`` from a single zeta value, runs
-           ``simulate_tb_radial`` with an explicit r_grid of 2000 points
-           from 1e-6 to 30.0 bohr, and returns the sum of all
-           intensities.
+        1. **Setup**: Use the fixture without its Slater parameters.
+           Define a scalar loss with new parameters and an explicit radial grid.
         2. **Differentiate**: Call ``jax.grad(loss)(1.0)`` to compute
            the gradient of the loss with respect to the Slater exponent.
         3. **Check finiteness**: Assert the gradient is finite.
 
         **Expected assertions**
 
-        The gradient w.r.t. the Slater exponent zeta is finite, proving
-        that the radial integration (Slater wavefunction times spherical
-        Bessel function) is differentiable through JAX and that no
-        numerical singularities arise during backpropagation. This is
-        essential for inverse fitting of orbital parameters.
+        The Slater-exponent gradient is finite. This result verifies JAX
+        differentiation through the radial integration without singularities.
         """
         diag: diffpes.types.DiagonalizedBands
         params: diffpes.types.SimulationParams
@@ -429,17 +401,14 @@ class TestSimulateTBRadial:
     def test_gradient_wrt_hopping(self) -> None:
         """Verify end-to-end gradient through TB diagonalization and simulation.
 
-        This case establishes the gradient wrt hopping contract for simulate t b radial
+        The test establishes the gradient wrt hopping contract for simulate t b radial
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Build a fresh 1D chain model (t=-1.0), 5 k-points,
-           a single 1s Slater orbital (zeta=1.0), simulation params with
-           fidelity=200, and LHP polarization. Define a scalar loss
-           function that replaces the model's hopping_params, re-
-           diagonalizes, runs ``simulate_tb_radial`` with an explicit
-           r_grid, and returns the sum of all intensities.
+        1. **Setup**: Build a five-point chain with one 1s orbital.
+           Define a scalar loss that replaces the hopping parameters.
+           Diagonalize the model and simulate with an explicit radial grid.
         2. **Differentiate**: Call ``jax.grad(loss)(model.hopping_params)``
            to compute the gradient of the total intensity with respect to
            the tight-binding hopping parameter(s).
@@ -447,12 +416,8 @@ class TestSimulateTBRadial:
 
         **Expected assertions**
 
-        All gradient components w.r.t. hopping parameters are finite,
-        demonstrating that the full pipeline -- Hamiltonian construction,
-        eigenvalue decomposition via ``diagonalize_tb``, radial matrix
-        elements, broadening, and summation -- is end-to-end
-        differentiable through JAX. This is the core requirement for
-        inverse tight-binding fitting.
+        All hopping gradients are finite. This result verifies JAX
+        differentiation through the complete forward model.
         """
         model: diffpes.types.TBModel
         kpoints: Array
@@ -510,20 +475,15 @@ class TestSimulateTBRadial:
     def test_graphene_runs(self) -> None:
         """Verify that a graphene model with two pz orbitals runs end-to-end.
 
-        This case establishes the graphene runs contract for simulate t b radial with
+        The test establishes the graphene runs contract for simulate t b radial with
         the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Setup**: Build a graphene tight-binding model with
            nearest-neighbour hopping t=-2.7 eV (standard graphene value).
-           Use 3 high-symmetry k-points (Gamma, K, M) and define two
-           pz orbitals (n=2, l=1, m=0) for the A and B sublattice atoms,
-           each with Slater exponent zeta=1.625 (carbon 2p). Simulation
-           params use a wide energy window [-10, 10] eV, fidelity=300,
-           broader Voigt widths (sigma=0.2, gamma=0.2), temperature
-           30 K, photon energy 21.2 eV, and an explicit r_grid of 2000
-           points.
+           Use three high-symmetry k-points and two carbon pz orbitals.
+           Use a wide energy window and an explicit radial grid.
         2. **Simulate**: Call ``simulate_tb_radial`` with LHP
            polarization.
         3. **Check shape and finiteness**: Assert intensity shape is
@@ -531,11 +491,8 @@ class TestSimulateTBRadial:
 
         **Expected assertions**
 
-        The intensity has shape ``(n_kpoints, fidelity)`` and is
-        entirely finite, confirming that the forward model generalizes
-        beyond the single-orbital 1D chain to a multi-atom, multi-orbital
-        system with known physical relevance (graphene's Dirac cone band
-        structure).
+        The intensity has the expected shape and finite values. This result
+        verifies the forward model for a graphene system with multiple atoms.
         """
         model: diffpes.types.TBModel
         kpoints: Array

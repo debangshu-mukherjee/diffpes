@@ -1,4 +1,4 @@
-"""Tests for semantic transformation contracts.
+"""Validate semantic transformation contracts.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

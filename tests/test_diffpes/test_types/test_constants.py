@@ -43,7 +43,7 @@ class TestOrbitalConstants:
 
         Notes
         -----
-        Compares the public mapping and slice constants exactly, then uses Chex
+        The test compares the public mapping and slice constants exactly, then uses Chex
         for the direction-table shape and scalar-orbital row.
         """
         assert isinstance(ORBITAL_INDEX, MappingProxyType)
@@ -57,8 +57,8 @@ class TestOrbitalConstants:
 class TestParserConstants:
     """Validate immutable parser tokens and angular-momentum bounds.
 
-    Coordinate selectors and the maximum supported orbital angular momentum
-    are pinned shared conventions rather than parser-local values.
+    The tests verify shared coordinate selectors and the maximum orbital
+    angular momentum. Parsers do not define local values for these conventions.
 
     :see: :data:`~diffpes.types.COORDINATE_MODE_TOKENS`
     :see: :data:`~diffpes.types.L_MAX`
@@ -71,7 +71,7 @@ class TestParserConstants:
 
         Notes
         -----
-        Compares the public token container type and contents plus the integer
+        The test compares the public token container type and contents plus the integer
         angular-momentum bound against independent literal values.
         """
         expected_tokens: frozenset[str] = frozenset(
@@ -100,7 +100,7 @@ class TestCrossSectionTables:
 
         Notes
         -----
-        Iterates over the three independent public channel arrays and uses Chex
+        The test iterates over the three independent public channel arrays and uses Chex
         to compare each shape with the energy table.
         """
         channels: tuple[jax.Array, ...] = (

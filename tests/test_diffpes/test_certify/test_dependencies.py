@@ -1,4 +1,4 @@
-"""Tests for JAX-native certification dependency analysis.
+"""Validate JAX-native certification dependency analysis.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

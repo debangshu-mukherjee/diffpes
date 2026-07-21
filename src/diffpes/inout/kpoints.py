@@ -1,10 +1,10 @@
-"""VASP KPOINTS file parser.
+"""Parse a VASP KPOINTS file.
 
 Extended Summary
 ----------------
-Reads VASP KPOINTS files and returns a :class:`~diffpes.types.KPathInfo`
-carrier containing plotting labels and mode-specific metadata: automatic
-grid and shift, explicit weights, and line-mode segment endpoints.
+The module reads VASP KPOINTS files. It returns a ``KPathInfo`` carrier with
+plotting labels and metadata for each mode. The metadata includes grids,
+shifts, weights, and segment endpoints.
 
 Routine Listings
 ----------------
@@ -37,8 +37,8 @@ def read_kpoints(  # noqa: PLR0915
 ) -> KPathInfo:
     """Parse a VASP KPOINTS file.
 
-    Reads a VASP KPOINTS file that specifies Brillouin-zone sampling.
-    Supports the three standard modes:
+    The function reads a VASP KPOINTS file that specifies Brillouin-zone
+    sampling. It supports three standard modes:
     Line-mode (path segments), Automatic (Monkhorst-Pack/Gamma grids),
     and Explicit (listed k-points with optional weights).
 
@@ -197,14 +197,13 @@ def _parse_explicit_kpoints(
 
     Extended Summary
     ----------------
-    In VASP explicit KPOINTS mode, each k-point is listed on its own
-    line with at least three fractional/Cartesian coordinates and an
-    optional fourth column for the integration weight.
+    In the VASP explicit mode, one line defines each k-point. The line contains
+    at least three coordinates and can contain an integration weight.
 
     Implementation Logic
     --------------------
-    1. Iterate over ``lines``, stopping once ``num_kpoints`` k-points
-       have been collected.
+    1. Iterate over ``lines`` until the function collects ``num_kpoints``
+       k-points.
     2. Split each line and parse all tokens as floats. Raise
        ``ValueError`` if any token is not numeric or if fewer than 3
        values are present.
@@ -229,8 +228,8 @@ def _parse_explicit_kpoints(
     Raises
     ------
     ValueError
-        If a coordinate line cannot be parsed or has fewer than 3
-        numeric tokens.
+        If the parser cannot read a coordinate line.
+        If a coordinate line has fewer than three numeric tokens.
     """
     stripped: str
 
@@ -268,11 +267,10 @@ def _looks_like_kpoint_line(line: str) -> bool:
 
     Extended Summary
     ----------------
-    Heuristic used to distinguish a k-point coordinate line from a
-    coordinate-mode descriptor line (e.g. ``"Reciprocal"``) when the
-    KPOINTS file uses explicit mode and the mode keyword also happens
-    to appear on line 3. Lines with fewer than 3 tokens or with
-    non-numeric leading tokens return ``False``.
+    The heuristic distinguishes a k-point coordinate line from a coordinate
+    mode descriptor. Explicit files can place the mode keyword on line 3.
+    Lines with fewer than three tokens return ``False``. Lines with nonnumeric
+    leading tokens also return ``False``.
 
     Parameters
     ----------
@@ -282,8 +280,8 @@ def _looks_like_kpoint_line(line: str) -> bool:
     Returns
     -------
     bool
-        ``True`` if the first three whitespace-separated tokens can
-        all be converted to ``float``; ``False`` otherwise.
+        ``True`` if ``float`` can convert each of the first three tokens;
+        otherwise, ``False``.
     """
     parts: list[str] = line.split()
     looks_like_kpoint: bool = False
@@ -306,11 +304,9 @@ def _parse_grid(line: str) -> list[int]:
 
     Extended Summary
     ----------------
-    In VASP automatic KPOINTS mode, the line immediately after the
-    scheme keyword contains the three Monkhorst-Pack grid subdivisions
-    ``N1 N2 N3``. Tokens are parsed as floats first and then rounded
-    to the nearest integer to tolerate files written with decimal
-    points (e.g. ``"4.0 4.0 4.0"``).
+    In the VASP automatic mode, the line after the scheme contains the three
+    Monkhorst-Pack subdivisions. The helper converts the tokens to floats. It
+    then rounds them to accept decimal forms such as ``"4.0 4.0 4.0"``.
 
     Parameters
     ----------
@@ -377,10 +373,9 @@ def _extract_coords(line: str) -> list[float]:
 
     Extended Summary
     ----------------
-    Uses a regex (``FLOAT_TOKEN_RE``) to find all floating-point
-    tokens in the line, regardless of surrounding non-numeric text
-    (such as symmetry labels or comment markers). This makes the
-    extraction robust to various KPOINTS formatting styles.
+    The helper uses ``FLOAT_TOKEN_RE`` to find each floating-point token in the
+    line. It ignores surrounding nonnumeric text, including labels and comment
+    markers. This behavior supports different KPOINTS formats.
 
     Parameters
     ----------
@@ -395,7 +390,7 @@ def _extract_coords(line: str) -> list[float]:
     Raises
     ------
     ValueError
-        If fewer than 3 float tokens are found on the line.
+        If the helper finds fewer than three float tokens on the line.
     """
     tokens: list[str] = FLOAT_TOKEN_RE.findall(line)
     if len(tokens) < XYZ_COMPONENTS:
@@ -412,26 +407,20 @@ def _extract_coords(line: str) -> list[float]:
 def _extract_label(line: str) -> str:
     r"""Extract symmetry label from a KPOINTS line.
 
-    Parses a single coordinate line from a VASP KPOINTS file and
-    attempts to recover the human-readable symmetry label (e.g.
-    ``"G"``, ``"X"``, ``"M"``) that is conventionally appended after
-    the three fractional coordinates.
+    The helper parses one coordinate line from a VASP KPOINTS file. It tries to
+    read the symmetry label after the three fractional coordinates.
 
     Implementation Logic
     --------------------
-    1. **Regex match** -- search for the pattern ``! <label>`` using
-       ``re.search(r"!\\s*(\\S+)", line)``. The ``!`` delimiter is the
-       standard VASP comment marker used by AFLOW, SeeK-path, and most
-       KPOINTS generators. If a match is found, return the first
-       captured non-whitespace group.
+    1. **Match the expression**: Search for ``! <label>`` with
+       ``re.search(r"!\\s*(\\S+)", line)``. AFLOW, SeeK-path, and many KPOINTS
+       generators use the ``!`` delimiter. Return the first captured group.
 
-    2. **Fallback heuristic** -- if no ``!`` marker is present, split
-       the line on whitespace. If there are more than 4 tokens (three
-       coordinates plus at least a weight and a label), return the last
-       token as the label.
+    2. **Apply the fallback**: Split a line without ``!`` on whitespace.
+       Return the last token when the line contains more than four tokens.
 
-    3. **Default** -- if neither strategy yields a label, return an
-       empty string.
+    3. **Use the default**: Return an empty string when neither strategy finds
+       a label.
 
     Parameters
     ----------
@@ -442,14 +431,12 @@ def _extract_label(line: str) -> str:
     Returns
     -------
     label : str
-        Extracted symmetry label, or ``""`` if none is found.
+        The symmetry label, or ``""`` when no label exists.
 
     Notes
     -----
-    The ``! LABEL`` convention is the most reliable. The fallback
-    heuristic can misidentify a numeric weight as a label when the
-    line has exactly 5 whitespace-separated tokens, but this situation
-    is rare in practice.
+    The ``! LABEL`` convention gives the most reliable result. The fallback
+    can incorrectly read a numeric weight as a label in a five-token line.
     """
     _min_parts_with_label: int = 4
     match: Optional[re.Match[str]] = re.search(r"!\s*(\S+)", line)

@@ -1,8 +1,14 @@
 # Simulation Levels
 
-diffpes organizes its projection-based ARPES forward models into a six-level ladder: **novice**, **basic**, **basicplus**, **advanced**, **expert**, and **soc**. Each level is a self-contained approximation tier — a deliberate trade-off between physical fidelity, required inputs, and computational cost. All six share the same skeleton (sum bands, weight them, occupy them with Fermi-Dirac, broaden them onto an energy axis) and differ only in *how the per-band weight is computed* and *which lineshape is used*.
+diffpes provides six projection-based ARPES simulation levels: **novice**,
+**basic**, **basicplus**, **advanced**, **expert**, and **soc**. Each level
+balances physical fidelity, required inputs, and computational cost. All
+levels sum and weight the bands. They also apply Fermi-Dirac occupation and
+broaden the bands on an energy axis. The levels use different band weights
+and lineshapes.
 
-This guide describes what each level adds, states honestly which ingredients are placeholders, and shows the single-entry-point dispatch `simulate_expanded(level=...)`.
+This guide describes each level and identifies its approximations. It also
+shows the `simulate_expanded(level=...)` dispatch.
 
 ## The Common Skeleton
 
@@ -16,10 +22,14 @@ $$
 
 with
 
-- $E_b(\mathbf{k})$ — band eigenvalues, shape `(K, B)` in eV (e.g. from VASP `EIGENVAL`)
-- $W_b(\mathbf{k})$ — a weight built from the orbital projections `(K, B, A, 9)` (e.g. from VASP `PROCAR`), in VASP orbital order `[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]`
-- $f$ — the Fermi-Dirac occupation at temperature $T$
-- $\mathcal{L}$ — a normalized Gaussian (width $\sigma$) or pseudo-Voigt (Gaussian $\sigma$ + Lorentzian $\gamma$) profile
+- $E_b(\mathbf{k})$ contains band eigenvalues with shape `(K, B)` in eV.
+  VASP `EIGENVAL` can supply these values.
+- $W_b(\mathbf{k})$ contains weights from orbital projections with shape
+  `(K, B, A, 9)`. The last axis follows the VASP orbital order
+  `[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]`.
+- $f$ is the Fermi-Dirac occupation at temperature $T$.
+- $\mathcal{L}$ is a normalized Gaussian or pseudo-Voigt profile. The profile
+  uses Gaussian width $\sigma$ and optional Lorentzian width $\gamma$.
 
 See [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md) for the lineshapes and [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) for the axes and units.
 
@@ -34,13 +44,19 @@ See [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md
 | `expert` | Voigt ($\sigma$, $\gamma$) | Yeh-Lindau $\times\; \lvert \hat{e}\cdot\hat{d}_o \rvert^2$ dipole weighting | yes | — | as `advanced` + `gamma` |
 | `soc` | Voigt ($\sigma$, $\gamma$) | As `expert`, modulated by $1 + \lambda\, \mathbf{S}\cdot\hat{k}_{\mathrm{ph}}$ | yes | yes | `surface_spin` `(K, B, A, 6)`, `ls_scale` |
 
-### What each rung adds
+### What each level adds
 
-**novice** — the minimal model that still looks like ARPES: every band is a Voigt peak with Fermi-Dirac occupation. Orbital projections enter only as a total weight (all non-s channels summed with equal weight). Use it for quick sanity checks of the band geometry.
+**novice** uses the minimum ARPES model. Each band becomes a Voigt peak with
+Fermi-Dirac occupation. The model sums all non-s orbital channels with equal
+weight. Use this level for quick checks of the band geometry.
 
-**basic** — swaps the uniform weights for an energy-regime heuristic, `heuristic_weights`: below 50 eV photon energy the three p channels get weight 2 (He-I / laser regime), above 50 eV the five d channels get weight 2 (He-II / synchrotron regime). This is a *coarse placeholder* for cross-section physics, not tabulated data.
+**basic** uses the `heuristic_weights` energy rule. Below 50 eV, the rule gives
+the three p channels a weight of 2. Above 50 eV, it gives the five d channels
+a weight of 2. This coarse approximation does not use tabulated cross-sections.
 
-**basicplus** — replaces the heuristic with `yeh_lindau_weights`: per-subshell photoionization cross-sections linearly interpolated from a *simplified* tabulation of Yeh & Lindau (1985) at 20/40/60 eV, broadcast to the 9-orbital basis:
+**basicplus** uses `yeh_lindau_weights`. The function linearly interpolates a
+simplified Yeh-Lindau (1985) table at 20, 40, and 60 eV. It broadcasts the
+subshell cross-sections to the nine-orbital basis:
 
 ```python
 import diffpes
@@ -51,31 +67,59 @@ print(diffpes.simul.yeh_lindau_weights(40.0))
 # [0.08 0.9  0.9  0.9  1.5  1.5  1.5  1.5  1.5]
 ```
 
-**advanced** — adds polarization selection rules on top of the Yeh-Lindau weights. The electric-field vector $\hat{e}$ is built from `polarization`, `incident_theta`, and `incident_phi` (degrees), and each orbital channel $o$ is weighted by $\lvert \hat{e} \cdot \hat{d}_o \rvert^2$ where $\hat{d}_o$ is a fixed unit direction vector per orbital (`ORBITAL_DIRS_NORMALIZED`). Unpolarized light averages the s- and p-polarization results.
+**advanced** adds polarization selection rules to the Yeh-Lindau weights.
+`polarization`, `incident_theta`, and `incident_phi` define the electric field
+$\hat{e}$. The angles use degrees. The model weights each orbital channel by
+$\lvert \hat{e} \cdot \hat{d}_o \rvert^2$. `ORBITAL_DIRS_NORMALIZED` supplies
+one fixed unit direction $\hat{d}_o$ per orbital. Unpolarized light averages
+the s- and p-polarization results.
 
-**expert** — the most complete projection-based tier: Voigt broadening + Yeh-Lindau cross-sections + polarization-dependent dipole weighting, all together.
+**expert** combines Voigt broadening, Yeh-Lindau cross-sections, and
+polarization-dependent dipole weights. It is the most complete
+projection-based level.
 
-**soc** — the expert pipeline plus a **phenomenological spin dial**. It requires spin projections `surface_spin` of shape `(K, B, A, 6)` (up/down for $x$, $y$, $z$, e.g. from a spin-polarized `PROCAR`) and modulates each band's intensity by
+**soc** adds a **phenomenological spin scale** to the expert calculation. It
+requires `surface_spin` projections with shape `(K, B, A, 6)`. These channels
+contain the up and down components for $x$, $y$, and $z$. A spin-polarized
+`PROCAR` can supply this data. The level changes each band intensity by
 
 $$
 W_b \rightarrow W_b \left( 1 + \lambda \; \mathbf{S}_b \cdot \hat{k}_{\mathrm{ph}} \right)
 $$
 
-where $\hat{k}_{\mathrm{ph}}$ is the photon propagation direction and $\lambda$ = `ls_scale` (default 0.01). With `ls_scale=0` the result reduces to the expert level. This mimics spin-dependent intensity asymmetries (e.g. circular dichroism trends) but is an **intensity dial, not a matrix-element calculation**.
+Here, $\hat{k}_{\mathrm{ph}}$ is the photon propagation direction, and
+$\lambda$ is `ls_scale`. Its default is 0.01. With `ls_scale=0`, the result
+equals the expert result. This scale approximates spin-dependent intensity
+asymmetries. It does not compute a matrix element.
 
-## Honest Framing: These Are Approximation Tiers
+## Scope of the Approximations
 
-Several ingredients in the ladder are stated placeholders, and the documentation should not oversell them:
+Several level components are explicit approximations:
 
-- The **heuristic weights** (`basic`) and the **simplified Yeh-Lindau tabulation** (three energy points per subshell, no element resolution) are rough stand-ins for real atomic cross-sections.
-- The **orbital-direction dipole model** used by `advanced`/`expert` assigns each orbital a single Cartesian direction and scores it with $\lvert \hat{e}\cdot\hat{d} \rvert^2$. It reproduces qualitative selection-rule behavior (e.g. s-polarized light suppressing out-of-plane orbitals) but is not a quantum-mechanical matrix element — notably, the s-orbital gets *zero* weight at these levels because its direction vector is the zero vector.
-- The **SOC spin dial** is purely phenomenological; `ls_scale` is a fitting knob, not a derived coupling constant.
+- The **heuristic weights** in `basic` approximate atomic cross-sections. The
+  simplified Yeh-Lindau table has three energy points and no element
+  resolution.
+- The **orbital-direction dipole model** assigns one Cartesian direction to
+  each orbital. It uses $\lvert \hat{e}\cdot\hat{d} \rvert^2$ as the score.
+  The model reproduces qualitative selection rules but does not compute a
+  quantum-mechanical matrix element. Its zero direction gives the s orbital
+  zero weight.
+- The **SOC spin scale** is phenomenological. `ls_scale` is a fit parameter,
+  not a derived coupling constant.
 
-These heuristics are slated for replacement by the full matrix-element engine already present in {mod}`diffpes.maths` and {mod}`diffpes.radial` — radial integrals, Gaunt coefficients, and real spherical harmonics assembled in `simulate_tb_radial` — see [Matrix Elements and Polarization](matrix-elements-and-polarization.md). The level ladder remains valuable because each tier is cheap, differentiable, and requires nothing beyond standard VASP outputs.
+`simulate_tb_radial` provides the full matrix-element alternative. It combines
+radial integrals, Gaunt coefficients, and real spherical harmonics from
+{mod}`diffpes.maths` and {mod}`diffpes.radial`. See
+[Matrix Elements and Polarization](matrix-elements-and-polarization.md). The
+six levels remain useful because they are differentiable and low-cost. They
+also require only standard VASP outputs.
 
 ## Dispatch with `simulate_expanded`
 
-`simulate_expanded` is the single entry point: pass the level name (case-insensitive) plus plain arrays, and it routes to the matching `simulate_*_expanded` wrapper. Parameters a level does not use are silently ignored (e.g. `gamma` at the Gaussian-only levels, polarization angles below `advanced`).
+Pass a case-insensitive level name and plain arrays to `simulate_expanded`.
+The function calls the matching `simulate_*_expanded` wrapper. Each level
+ignores parameters that it does not use. For example, Gaussian-only levels
+ignore `gamma`. Levels below `advanced` ignore polarization angles.
 
 ```python
 import jax.numpy as jnp
@@ -131,21 +175,35 @@ An unknown `level` string, or `level="soc"` without `surface_spin`, raises a `Va
 
 ### Sensible defaults
 
-Only `level`, `eigenbands`, and `surface_orb` are required. The defaults are `ef=0.0`, `sigma=0.04`, `gamma=0.1`, `fidelity=25000`, `temperature=15.0` K, `photon_energy=11.0` eV, unpolarized light at 45° incidence. The energy axis is auto-derived as `linspace(min(eigenbands) - 1, max(eigenbands) + 1, fidelity)` via `make_expanded_simulation_params`.
+The function requires only `level`, `eigenbands`, and `surface_orb`. The width
+defaults are `sigma=0.04` and `gamma=0.1`. Other defaults include `ef=0.0`,
+`fidelity=25000`, and `temperature=15.0` K. The photon energy defaults to
+11.0 eV. The default uses unpolarized light at 45 degrees incidence.
+`make_expanded_simulation_params` derives the energy axis from the band range.
 
 ## Choosing a Level
 
-- **Debugging a band structure or k-path** → `novice` (fewest knobs, no weight surprises).
-- **Photon-energy trends without polarization** → `basicplus` (skip `basic` unless you specifically want the two-regime heuristic).
-- **Polarization/geometry experiments (light-polarization switching, orbital contrast)** → `advanced` or `expert`.
-- **Spin-resolved or dichroism-flavored questions** → `soc`, treating `ls_scale` as a fit parameter.
-- **Quantitative matrix-element physics or gradient-based recovery of orbital parameters** → step off the ladder to `simulate_tb_radial` (see [Matrix Elements and Polarization](matrix-elements-and-polarization.md)).
+- Use `novice` to debug a band structure or k-path.
+- Use `basicplus` for photon-energy trends without polarization. Use `basic`
+  only for the two-regime heuristic.
+- Use `advanced` or `expert` for polarization and geometry experiments.
+- Use `soc` for spin-resolved or dichroism studies. Treat `ls_scale` as a fit
+  parameter.
+- Use `simulate_tb_radial` for quantitative matrix-element physics or
+  gradient-based recovery of orbital parameters. See
+  [Matrix Elements and Polarization](matrix-elements-and-polarization.md).
 
-All levels are JAX-differentiable with respect to their continuous inputs (`sigma`, `gamma`, `temperature`, eigenvalues, projections, ...), so any tier can sit inside a `jax.grad` loss.
+All levels are JAX-differentiable with respect to their continuous inputs.
+These inputs include widths, temperature, eigenvalues, and projections. Any
+level can run inside a `jax.grad` loss.
 
 ## Further Reading
 
-- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) — axes, units, and the incidence-angle convention
-- [Matrix Elements and Polarization](matrix-elements-and-polarization.md) — the full dipole engine that supersedes the heuristic weights
-- [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md) — Gaussian vs. Voigt, and energy-dependent linewidths
+- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) defines the
+  axes, units, and incidence-angle convention.
+- [Matrix Elements and Polarization](matrix-elements-and-polarization.md)
+  describes the full dipole engine and the heuristic weights.
+- [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md)
+  compares Gaussian and Voigt profiles. It also describes energy-dependent
+  linewidths.
 - API reference: {doc}`../api/simul` (all `simulate_*` functions), {doc}`../api/inout` (VASP parsers feeding the ladder)

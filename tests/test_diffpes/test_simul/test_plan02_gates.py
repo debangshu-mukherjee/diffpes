@@ -70,13 +70,13 @@ class TestNoviceCarrierGradients:
 
         Extended Summary
         ----------------
-        Differentiates summed spectral intensity through each complete
+        The test differentiates summed spectral intensity through each complete
         carrier on the pinned ``[-1, +1]`` eV two-band fixture. Automatic
         reverse-mode derivatives must agree with the shared central-FD gate.
 
         Notes
         -----
-        Uses a sixteen-point energy grid to keep the full leafwise FD census
+        The test uses a sixteen-point energy grid to keep the full leafwise FD census
         small while retaining both occupied and underflowed unoccupied bands.
         """
         bands: diffpes.types.BandStructure
@@ -136,9 +136,9 @@ class TestNoviceScalability:
 
         Notes
         -----
-        A Python trace counter surrounds ``simulate_novice`` before wrapping
-        it with :func:`equinox.filter_jit`; completed outputs are blocked so
-        asynchronous dispatch cannot hide retraces.
+        A Python counter records traces around the JIT simulation.
+        The test blocks completed outputs so asynchronous dispatch cannot hide
+        additional traces.
         """
         bands: diffpes.types.BandStructure
         projections: Array
@@ -187,12 +187,12 @@ class TestNoviceScalability:
 
         Extended Summary
         ----------------
-        Three Gaussian widths are mapped over otherwise shared carriers; the
-        output retains the explicit parameter, k-point, and energy axes.
+        The test maps three Gaussian widths over shared carriers. The output
+        retains the parameter, k-point, and energy axes.
 
         Notes
         -----
-        Builds each mapped parameter carrier with :func:`equinox.tree_at` and
+        The test builds each mapped parameter carrier with :func:`equinox.tree_at` and
         evaluates the production forward function under :func:`jax.vmap`.
         """
         bands: diffpes.types.BandStructure

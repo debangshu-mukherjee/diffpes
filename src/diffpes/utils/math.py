@@ -1,11 +1,11 @@
-"""Mathematical utility functions for ARPES simulations.
+"""Compute mathematical utilities for ARPES simulations.
 
 Extended Summary
 ----------------
-Provides JAX-compatible implementations of the Faddeeva function
-(complex error function) and data normalization routines used
-throughout the ARPES simulation pipeline. Complex parameter packing
-provides the sanctioned optimizer boundary for complex-valued physics.
+The module provides JAX-compatible implementations of the Faddeeva function
+and data normalization routines. The ARPES simulation pipeline uses these
+functions. Complex parameter packing provides the required optimizer boundary
+for complex physics.
 
 Routine Listings
 ----------------
@@ -20,9 +20,9 @@ Routine Listings
 
 Notes
 -----
-The Faddeeva implementation uses a 64-term Taylor series
-derived from the ODE w'(z) = -2z w(z) + 2i/sqrt(pi),
-giving double-precision accuracy for |z| < 6.
+The Faddeeva implementation uses a 64-term Taylor series. The ODE
+w'(z) = -2z w(z) + 2i/sqrt(pi) defines the coefficients. The series provides
+double-precision accuracy for |z| < 6.
 """
 
 import math
@@ -37,12 +37,12 @@ from diffpes.types import N_TAYLOR
 
 
 def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
-    r"""Taylor coefficients of w(z) = exp(-z^2) erfc(-iz) via JAX scan.
+    r"""Compute Taylor coefficients of w(z) through a JAX scan.
 
     Extended Summary
     ----------------
-    Computes the first ``N_TAYLOR`` coefficients of the Taylor expansion
-    of the Faddeeva function about the origin.
+    The function computes the first ``N_TAYLOR`` coefficients in the Taylor
+    expansion of the Faddeeva function about the origin.
 
     **Mathematical derivation:**
 
@@ -61,25 +61,21 @@ def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
         a_0 = 1, \quad a_1 = \frac{2i}{\sqrt{\pi}}, \quad
         a_{n+1} = \frac{-2 \, a_{n-1}}{n+1} \quad (n \ge 1)
 
-    Note that the recurrence couples even-indexed coefficients among
-    themselves and odd-indexed coefficients among themselves (the
-    series separates into even and odd parts). Even coefficients are
-    real and odd coefficients are purely imaginary, reflecting the
+    The recurrence connects the even-indexed coefficients. It separately
+    connects the odd-indexed coefficients. Even coefficients are real, and
+    odd coefficients are purely imaginary. This structure reflects the
     symmetry :math:`w(-z) = 2 e^{-z^2} - w(z)`.
 
     **Implementation:**
 
-    The recurrence is implemented with ``jax.lax.scan`` (no Python
-    for-loop) for efficiency and XLA compatibility. The scan carry
-    is the pair :math:`(a_{n-1}, a_n)`, and at each step n (0-indexed),
-    the next coefficient is :math:`a_{n+2} = -2 a_n / (n + 2)`. The
-    scan produces coefficients :math:`a_2` through :math:`a_{N-1}`,
-    which are concatenated with the seed values :math:`a_0, a_1` to
-    form the complete coefficient vector.
+    The function implements the recurrence with ``jax.lax.scan``. The scan
+    carries the pair :math:`(a_{n-1}, a_n)`. At each zero-based step n, the
+    scan computes :math:`a_{n+2} = -2 a_n / (n + 2)`. It produces coefficients
+    :math:`a_2` through :math:`a_{N-1}`. The function joins these coefficients
+    with the seed values :math:`a_0, a_1`.
 
-    The resulting array is reversed (descending power order) at module
-    level and stored in ``_W_POLY`` for use with ``jnp.polyval``
-    (Horner's method).
+    The module reverses the resulting array into descending power order. It
+    stores the array in ``_W_POLY`` for Horner's method in ``jnp.polyval``.
 
     Returns
     -------
@@ -133,11 +129,10 @@ def faddeeva(
 ) -> Complex[Array, " ..."]:
     r"""Evaluate the Faddeeva function w(z) = exp(-z^2) erfc(-iz).
 
-    Computes the Faddeeva (scaled complex complementary error) function
-    for arbitrary complex arrays using a precomputed Taylor polynomial
-    evaluated via Horner's method.
+    The function computes the Faddeeva function for arbitrary complex arrays.
+    It applies Horner's method to a precomputed Taylor polynomial.
 
-    The Faddeeva function is defined as:
+    The following equation defines the Faddeeva function:
 
     .. math::
 
@@ -145,29 +140,23 @@ def faddeeva(
              = e^{-z^2} \left(1 + \frac{2i}{\sqrt{\pi}}
                \int_0^z e^{t^2} dt \right)
 
-    It is closely related to the Voigt profile used in spectroscopy:
-    the Voigt function is the real part of the Faddeeva function
-    evaluated along the imaginary axis. In ARPES simulations, it
-    appears when convolving Lorentzian lifetime broadening with
-    Gaussian instrumental resolution.
+    The Voigt profile uses the real part of the Faddeeva function along the
+    imaginary axis. ARPES simulations use it to convolve Lorentzian lifetime
+    broadening with Gaussian instrument resolution.
 
     **Implementation:**
 
-    1. **Cast to complex128** -- convert the input to ``jnp.complex128``
-       via ``jnp.asarray`` to ensure sufficient precision for the 64-term
-       polynomial evaluation.
+    1. **Cast to complex128**: Convert the input to ``jnp.complex128`` with
+       ``jnp.asarray``. This type provides sufficient precision for the
+       64-term polynomial.
 
-    2. **Evaluate via Horner's method** -- call ``jnp.polyval`` with
-       the module-level constant ``_W_POLY`` (coefficients stored in
-       descending-power order, i.e. reversed from the natural
-       :math:`a_0, \ldots, a_{N-1}` ordering) and the cast input. The
-       ``unroll=8`` hint allows XLA to pipeline the inner loop for
-       better throughput on accelerators.
+    2. **Apply Horner's method**: Call ``jnp.polyval`` with ``_W_POLY`` and the
+       converted input. ``_W_POLY`` stores the coefficients in descending
+       power order. The ``unroll=8`` hint lets XLA pipeline the inner loop.
 
-    The Taylor coefficients are derived from the ODE
-    :math:`w'(z) = -2z w(z) + 2i/\sqrt{\pi}` and precomputed at
-    module import time by `_faddeeva_taylor_coeffs`. See that
-    function's docstring for the full recurrence derivation.
+    The ODE :math:`w'(z) = -2z w(z) + 2i/\sqrt{\pi}` defines the Taylor
+    coefficients. The `_faddeeva_taylor_coeffs` function computes them during
+    module import. Its docstring gives the full recurrence derivation.
 
     :see: :class:`~.test_math.TestFaddeeva`
 
@@ -183,13 +172,10 @@ def faddeeva(
 
     Notes
     -----
-    Accuracy is approximately double-precision (~15 significant digits)
-    for ``|z| < 6``. For ``|z| >= 6`` the Taylor series converges slowly
-    and
-    an asymptotic expansion or continued-fraction representation should
-    be used instead. The current implementation does **not** fall back
-    to an asymptotic form, so callers must ensure inputs stay within the
-    convergence domain.
+    The result has approximately 15 significant digits for ``|z| < 6``. The
+    Taylor series converges slowly for ``|z| >= 6``. Use an asymptotic
+    expansion or a continued fraction outside the convergence domain. The
+    function does not select these alternatives automatically.
 
     The function is fully differentiable via JAX autodiff, which
     is important for gradient-based optimization of broadening
@@ -225,9 +211,9 @@ def pack_complex(
 
     Notes
     -----
-    The final axis is formed exactly as
-    ``jnp.stack([z.real, z.imag], axis=-1)``. This preserves the component
-    dtype and exposes independent real optimizer coordinates.
+    The function forms the final axis with
+    ``jnp.stack([z.real, z.imag], axis=-1)``. This operation preserves the
+    component dtype and exposes independent real optimizer coordinates.
 
     See Also
     --------
@@ -280,10 +266,9 @@ def zscore_normalize(
 ) -> Float[Array, " ..."]:
     r"""Apply z-score normalization (zero-mean, unit-variance).
 
-    Transforms an arbitrary float array so that the output has zero mean
-    and unit standard deviation, which is a common preprocessing step
-    before comparing simulated and experimental ARPES spectra. The
-    z-score transformation is:
+    The function transforms a float array to zero mean and unit standard
+    deviation. This transformation prepares simulated and experimental ARPES
+    spectra for comparison. The z-score transformation is:
 
     .. math::
 
@@ -294,19 +279,15 @@ def zscore_normalize(
 
     **Implementation details:**
 
-    1. **Compute statistics** -- calculate the global mean and standard
-       deviation of the input array using ``jnp.mean`` and ``jnp.std``
-       (population std, i.e. ddof=0).
+    1. **Compute the statistics**: Compute the global mean with ``jnp.mean``.
+       Compute the population standard deviation with ``jnp.std`` and ddof=0.
 
-    2. **Guard against zero std** -- route the centered values and standard
-       deviation through :func:`~diffpes.maths.safe_divide`, selecting its
-       zero fallback for constant inputs. This produces an all-zeros output,
-       the mathematically sensible degenerate value, with a zero selected
-       subgradient rather than an inactive division-by-zero contaminating
-       reverse-mode autodiff.
+    2. **Guard against zero deviation**: Pass the centered values and standard
+       deviation to :func:`~diffpes.maths.safe_divide`. The function selects
+       zero for a constant input and defines a zero subgradient.
 
-    3. **Normalize** -- compute ``(data - mean) / safe_std`` element-wise
-       and return.
+    3. **Normalize the values**: Compute ``(data - mean) / safe_std`` for each
+       element and return the result.
 
     :see: :class:`~.test_math.TestZscoreNormalize`
 
@@ -323,9 +304,9 @@ def zscore_normalize(
 
     Notes
     -----
-    The normalization is computed over **all** elements (global mean
-    and std), not per-axis. For per-axis normalization, reshape the
-    data and call this function on each slice separately.
+    The function computes one global mean and standard deviation over all
+    elements. For each-axis normalization, reshape the data and call the
+    function on each slice.
 
     This function is differentiable via JAX autodiff with respect to
     the input ``data``. The gradient propagates through both the

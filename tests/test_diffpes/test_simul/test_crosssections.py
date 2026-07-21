@@ -1,4 +1,4 @@
-"""Tests for ARPES cross-section weight functions.
+"""Validate ARPES cross-section weight functions.
 
 Extended Summary
 ----------------
@@ -6,8 +6,7 @@ Exercises heuristic_weights and yeh_lindau_weights. Heuristic tests
 verify the two-regime model (p-enhanced below 50 eV, d-enhanced above),
 output shape (9,), and JIT compatibility. Yeh-Lindau tests verify
 interpolation at a fixed photon energy, output shape, and non-negative
-weights. All test logic and assertions are documented in the docstrings
-of each test class and method.
+weights. Each class and method docstring documents its test logic.
 
 """
 
@@ -23,35 +22,31 @@ from diffpes.simul import (
 
 
 class TestHeuristicWeights(chex.TestCase):
-    """Tests for :func:`diffpes.simul.crosssections.heuristic_weights`.
+    """Validate :func:`diffpes.simul.crosssections.heuristic_weights`.
 
-    Verifies the two-regime heuristic model that assigns enhanced weights
-    to p-orbitals below 50 eV and to d-orbitals above 50 eV, including
-    output shape, correct orbital enhancement in each regime, and JIT
-    compatibility.
+    The tests verify p-orbital enhancement below 50 eV and d-orbital
+    enhancement above 50 eV. They check the output shape and JIT compatibility.
 
     :see: :func:`~diffpes.simul.heuristic_weights`
     """
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_low_energy_p_enhanced(self) -> None:
-        """Verify that p-orbital weights are enhanced in the low-energy regime.
+        """Verify enhanced p-orbital weights in the low-energy regime.
 
-        This case establishes the low energy p enhanced contract for heuristic weights
+        The test establishes the low energy p enhanced contract for heuristic weights
         with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Compute weights at 30 eV**:
-           Calls ``heuristic_weights(30.0)``, which is below the 50 eV
-           threshold and should select the low-energy weight vector.
+           Call ``heuristic_weights(30.0)`` below the 50 eV threshold.
 
         2. **Check output shape**:
            Confirms the result has shape ``(9,)`` matching the 9-orbital basis.
 
         3. **Check p-orbital enhancement**:
-           Verifies that p-orbital indices (1, 2, 3) have weight 2.0 and
-           the first d-orbital index (4) has weight 1.0.
+           Verify weights 2.0 for p orbitals and 1.0 for the first d orbital.
 
         **Expected assertions**
 
@@ -71,20 +66,18 @@ class TestHeuristicWeights(chex.TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_high_energy_d_enhanced(self) -> None:
-        """Verify that d-orbital weights are enhanced in the high-energy regime.
+        """Verify enhanced d-orbital weights in the high-energy regime.
 
-        This case establishes the high energy d enhanced contract for heuristic weights
+        The test establishes the high energy d enhanced contract for heuristic weights
         with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Compute weights at 60 eV**:
-           Calls ``heuristic_weights(60.0)``, which is above the 50 eV
-           threshold and should select the high-energy weight vector.
+           Call ``heuristic_weights(60.0)`` above the 50 eV threshold.
 
         2. **Check p- and d-orbital values**:
-           Verifies that p-orbital index 1 has weight 1.0, while d-orbital
-           indices 4 and 8 have weight 2.0.
+           Verify weight 1.0 for a p orbital and 2.0 for two d orbitals.
 
         **Expected assertions**
 
@@ -102,7 +95,7 @@ class TestHeuristicWeights(chex.TestCase):
 
 
 class TestYehLindauWeights(chex.TestCase):
-    """Tests for :func:`diffpes.simul.crosssections.yeh_lindau_weights`.
+    """Validate :func:`diffpes.simul.crosssections.yeh_lindau_weights`.
 
     Verifies the interpolated Yeh-Lindau cross-section weights including
     exact values at tabulation points, correct interpolation at intermediate
@@ -115,23 +108,19 @@ class TestYehLindauWeights(chex.TestCase):
     def test_at_20_eV(self) -> None:
         """Verify exact cross-section values at the 20 eV tabulation point.
 
-        This case establishes the at 20 eV contract for yeh lindau weights with the
+        The test establishes the at 20 eV contract for yeh lindau weights with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Compute weights at 20 eV**:
-           Calls ``yeh_lindau_weights(20.0)`` at the lowest tabulation
-           energy, where no interpolation is needed.
+           Call ``yeh_lindau_weights(20.0)`` at the lowest table energy.
 
         2. **Check output shape**:
            Confirms the result has shape ``(9,)``.
 
         3. **Check known tabulated values**:
-           Compares the s-orbital weight (index 0) against 0.1, the
-           first p-orbital weight (index 1) against 0.6, and the first
-           d-orbital weight (index 4) against 2.0, matching the
-           _SIGMA_S, _SIGMA_P, and _SIGMA_D tables at 20 eV.
+           Compare selected s, p, and d weights with their table values.
 
         **Expected assertions**
 
@@ -152,7 +141,7 @@ class TestYehLindauWeights(chex.TestCase):
     def test_interpolated(self) -> None:
         """Verify that interpolation at 30 eV produces positive s and p weights.
 
-        This case establishes the interpolated contract for yeh lindau weights with the
+        The test establishes the interpolated contract for yeh lindau weights with the
         concrete values and array shapes described below.
 
         Notes
@@ -165,8 +154,7 @@ class TestYehLindauWeights(chex.TestCase):
            Confirms the result has shape ``(9,)``.
 
         3. **Check s- and p-orbital weights are positive**:
-           Verifies that the interpolated s-orbital (index 0) and
-           p-orbital (index 1) weights are strictly greater than zero.
+           Verify positive interpolated s-orbital and p-orbital weights.
 
         **Expected assertions**
 
@@ -186,7 +174,7 @@ class TestYehLindauWeights(chex.TestCase):
     def test_all_positive(self) -> None:
         """Verify that all 9 orbital weights are strictly positive at 40 eV.
 
-        This case establishes the all positive contract for yeh lindau weights with the
+        The test establishes the all positive contract for yeh lindau weights with the
         concrete values and array shapes described below.
 
         Notes

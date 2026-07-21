@@ -2,10 +2,9 @@
 
 Extended Summary
 ----------------
-Wraps Chex's PyTree assertions with the strict defaults used throughout the
-test suite and loads behavioral regression arrays from the reference-data
-directory established by WP6.1. It also provides the shared eager/JIT
-rejection contract used by factory validation tests.
+This module wraps Chex's PyTree assertions with the strict test defaults.
+It loads behavioral regression arrays from the WP6.1 reference directory.
+It also provides the shared eager and JIT rejection contract for factory tests.
 """
 
 import re
@@ -92,9 +91,9 @@ def assert_trees_close(
 ) -> None:
     """Assert that corresponding numerical PyTree leaves are close.
 
-    Uses Chex tree comparison with a relative tolerance of ``1e-12`` and zero
-    absolute tolerance by default, preserving sensitivity near zero while
-    allowing harmless floating-point reduction-order variation.
+    The helper uses a relative tolerance of ``1e-12`` and zero absolute
+    tolerance by default. These settings preserve sensitivity near zero.
+    They also permit small variation from the order of floating-point reductions.
     """
     chex.assert_trees_all_close(actual, desired, rtol=rtol, atol=atol)
 

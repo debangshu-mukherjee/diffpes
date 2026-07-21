@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to diffpes are documented in this file.
+This file documents all notable changes to diffpes.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses calendar versioning.
@@ -9,103 +9,110 @@ and the project uses calendar versioning.
 
 ### Changed
 
-- Merged `diffpes.types.orbital_constants` and `diffpes.types.vasp_constants`
-  into `diffpes.types.constants` and deleted the two modules (zero-legacy, no
-  shims). All constants consumed across subpackages are now public, renamed by
-  dropping their leading underscore (e.g. `_EPS` → `EPS`, `_N_ORBITALS` →
-  `N_ORBITALS`, `_PHASE_LOSS_MESSAGE` → `PHASE_LOSS_MESSAGE`), and re-exported
-  through `diffpes.types`; only module-internal intermediates remain private.
-  `diffpes.types.constants` now imports JAX (orbital direction tables are
-  device arrays) and is no longer dependency-light.
-- Adopted the generalized import rule (see CONTRIBUTING): cross-subpackage
-  imports must use the source subpackage's public surface
-  (`from diffpes.<sub> import name`), never a file inside it; fixed the last
-  offenders (`simul/workflow.py` deep imports into `diffpes.inout`).
+- The package merges `orbital_constants` and `vasp_constants` into
+  `diffpes.types.constants`. The package removes both old modules without
+  compatibility shims. Cross-subpackage constants are now public and omit
+  their leading underscores. Examples include `_EPS` to `EPS` and
+  `_N_ORBITALS` to `N_ORBITALS`. Another example is `_PHASE_LOSS_MESSAGE` to
+  `PHASE_LOSS_MESSAGE`. `diffpes.types` re-exports these constants. Only
+  module-internal intermediate values remain private. The constants module
+  now imports JAX because orbital direction tables are device arrays.
+- The project adopts the generalized import rule from CONTRIBUTING.
+  Cross-subpackage imports use the source subpackage's public surface.
+  They do not import a file inside that subpackage. The update fixes the deep
+  `diffpes.inout` imports in `simul/workflow.py`.
 
-- Scoped the Plan 01 pre-commit Ruff hooks to their source, test, and project
-  metadata floor, and enabled manual CI dispatch for gate verification.
-- Replaced every registered `NamedTuple` carrier with a types-owned
-  `equinox.Module`, moved all carrier factories to `diffpes.types`, and
-  updated HDF5 serialization for introspected array, nested-module, optional,
-  and static fields. Carrier construction is now keyword-only; use
-  `equinox.tree_at` instead of `NamedTuple._replace` for immutable updates.
-- Consolidated declarative constants, orbital conventions, parser schemas,
-  and lookup tables under `diffpes.types`.
-- Moved the workflow context and its projection and DOS aliases into
-  `diffpes.types`, and converted the context PyTree to an Equinox module.
-- Normalized the project, repository links, documentation, and release
-  surfaces to the lowercase `diffpes` name.
-- Activated the two-tier factory validation wall: structural violations now
-  raise `ValueError`, while traced value violations use value-threaded
+- Plan 01 scopes the pre-commit Ruff hooks to source, tests, and project
+  metadata. The continuous integration workflow now supports manual gate
+  verification.
+- Every registered carrier now uses a types-owned `equinox.Module` instead of
+  a `NamedTuple`. All carrier factories now belong to `diffpes.types`.
+  HDF5 serialization now introspects array fields. It also handles nested
+  modules, optional fields, and static fields. Carrier construction now
+  requires keywords.
+  Use `equinox.tree_at` for immutable updates instead of
+  `NamedTuple._replace`.
+- `diffpes.types` now owns the declarative constants, orbital conventions,
+  parser schemas, and lookup tables.
+- `diffpes.types` now owns the workflow context and its projection and DOS
+  aliases. The context PyTree now uses an Equinox module.
+- Repository links, documentation, and release surfaces now use lowercase
+  `diffpes`.
+- The two-tier factory validation system is now active. Structural violations
+  raise `ValueError`. Traced value violations use value-threaded
   `equinox.error_if` checks that survive JIT compilation.
-- Widened `read_eigenval(..., fermi_energy=...)` to `ScalarFloat` and kept
-  workflow Fermi energies as traced scalar leaves instead of host floats.
+- `read_eigenval(..., fermi_energy=...)` now accepts `ScalarFloat`.
+  Workflow Fermi energies remain traced scalar leaves instead of host floats.
 
 ### Added
 
-- Added JAX-native certified forward execution as a defining package
-  capability: typed certificate PyTrees, deterministic model and transformation
-  registries, provenance and information-loss graphs, JAXPR dependency maps,
-  reusable JVP/VJP evidence, matrix-free information spectra, cumulative
-  assurance policies, and compiled domain checks.
-- Added an explicitly registered radial ARPES certification surface together
-  with portable canonical JSON/HDF5 certificate persistence, offline
-  inspection and verification, and user/API documentation. Consistency
-  markers use CRC32 bookkeeping for accidental mismatches only and carry no
-  security, authenticity, or physical-assurance meaning.
-- Added a tag-gated, uv-native PyPI Trusted Publishing workflow with wheel
-  and source-distribution smoke tests.
-- Added Equinox, Optimistix, Lineax, and Optax as the differentiable type,
-  nonlinear-solver, linear-solver, and optimizer stack, following the stack
-  decision adopted on 2026-07-13.
-- Added Hypothesis and psutil to the test environment for property-based
-  verification and runtime memory guards.
-- Added a shared pytest runtime foundation with x64 enforcement, deterministic
-  random keys, JAX cache cleanup, RSS leak limits, and xdist memory grouping.
-- Added typed deterministic toy factories, strict numerical tree assertions,
-  and an NPZ reference-comparison scaffold for the test suite.
-- Added the program-wide gradient verification harness with scaled finite
-  differences, Wirtinger checks, and zero-gradient tripwires.
-- Added Python 3.12--3.14 GitHub Actions testing with informational Codecov
-  uploads and lock-aligned Ruff and ty pre-commit hooks; install them with
-  `uv run pre-commit install`.
-- Added deterministic pre-refactor novice and tight-binding radial regression
-  references, including standing zeta-gradient baselines and provenance.
-- Added seven named gradient-safe math primitives with explicit guarded-set
-  value and subgradient conventions.
-- Added `pack_complex` and `unpack_complex` as the real-PyTree optimizer and
-  complex-physics boundary, with a pinned JAX Wirtinger convention test.
+- JAX-native certified forward execution is now a defining capability.
+  It provides typed certificate PyTrees and deterministic registries for models
+  and transformations. It also provides provenance graphs, information-loss
+  graphs, JAXPR dependency maps, and reusable JVP/VJP evidence. Other features
+  include matrix-free information spectra, cumulative assurance policies, and
+  compiled domain checks.
+- The package now provides an explicitly registered radial ARPES certification
+  surface. It supports portable canonical JSON and HDF5 certificate storage.
+  It also supports offline inspection, verification, and user and API
+  documentation. CRC32 consistency markers detect accidental mismatches only.
+  They do not provide security, authenticity, or physical assurance.
+- A tag-gated, uv-native PyPI Trusted Publishing workflow now tests wheels and
+  source distributions.
+- Equinox, Optimistix, Lineax, and Optax now form the differentiable software
+  stack. They provide types, nonlinear solvers, linear solvers, and optimizers.
+  The project adopted this stack on 2026-07-13.
+- The test environment now includes Hypothesis for property-based verification.
+  It also includes psutil for memory guards during execution.
+- The shared pytest foundation enforces x64 and deterministic random keys.
+  It also cleans JAX caches, limits RSS leaks, and groups xdist tests by memory.
+- The test suite now provides typed deterministic toy factories and strict
+  numerical tree assertions. It also provides an NPZ reference comparison
+  scaffold.
+- The program-wide gradient harness now checks scaled finite differences,
+  Wirtinger derivatives, and unexpected zero gradients.
+- GitHub Actions now tests Python 3.12 through 3.14 and uploads informational
+  Codecov reports. Lock-aligned Ruff and ty hooks run before each commit.
+  Install the hooks with `uv run pre-commit install`.
+- Deterministic regression references now preserve pre-refactor novice and
+  tight-binding radial results. They include established zeta-gradient
+  baselines and provenance.
+- Seven named gradient-safe mathematical primitives now define values and
+  subgradients on their guarded sets.
+- `pack_complex` and `unpack_complex` now define the boundary between real
+  optimizer PyTrees and complex physics. A JAX test pins the Wirtinger
+  convention.
 
 ### Removed
 
-- Removed the unused `difftb` dependency and its broken editable
-  `[tool.uv.sources]` path so diffpes installs as a standalone package.
-- Retired Black, isort, jupyter-black, build, and Twine from the development
-  environment; Ruff owns formatting and uv owns build and publish workflows.
+- The project removes the unused `difftb` dependency and its broken editable
+  `[tool.uv.sources]` path. diffpes now installs as a standalone package.
+- The development environment no longer includes Black, isort, jupyter-black,
+  build, or Twine. Ruff formats the code. uv builds and publishes the package.
 
 ### Fixed
 
-- Restored Python 3.14 imports while beartype 0.22.9 still references the
-  removed `collections.abc.ByteString` name.
-- Corrected the supported Python range to `>=3.12,<3.15` and documented
-  Python 3.12 support.
-- Repaired project metadata by making JAX platform-independent, removing dead
-  setuptools configuration, aligning interrogate with NumPy docstrings, and
-  extending Ruff and runtime type-checking coverage to the test suite.
-- Corrected real-to-complex Gaunt transformation coefficients to satisfy their
+- Python 3.14 imports now work while beartype 0.22.9 references the removed
+  `collections.abc.ByteString` name.
+- The supported Python range is now `>=3.12,<3.15`. The documentation now
+  states support for Python 3.12.
+- JAX project metadata is now platform-independent. The project removes unused
+  setuptools configuration and aligns interrogate with NumPy docstrings.
+  Ruff and runtime type checks now cover the test suite.
+- The real-to-complex Gaunt transformation coefficients now satisfy their
   complex-valued runtime type contract.
-- Replaced the overflow-prone reciprocal-exponential Fermi-Dirac expression
-  with a stable sigmoid, keeping values and gradients finite through the
+- A stable sigmoid replaces the overflow-prone reciprocal-exponential
+  Fermi-Dirac expression. Values and gradients remain finite across the
   realistic-spectrum audit range.
-- Made the Thompson-Cox-Hastings pseudo-Voigt implementation gradient-safe on
-  both positive-width boundary rays and reject the undefined zero-width
-  intersection eagerly and under JIT.
+- The Thompson-Cox-Hastings pseudo-Voigt implementation now has defined
+  gradients on both positive-width boundary rays. It rejects the undefined
+  zero-width intersection before and during JIT execution.
 
 ## [2026.03.01] - 2026-07-13
 
 ### Added
 
-- Established the initial differentiable ARPES package release.
+- The initial release establishes the differentiable ARPES package.
 
 [unreleased]: https://github.com/debangshu-mukherjee/diffpes/compare/v2026.03.01...HEAD
 [2026.03.01]: https://github.com/debangshu-mukherjee/diffpes/releases/tag/v2026.03.01

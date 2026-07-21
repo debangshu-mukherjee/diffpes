@@ -1,8 +1,8 @@
-"""Tight-binding model and diagonalized band data structures.
+"""Define tight-binding model and diagonalized-band data structures.
 
 Extended Summary
 ----------------
-Defines PyTree types for tight-binding model parameters and
+This module defines PyTree types for tight-binding model parameters and
 diagonalized electronic structure. ``DiagonalizedBands`` is the
 common interface between TB-derived and VASP-derived inputs for
 the differentiable forward simulator.
@@ -41,16 +41,16 @@ from .radial_params import OrbitalBasis, make_orbital_basis
 class DiagonalizedBands(eqx.Module):
     """Store diagonalized electronic-structure data in a JAX PyTree.
 
-    The common interface between VASP-derived and TB-derived inputs
-    for the forward simulator ``simulate_tb_radial``. The native
+    This type provides the common interface between VASP-derived and
+    TB-derived inputs for the forward simulator ``simulate_tb_radial``. The
+    native
     ``diffpes.tightb.diagonalize_tb`` producer constructs this PyTree
     from a ``TBModel``; the VASP adapter ``vasp_to_diagonalized``
     constructs it from VASP eigenvectors.
 
-    By unifying both data sources into a single PyTree type, the
-    differentiable forward simulator can accept inputs from either
-    tight-binding models or first-principles calculations without
-    code branching. The eigenvectors carry the orbital-decomposition
+    This single PyTree type lets the differentiable forward simulator accept
+    either tight-binding or first-principles inputs without code branches.
+    The eigenvectors carry the orbital-decomposition
     information needed to compute dipole matrix elements in the
     Chinook pipeline.
 
@@ -143,16 +143,15 @@ def make_diagonalized_bands(  # noqa: DOC503
 ) -> DiagonalizedBands:
     """Create a validated ``DiagonalizedBands`` instance.
 
-    Factory function that validates and normalises diagonalized
+    The factory validates and normalizes diagonalized
     electronic structure data before constructing a
-    ``DiagonalizedBands`` PyTree. Real-valued arrays are cast to
-    ``float64``; the complex eigenvector array is cast to
+    ``DiagonalizedBands`` PyTree. It casts real-valued arrays to ``float64``
+    and the complex eigenvector array to
     ``complex128`` to maintain full double-precision accuracy in
     the orbital decomposition.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape constraints (K must agree across all arrays, B and
-    O must be consistent) are checked at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the shape constraints at call
+    time. K must agree across all arrays, and B and O must be consistent.
 
     Use this factory when constructing ``DiagonalizedBands`` from
     either TB diagonalization output or VASP eigenvector data.
@@ -282,19 +281,16 @@ def make_tb_model(  # noqa: DOC503
 ) -> TBModel:
     """Create a validated ``TBModel`` instance.
 
-    Factory function that validates and normalises tight-binding
+    The factory validates and normalizes tight-binding
     model parameters before constructing a ``TBModel`` PyTree. The
-    two differentiable arrays (``hopping_params``,
-    ``lattice_vectors``) are cast to ``float64``; the three static
-    fields are passed through unchanged as auxiliary data.
+    factory casts the two differentiable arrays to ``float64``. It passes the
+    three static fields unchanged as auxiliary data.
 
-    The function is decorated with ``@jaxtyped(typechecker=beartype)``
-    so that shape constraints on the differentiable arrays are
-    checked at call time.
+    ``@jaxtyped(typechecker=beartype)`` checks the shape constraints on the
+    differentiable arrays at call time.
 
-    Use this factory to build a ``TBModel`` from raw hopping data
-    (e.g. from a Slater-Koster parameterization) before passing it
-    to the Hamiltonian construction and diagonalization routines.
+    Use this factory to build a ``TBModel`` from raw hopping data. Then pass
+    the model to the Hamiltonian construction and diagonalization routines.
 
     :see: :class:`~.test_tb_model.TestMakeTBModel`
 
@@ -429,31 +425,27 @@ def make_1d_chain_model(
 ) -> TBModel:
     r"""Create a 1D chain tight-binding model.
 
-    Single orbital per unit cell with nearest-neighbor hopping t.
+    The model has one orbital in each unit cell and nearest-neighbor hopping t.
 
-    The 1D chain is the simplest possible tight-binding model: one
-    s-orbital per unit cell with hopping only to the two nearest
-    neighbors at lattice vectors ``+a1`` and ``-a1``.  The lattice is
-    set to an identity matrix (``a1 = [1, 0, 0]``, etc.) so that
-    fractional and Cartesian coordinates coincide with a lattice
-    constant of 1 (arbitrary units).
+    The 1D chain has one s-orbital in each unit cell. Hopping connects only the
+    two nearest neighbors at lattice vectors ``+a1`` and ``-a1``. The function
+    uses an identity lattice matrix. Therefore, fractional and Cartesian
+    coordinates coincide for a lattice constant of 1 in arbitrary units.
 
-    The resulting band dispersion is the textbook cosine band:
+    The resulting band dispersion is the standard cosine band:
 
     .. math::
 
         E(k) = 2t \cos(2 \pi k)
 
-    with bandwidth ``|4t|``.  This model is useful as a minimal
-    smoke-test for the Hamiltonian builder, diagonalizer, and
-    gradient machinery.
+    with bandwidth ``|4t|``. This model provides a minimal test for the
+    Hamiltonian builder, diagonalizer, and gradient machinery.
 
-    The hopping list contains two entries -- ``(0, 0, (+1,0,0))`` and
-    ``(0, 0, (-1,0,0))`` -- which are the forward and backward
-    nearest-neighbor hops of the single orbital to itself in adjacent
-    unit cells.  After Hermitianization in ``build_hamiltonian_k``
-    these are redundant (each is its own conjugate), so the
-    on-diagonal entry receives ``2t cos(2 pi k)`` as expected.
+    The hopping list contains ``(0, 0, (+1,0,0))`` and
+    ``(0, 0, (-1,0,0))``. These entries connect the single orbital to itself
+    in adjacent unit cells. Hermitianization in ``build_hamiltonian_k`` makes
+    these entries redundant because each is its own conjugate. The diagonal
+    entry therefore receives ``2t cos(2 pi k)``.
 
     :see: :class:`~.test_tb_model.TestMake1dChainModel`
 
@@ -512,8 +504,8 @@ def make_graphene_model(
 ) -> TBModel:
     """Create a graphene pz tight-binding model.
 
-    Two-orbital (A/B sublattice) model on a honeycomb lattice
-    with nearest-neighbor hopping t.
+    The model has two orbitals (A/B sublattices) on a honeycomb lattice. It
+    uses nearest-neighbor hopping t.
 
     Graphene's honeycomb lattice has two atoms (sublattices A and B)
     per primitive cell.  The lattice vectors used here are:
@@ -523,17 +515,16 @@ def make_graphene_model(
     * ``a3 = (0, 0, 10)``  (vacuum slab for 2-D periodicity)
 
     with ``a = 2.46`` Angstrom (the experimental graphene lattice
-    constant).  The two orbitals are labeled ``A_pz`` and ``B_pz``
-    with quantum numbers ``(n=2, l=1, m=0)``, representing carbon
-    p_z orbitals on each sublattice.
+    constant). The function labels the two orbitals ``A_pz`` and ``B_pz``.
+    Their quantum numbers are ``(n=2, l=1, m=0)``. These orbitals represent
+    carbon p_z orbitals on each sublattice.
 
     Each A-site atom has three nearest-neighbor B-site atoms.  In
     fractional coordinates the three A -> B hoppings connect to cells
     ``(0,0,0)``, ``(-1,0,0)``, and ``(0,-1,0)``.  The reverse B -> A
-    hoppings at ``(0,0,0)``, ``(+1,0,0)``, and ``(0,+1,0)`` are
-    listed explicitly so that the raw Hamiltonian matrix is already
-    nearly Hermitian before the Hermitianization step in
-    ``build_hamiltonian_k``.
+    hoppings use ``(0,0,0)``, ``(+1,0,0)``, and ``(0,+1,0)``. The function
+    lists these reverse hoppings explicitly. The raw Hamiltonian is therefore
+    nearly Hermitian before ``build_hamiltonian_k`` applies Hermitianization.
 
     The resulting 2x2 Hamiltonian produces the classic Dirac-cone
     band structure with linear dispersion near the K and K' points
@@ -619,8 +610,8 @@ def make_graphene_model(
     Notes
     -----
     The default hopping value of -2.7 eV reproduces the standard
-    nearest-neighbor graphene band structure commonly used in the
-    literature (e.g. Castro Neto et al., Rev. Mod. Phys. 81, 109).
+    nearest-neighbor graphene band structure. Castro Neto et al. use this
+    value in Rev. Mod. Phys. 81, 109.
     The negative sign follows the convention that bonding states
     are lower in energy.
 

@@ -103,9 +103,10 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        Checks sine, a Gaussian sum, the two-dimensional Rosenbrock function,
-        and a mixed-unit rational monomial through both forward- and
-        reverse-mode checks plus elementwise finite differences (01.G3).
+        The test checks sine, a Gaussian sum, and the two-dimensional
+        Rosenbrock function. It also checks a mixed-unit rational monomial.
+        Each check uses both autodiff modes and elementwise finite differences
+        for gate 01.G3.
         """
         sine_input: Float[Array, "3"] = jnp.array([-0.7, 0.2, 1.1])
         assert_grad_matches_fd(lambda x: jnp.sum(jnp.sin(x)), sine_input)
@@ -134,7 +135,7 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        Compares a mixed-unit vector against the exact
+        The test compares a mixed-unit vector against the exact
         ``eps**(1/3) * max(abs(theta), 1e-3)`` prescription (01.G3).
         """
         theta: Float[Array, "3"] = jnp.array([1e-4, 5.0, -3.0])
@@ -151,9 +152,9 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        Checks the exact gradient ``2-2j`` of ``abs(z)**2`` at ``1+1j`` and
-        compares the harness on generic asymmetric complex data at 1e-8
-        relative tolerance (01.G3).
+        The test checks the exact gradient ``2-2j`` at ``1+1j``.
+        It also checks generic asymmetric complex data at relative tolerance
+        ``1e-8`` for gate 01.G3.
         """
         exact: Complex[Array, ""] = jax.grad(lambda z: jnp.abs(z) ** 2)(
             jnp.asarray(1.0 + 1.0j)
@@ -180,8 +181,8 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        A ``custom_jvp`` retains the correct sine primal but scales its
-        derivative by 1.1; the shared gate must raise for gate 01.G4.
+        A ``custom_jvp`` retains the correct sine primal. It scales the
+        derivative by 1.1. The shared gate must raise for gate 01.G4.
         """
         theta: Float[Array, "3"] = jnp.array([-0.4, 0.2, 0.8])
         regime: GradRegime
@@ -194,12 +195,12 @@ class TestGradientHarness(chex.TestCase):
     def test_detection_floor(self) -> None:
         """Verify a one-part-in-100000 defect fails the smooth tolerance.
 
-        The strict smooth regime must detect a derivative error at its stated
-        sensitivity floor even when the forward values remain exact.
+        The strict smooth regime must detect an error at its sensitivity floor.
+        The forward values remain exact.
 
         Notes
         -----
-        Uses a planted ``1.00001*cos(x)`` tangent and demands detection at the
+        The test uses a planted ``1.00001*cos(x)`` tangent and demands detection at the
         strictest 1e-6 relative rung, documenting gate 01.G4's floor.
         """
         theta: Float[Array, "3"] = jnp.array([-0.4, 0.2, 0.8])
@@ -239,9 +240,9 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        Differentiates the sum of heuristic orbital weights at 30 eV, where
-        the piecewise lookup has exactly zero sensitivity, and requires the
-        zero-gradient tripwire to raise for gate 01.G4.
+        The test differentiates the sum of heuristic orbital weights at 30 eV.
+        The piecewise lookup has exactly zero sensitivity at this energy.
+        The test requires the zero-gradient check to raise for gate 01.G4.
         """
         photon_energy: Float[Array, ""] = jnp.asarray(30.0)
         with pytest.raises(AssertionError):
@@ -258,7 +259,7 @@ class TestGradientHarness(chex.TestCase):
 
         Notes
         -----
-        Compares the holomorphic sine derivative with cosine at relative
+        The test compares the holomorphic sine derivative with cosine at relative
         tolerance 1e-15, then confirms conjugation in ``abs(x)**2`` triggers
         the zero-imaginary guard (01.G3).
         """
@@ -273,14 +274,14 @@ class TestGradientHarness(chex.TestCase):
     def test_check_grads_semantics_anchor(self) -> None:
         """Pin JAX check_grads behavior on truth and a planted tangent defect.
 
-        The upstream JAX checker must independently accept the analytic sine
-        derivative and reject the same corrupted tangent used by the harness.
+        The upstream JAX checker must accept the analytical sine derivative.
+        It must reject the corrupted tangent from the harness test.
 
         Notes
         -----
-        Calls JAX's external directional-gradient instrument directly on sine
-        and the 1.1-scaled ``custom_jvp`` plant, establishing gate 01.G3's
-        semantic anchor independently of the wrapper.
+        The test calls the JAX directional-gradient checker on sine and the
+        scaled ``custom_jvp``. This direct check establishes the independent
+        semantic reference for gate 01.G3.
         """
         theta: Float[Array, "3"] = jnp.array([-0.4, 0.2, 0.8])
         test_util.check_grads(

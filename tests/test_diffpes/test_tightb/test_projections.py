@@ -1,12 +1,11 @@
-"""Tests for eigenvector projection utilities.
+"""Validate the eigenvector projection utilities.
 
 Extended Summary
 ----------------
-Validates ``eigenvector_orbital_weights`` and ``orbital_coefficients``
-from :mod:`diffpes.tightb.projections`. Covers the modulus-squared
-computation for complex eigenvectors and verifies that
-``orbital_coefficients`` is an identity function preserving shape,
-dtype, and complex values.
+The tests validate ``eigenvector_orbital_weights`` and
+``orbital_coefficients`` from :mod:`diffpes.tightb.projections`.
+They cover complex orbital weights and the identity operation for orbital
+coefficients.
 
 """
 
@@ -21,24 +20,25 @@ from diffpes.tightb import (
 
 
 class TestEigenvectorOrbitalWeights:
-    """Tests for :func:`diffpes.tightb.projections.eigenvector_orbital_weights`.
+    """Validate :func:`diffpes.tightb.projections.eigenvector_orbital_weights`.
 
-    Verifies that the function correctly computes ``|c|^2`` for complex
-    eigenvectors and that the result shape and dtype match expectations.
+    The tests verify the squared magnitude of each complex coefficient.
+    They also verify the shape and the real dtype of the result.
 
     :see: :func:`~diffpes.tightb.eigenvector_orbital_weights`
     """
 
     def test_real_eigenvectors_give_squared_values(self) -> None:
-        """Verify that real eigenvectors produce their squared magnitudes.
+        """Verify real eigenvectors produce their squared magnitudes.
 
-        For purely real input, ``|c|^2 = c^2``. Uses a single k-point,
-        two bands, and two orbitals. Asserts the output matches the
-        squared input to within 1e-12.
+        For a real coefficient, ``|c|^2 = c^2``. The expected weights have
+        values 0.36 and 0.64.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test uses one k-point, two bands, and two orbitals. It compares
+        the weights with the squared input at an absolute tolerance of 1e-12.
+        """
         evecs: Array
         weights: Array
         expected: Array
@@ -51,13 +51,15 @@ class TestEigenvectorOrbitalWeights:
     def test_complex_eigenvectors_give_modulus_squared(self) -> None:
         """Verify complex eigenvectors produce ``|c|^2`` per coefficient.
 
-        Uses (3+4j)/5 which has ``|c|^2 = (9+16)/25 = 1.0``. Checks that
-        the
-        function computes the squared modulus, not the real part squared.
+        The coefficient ``(3+4j)/5`` has a squared magnitude of 1.0.
+        The expected result distinguishes the squared magnitude from the
+        squared real part.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test fills a two-band array with the complex coefficient. It
+        compares every weight with 1.0 at an absolute tolerance of 1e-12.
+        """
         c: complex
         evecs: Array
         weights: Array
@@ -71,12 +73,13 @@ class TestEigenvectorOrbitalWeights:
     def test_output_shape_matches_input(self) -> None:
         """Verify the output shape equals the input shape (K, B, O).
 
-        This case establishes the output shape matches input contract for eigenvector
-        orbital weights with the concrete values and array shapes described below.
+        The weight function preserves every axis of the eigenvector array.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test supplies an array with shape ``(3, 4, 5)``. It compares the
+        output shape with the input shape.
+        """
         K: int
         B: int
         O: int
@@ -89,14 +92,15 @@ class TestEigenvectorOrbitalWeights:
         assert weights.shape == (K, B, O)
 
     def test_output_is_real(self) -> None:
-        """Verify the output dtype is float64 (real), not complex.
+        """Verify squared magnitudes have a float64 dtype.
 
-        This case establishes the output is real contract for eigenvector orbital
-        weights with the concrete values and array shapes described below.
+        Squared magnitudes of complex coefficients have a real dtype.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test supplies a complex128 array. It checks that the result has a
+        floating-point dtype.
+        """
         evecs: Array
         weights: Array
 
@@ -106,23 +110,24 @@ class TestEigenvectorOrbitalWeights:
 
 
 class TestOrbitalCoefficients:
-    """Tests for :func:`diffpes.tightb.projections.orbital_coefficients`.
+    """Validate :func:`diffpes.tightb.projections.orbital_coefficients`.
 
-    Verifies that the identity function returns its input unchanged,
-    preserving complex values, shape, and dtype.
+    The tests verify that the identity function preserves the complex values,
+    shape, and dtype of its input.
 
     :see: :func:`~diffpes.tightb.orbital_coefficients`
     """
 
     def test_identity_preserves_values(self) -> None:
-        """Verify that orbital_coefficients returns its input unchanged.
+        """Verify ``orbital_coefficients`` returns its input unchanged.
 
-        Constructs a complex eigenvector array and asserts that the
-        output is identical to the input (element-wise equality).
+        The function preserves each complex orbital coefficient.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test supplies a complex128 eigenvector array. It compares the
+        output and input at an absolute tolerance of 1e-15.
+        """
         c: complex
         evecs: Array
         out: Array
@@ -133,14 +138,15 @@ class TestOrbitalCoefficients:
         assert jnp.allclose(out, evecs, atol=1e-15)
 
     def test_identity_preserves_shape_and_dtype(self) -> None:
-        """Verify that orbital_coefficients preserves shape and complex128 dtype.
+        """Verify ``orbital_coefficients`` preserves the shape and complex128 dtype.
 
-        This case establishes the identity preserves shape and dtype contract for
-        orbital coefficients with the concrete values and array shapes described below.
+        The function retains all eigenvector axes and the complex dtype.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test supplies a complex128 array with shape ``(2, 3, 4)``. It
+        compares the output shape and dtype with the input properties.
+        """
         K: int
         B: int
         O: int

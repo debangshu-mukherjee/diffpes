@@ -1,4 +1,4 @@
-"""Tests for compiled JAX-native certified execution.
+"""Validate compiled JAX-native certified execution.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

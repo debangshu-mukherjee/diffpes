@@ -1,12 +1,11 @@
-"""Momentum resolution broadening for ARPES simulations.
+"""Apply momentum resolution broadening to ARPES simulations.
 
 Extended Summary
 ----------------
-Applies a Gaussian convolution along the k-axis to simulate the
-finite angular acceptance of the ARPES electron analyser. The
-convolution is implemented as a dense kernel matrix multiply,
-which is efficient for typical k-point counts and fully
-JAX-differentiable.
+The module applies a Gaussian convolution along the k-axis. This operation
+simulates the finite angular acceptance of the ARPES electron analyzer. A dense
+kernel matrix multiplication implements the convolution. It supports typical
+k-point counts and JAX differentiation.
 
 Routine Listings
 ----------------
@@ -15,10 +14,9 @@ Routine Listings
 
 Notes
 -----
-The kernel matrix has shape ``(K, K)`` and is built from the
-cumulative k-path distances, so it correctly handles non-uniform
-k-point spacing. All operations are JIT-compilable and support
-``jax.grad`` with respect to the broadening width ``dk``.
+The kernel matrix has shape ``(K, K)``. The cumulative k-path distances define
+it, so it supports nonuniform k-point spacing. JAX can compile all operations
+and differentiate them with respect to ``dk``.
 """
 
 import jax.numpy as jnp
@@ -42,13 +40,11 @@ def apply_momentum_broadening(
     This smears sharp spectral features in momentum, mimicking the
     experimental point-spread function in the angular direction.
 
-    In a real ARPES experiment, the finite angular acceptance of the
-    electron analyser and the finite spot size of the photon beam
-    lead to a momentum-space resolution function. This is well
-    approximated by a Gaussian of width ``dk`` (in inverse
-    Angstroms). The convolution is implemented as a matrix multiply
-    with a normalized Gaussian kernel, which is efficient and
-    JAX-differentiable.
+    In an ARPES experiment, the electron analyzer has a finite angular
+    acceptance. The photon beam also has a finite spot size. These properties
+    produce a momentum-space resolution function. A Gaussian with width ``dk``
+    approximates this function. The implementation multiplies the intensity by
+    a normalized Gaussian kernel. JAX can differentiate this operation.
 
     :see: :class:`~.test_resolution.TestApplyMomentumBroadening`
 

@@ -1,13 +1,10 @@
-"""Tests for ARPES polarization and dipole matrix element functions.
+"""Validate ARPES polarization and dipole matrix element functions.
 
 Extended Summary
 ----------------
-Exercises build_polarization_vectors, build_efield, and
-dipole_matrix_elements. Verifies orthogonality and unit norm of the
-s- and p-polarization basis, correct efield for LVP, LHP, LAP, RCP,
-LCP and unknown-type fallback, and dipole matrix element non-negativity
-and shape. All test logic and assertions are documented in the
-docstrings of each test class and method.
+Exercise build_polarization_vectors, build_efield, and
+dipole_matrix_elements. Verify the polarization basis and each field
+mode. Check dipole matrix element shape and sign.
 
 """
 
@@ -27,7 +24,7 @@ from diffpes.types import make_polarization_config
 
 
 class TestBuildPolarizationVectors(chex.TestCase):
-    """Tests for :func:`diffpes.simul.polarization.build_polarization_vectors`.
+    """Validate :func:`diffpes.simul.polarization.build_polarization_vectors`.
 
     Verifies the geometric properties of the s- and p-polarization basis
     vectors, including mutual orthogonality, unit norm, and correct output
@@ -39,7 +36,7 @@ class TestBuildPolarizationVectors(chex.TestCase):
     def test_orthogonality(self) -> None:
         """Verify that e_s and e_p are mutually orthogonal.
 
-        This case establishes the orthogonality contract for build polarization vectors
+        The test establishes the orthogonality contract for build polarization vectors
         with the concrete values and array shapes described below.
 
         Notes
@@ -71,23 +68,21 @@ class TestBuildPolarizationVectors(chex.TestCase):
     def test_unit_vectors(self) -> None:
         """Verify that both e_s and e_p have unit norm.
 
-        This case establishes the unit vectors contract for build polarization vectors
+        The test establishes the unit vectors contract for build polarization vectors
         with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build polarization vectors**:
-           Calls ``build_polarization_vectors`` with theta=pi/3, phi=pi/6
-           to produce s- and p-polarization vectors at a non-trivial
-           incidence geometry.
+           Call ``build_polarization_vectors`` with theta=pi/3 and
+           phi=pi/6.
 
         2. **Compute norms**:
            Calculates the Euclidean norm of each vector.
 
         **Expected assertions**
 
-        Both ``||e_s||`` and ``||e_p||`` equal 1.0 within tolerance 1e-10,
-        confirming the vectors are properly normalized.
+        Both vectors have unit norm within tolerance 1e-10.
         """
         theta: Array
         phi: Array
@@ -111,7 +106,7 @@ class TestBuildPolarizationVectors(chex.TestCase):
     def test_shape(self) -> None:
         """Verify that the output vectors have the correct 3D shape.
 
-        This case establishes the shape contract for build polarization vectors with the
+        The test establishes the shape contract for build polarization vectors with the
         concrete values and array shapes described below.
 
         Notes
@@ -147,13 +142,13 @@ class TestPhotonWavevector(chex.TestCase):
     def test_matches_cardinal_incidence_directions(self) -> None:
         """Match normal and grazing incidence to Cartesian unit vectors.
 
-        Zero polar angle must point along positive z, while a right-angle polar
-        angle at zero azimuth must point along positive x within float64 tolerance.
+        Map zero polar angle to positive z. Map a right-angle polar angle
+        at zero azimuth to positive x within float64 tolerance.
 
         Notes
         -----
-        Evaluates two scalar angle pairs, compares both vectors with analytic
-        Cartesian directions at ``atol=1e-12``, and checks their unit norms.
+        Evaluate two scalar angle pairs. Compare both vectors with analytic
+        Cartesian directions at ``atol=1e-12``. Check their unit norms.
         """
         normal: Array
         grazing: Array
@@ -187,12 +182,10 @@ class TestPhotonWavevector(chex.TestCase):
 
 
 class TestBuildEfield(chex.TestCase):
-    """Tests for :func:`diffpes.simul.polarization.build_efield`.
+    """Validate :func:`diffpes.simul.polarization.build_efield`.
 
-    Verifies that the electric field vector is correctly constructed for
-    each polarization type, including LVP mapping to s-polarization, LHP
-    mapping to p-polarization, and the conjugate symmetry between RCP and
-    LCP circular polarizations.
+    Verify the electric field for each polarization type. Check the LVP,
+    LHP, RCP, and LCP relations.
 
     :see: :func:`~diffpes.simul.build_efield`
     """
@@ -200,14 +193,14 @@ class TestBuildEfield(chex.TestCase):
     def test_lvp_equals_s(self) -> None:
         """Verify that LVP (linear vertical polarization) yields the s-polarization vector.
 
-        This case establishes the lvp equals s contract for build efield with the
+        The test establishes the lvp equals s contract for build efield with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build E-field with LVP config**:
-           Creates a polarization config with type "LVP" at theta=pi/4,
-           phi=0 and computes the electric field vector.
+           Create an LVP configuration at theta=pi/4 and phi=0. Compute
+           its electric field vector.
 
         2. **Build reference s-polarization vector**:
            Independently computes e_s using ``build_polarization_vectors``
@@ -241,14 +234,14 @@ class TestBuildEfield(chex.TestCase):
     def test_lhp_equals_p(self) -> None:
         """Verify that LHP (linear horizontal polarization) yields the p-polarization vector.
 
-        This case establishes the lhp equals p contract for build efield with the
+        The test establishes the lhp equals p contract for build efield with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build E-field with LHP config**:
-           Creates a polarization config with type "LHP" at theta=pi/4,
-           phi=0 and computes the electric field vector.
+           Create an LHP configuration at theta=pi/4 and phi=0. Compute
+           its electric field vector.
 
         2. **Build reference p-polarization vector**:
            Independently computes e_p using ``build_polarization_vectors``
@@ -282,19 +275,18 @@ class TestBuildEfield(chex.TestCase):
     def test_rcp_lcp_conjugate(self) -> None:
         """Verify that RCP and LCP E-fields share the same real part.
 
-        This case establishes the rcp lcp conjugate contract for build efield with the
+        The test establishes the rcp lcp conjugate contract for build efield with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build RCP and LCP E-fields**:
-           Creates two polarization configs at the same angles (theta=pi/4,
-           phi=0) with types "RCP" and "LCP" respectively, and computes
-           both E-field vectors.
+           Create RCP and LCP configurations at theta=pi/4 and phi=0.
+           Compute both E-field vectors.
 
         2. **Compare real parts**:
-           Since RCP = (e_s + i*e_p)/sqrt(2) and LCP = (e_s - i*e_p)/sqrt(2),
-           their real parts are both e_s/sqrt(2) and should be identical.
+           Use the circular-polarization definitions. Compare their common
+           real part, e_s/sqrt(2).
 
         **Expected assertions**
 
@@ -327,17 +319,17 @@ class TestBuildEfield(chex.TestCase):
     def test_lap_linear_combination(self) -> None:
         """Verify that LAP (linear arbitrary) yields cos(angle)*e_s + sin(angle)*e_p.
 
-        This case establishes the lap linear combination contract for build efield with
+        The test establishes the lap linear combination contract for build efield with
         the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build E-field with LAP config**:
-           Creates a polarization config with type "LAP",
-           polarization_angle=0.3, and computes the electric field.
+           Create an LAP configuration with polarization_angle=0.3.
+           Compute its electric field.
 
-        2. **Build e_s and e_p** with the same angles and form the
-           expected combination cos(0.3)*e_s + sin(0.3)*e_p.
+        2. **Build e_s and e_p** with the same angles. Form the expected
+           combination cos(0.3)*e_s + sin(0.3)*e_p.
 
         3. **Compare**: E-field matches the expected combination.
 
@@ -372,7 +364,7 @@ class TestBuildEfield(chex.TestCase):
     def test_unknown_pol_type_fallback_to_s(self) -> None:
         """Verify that unknown polarization type falls back to e_s.
 
-        This case establishes the unknown pol type fallback to s contract for build
+        The test establishes the unknown pol type fallback to s contract for build
         efield with the concrete values and array shapes described below.
 
         Notes
@@ -406,12 +398,10 @@ class TestBuildEfield(chex.TestCase):
 
 
 class TestDipoleMatrixElements(chex.TestCase):
-    """Tests for :func:`diffpes.simul.polarization.dipole_matrix_elements`.
+    """Validate :func:`diffpes.simul.polarization.dipole_matrix_elements`.
 
-    Verifies the dipole transition matrix element computation, including
-    correct output shape, the zero matrix element for the s-orbital,
-    selective enhancement of the px-orbital with an x-polarized field,
-    and non-negativity of all matrix elements for arbitrary polarization.
+    Verify the output shape and the zero s-orbital element. Check px
+    coupling and non-negative elements for arbitrary polarization.
 
     :see: :func:`~diffpes.simul.dipole_matrix_elements`
     """
@@ -419,7 +409,7 @@ class TestDipoleMatrixElements(chex.TestCase):
     def test_shape(self) -> None:
         """Verify that the output has shape ``(9,)`` for the 9-orbital basis.
 
-        This case establishes the shape contract for dipole matrix elements with the
+        The test establishes the shape contract for dipole matrix elements with the
         concrete values and array shapes described below.
 
         Notes
@@ -445,7 +435,7 @@ class TestDipoleMatrixElements(chex.TestCase):
     def test_s_orbital_zero(self) -> None:
         """Verify that the s-orbital dipole matrix element is always zero.
 
-        This case establishes the s orbital zero contract for dipole matrix elements
+        The test establishes the s orbital zero contract for dipole matrix elements
         with the concrete values and array shapes described below.
 
         Notes
@@ -459,9 +449,8 @@ class TestDipoleMatrixElements(chex.TestCase):
 
         **Expected assertions**
 
-        The s-orbital matrix element (index 0) is zero within tolerance
-        1e-10, because the s-orbital direction vector is [0, 0, 0] and
-        its dot product with any E-field is identically zero.
+        The s-orbital direction vector is [0, 0, 0]. Its matrix element
+        is zero within tolerance 1e-10 for any electric field.
         """
         efield: Array
         m: Array
@@ -473,7 +462,7 @@ class TestDipoleMatrixElements(chex.TestCase):
     def test_px_with_x_field(self) -> None:
         """Verify that an x-polarized field produces a positive px matrix element.
 
-        This case establishes the px with x field contract for dipole matrix elements
+        The test establishes the px with x field contract for dipole matrix elements
         with the concrete values and array shapes described below.
 
         Notes
@@ -501,14 +490,14 @@ class TestDipoleMatrixElements(chex.TestCase):
     def test_all_nonnegative(self) -> None:
         """Verify that all dipole matrix elements are non-negative for arbitrary polarization.
 
-        This case establishes the all nonnegative contract for dipole matrix elements
+        The test establishes the all nonnegative contract for dipole matrix elements
         with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Create arbitrary normalized E-field**:
-           Constructs a complex E-field vector with components [0.5, 0.3, 0.8]
-           and normalizes it to unit length.
+           Create a complex field with components [0.5, 0.3, 0.8].
+           Normalize it to unit length.
 
         2. **Compute matrix elements**:
            Calls ``dipole_matrix_elements`` on the normalized field.

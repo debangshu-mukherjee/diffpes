@@ -1,8 +1,8 @@
-"""VASP DOSCAR file parser.
+"""Parse a VASP DOSCAR file.
 
 Extended Summary
 ----------------
-Reads VASP DOSCAR files and returns a density-of-states carrier.
+The module reads VASP DOSCAR files and returns a density-of-states carrier.
 Legacy data uses :class:`~diffpes.types.DensityOfStates`.
 Full data uses :class:`~diffpes.types.FullDensityOfStates`.
 The ``return_mode`` parameter selects the carrier.
@@ -14,9 +14,8 @@ Routine Listings
 
 Notes
 -----
-Handles both spin-polarized (ISPIN=2) and non-polarized (ISPIN=1)
-DOSCAR formats. The Fermi level is extracted directly from the
-file header.
+The parser supports spin-polarized and nonpolarized DOSCAR formats. It reads
+the Fermi level directly from the file header.
 """
 
 from pathlib import Path
@@ -45,7 +44,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
 ) -> Union[DensityOfStates, FullDensityOfStates]:
     """Parse a VASP DOSCAR file.
 
-    Reads a VASP DOSCAR file containing total (and optionally
+    The function reads a VASP DOSCAR file that contains total and optional
     site-projected) density of states on a uniform energy grid.
 
     The DOSCAR file format written by VASP consists of:
@@ -64,11 +63,10 @@ def read_doscar(  # noqa: PLR0912, PLR0915
       - ISPIN=2: 5 columns -- ``energy, DOS_up, DOS_down, intDOS_up,
         intDOS_down``.
 
-    * **Per-atom PDOS blocks** (optional, ``NATOMS`` blocks of
-      ``NEDOS`` lines each): each block begins with a header line
-      identical in format to line 6 of the main header, followed by
-      orbital-projected DOS values. Column counts vary depending on
-      ``LORBIT`` and spin polarization.
+    * **Per-atom PDOS blocks**: Each optional block contains ``NEDOS`` lines.
+      The header has the same format as line 6 of the main header.
+      Orbital-projected DOS values follow the header. ``LORBIT`` and spin
+      polarization determine the column count.
 
     :see: :class:`~.test_doscar.TestReadDoscar`
 
@@ -115,13 +113,11 @@ def read_doscar(  # noqa: PLR0912, PLR0915
 
     Notes
     -----
-    In ``"full"`` mode the parser also reads per-atom PDOS blocks
-    that follow the total DOS section. Each atom's PDOS block has
-    the same number of energy grid points (``NEDOS``) as the total
-    DOS block. The PDOS orbital ordering follows the VASP convention
-    determined by ``LORBIT`` (e.g. ``s, p_y, p_z, p_x, d_{xy}, ...``
-    for ``LORBIT=11``). The Fermi energy stored in the returned
-    object is taken directly from the file header (line 6, column 4).
+    In ``"full"`` mode, the parser also reads each PDOS block after the total
+    DOS section. Each PDOS block has ``NEDOS`` energy points. ``LORBIT``
+    determines the VASP orbital order. For example, ``LORBIT=11`` starts with
+    ``s, p_y, p_z, p_x, d_{xy}``. The parser reads the Fermi energy from
+    column 4 of line 6.
     """
     fid: TextIO
     i: int

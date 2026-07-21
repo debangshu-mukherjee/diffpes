@@ -1,8 +1,8 @@
-"""Photoionization cross-section weights for ARPES.
+"""Compute photoionization cross-section weights for ARPES.
 
 Extended Summary
 ----------------
-Provides orbital-dependent photoionization cross-section
+The module provides orbital-dependent photoionization cross-section
 calculations based on Yeh-Lindau tabulated data and simple
 heuristic models for different photon energies.
 
@@ -15,10 +15,9 @@ Routine Listings
 
 Notes
 -----
-Cross-section data is based on simplified tabulations from:
-Yeh & Lindau, Atomic Data and Nuclear Data Tables 32, 1-155
-(1985). The tabulated values at 20, 40, 60 eV provide
-approximate cross-sections for s, p, and d orbitals.
+Simplified tabulations from Yeh and Lindau provide the cross-section data.
+Their 1985 article appears in Atomic Data and Nuclear Data Tables 32, 1-155.
+Values at 20, 40, and 60 eV approximate the s, p, and d cross-sections.
 """
 
 import jax.numpy as jnp
@@ -41,7 +40,7 @@ def heuristic_weights(
     """Compute heuristic orbital weights based on photon energy.
 
     Provides a simple two-regime model for orbital-dependent
-    photoionization cross-sections. This is a coarse approximation
+    photoionization cross-sections. This is a simplified approximation
     useful when tabulated cross-section data is unavailable.
 
     :see: :class:`~.test_crosssections.TestHeuristicWeights`
@@ -55,7 +54,7 @@ def heuristic_weights(
 
            weights = [1, 2, 2, 2, 1, 1, 1, 1, 1]
 
-       p-orbitals (indices 1-3) are enhanced with weight 2,
+       Give p-orbitals at indices 1-3 a weight of 2. This value
        reflecting the stronger p-orbital cross-section at low
        photon energies typical of He-I or laser ARPES.
 
@@ -63,13 +62,13 @@ def heuristic_weights(
 
            weights = [1, 1, 1, 1, 2, 2, 2, 2, 2]
 
-       d-orbitals (indices 4-8) are enhanced with weight 2,
+       Give d-orbitals at indices 4-8 a weight of 2. This value
        reflecting the resonant enhancement of d-orbital
-       cross-sections at higher photon energies (e.g., He-II,
+       cross-sections at higher photon energies, for example He-II or
        synchrotron).
 
-    The selection is performed via ``jnp.where`` for JIT
-    compatibility (no Python-level branching).
+    The function uses ``jnp.where`` for JAX transformations without Python
+    branching.
 
     Parameters
     ----------
@@ -84,11 +83,11 @@ def heuristic_weights(
 
     Notes
     -----
-    The 50 eV regime choice is a deliberately hard selector. Its gradient
-    with respect to photon energy is zero away from the threshold and
-    undefined at the threshold, so this heuristic contributes no continuous
-    photon-energy Jacobian column. Plan 06 replaces this approximation with
-    a differentiable matrix-element treatment.
+    The 50 eV regime choice is a hard selector. Its photon-energy gradient is
+    zero away from the threshold and undefined at the threshold. Therefore,
+    this heuristic contributes no continuous photon-energy Jacobian column.
+    Plan 06 replaces this approximation with a differentiable matrix element
+    treatment.
     """
     low_e: Float[Array, " 9"] = jnp.array(
         [1.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0],
@@ -109,7 +108,7 @@ def _interp_cross_section(
     photon_energy: Float[Array, " "],
     sigma_vals: Float[Array, " 3"],
 ) -> Float[Array, " "]:
-    """Linearly interpolate cross-section with extrapolation.
+    """Interpolate a cross-section with linear extrapolation.
 
     Performs piecewise-linear interpolation of tabulated cross-section
     values at the given photon energy, with constant extrapolation
@@ -124,10 +123,9 @@ def _interp_cross_section(
        - ``sigma_vals`` are the corresponding cross-section values.
        - ``jnp.interp`` performs piecewise-linear interpolation
          between adjacent tabulation points.
-       - At the boundaries: energies below 20 eV return
-         sigma_vals[0] and energies above 60 eV return
-         sigma_vals[-1] (constant extrapolation), which is the
-         default behavior of ``jnp.interp``.
+       - At the boundaries, energies below 20 eV return sigma_vals[0].
+         Energies above 60 eV return sigma_vals[-1]. ``jnp.interp`` uses this
+         constant extrapolation by default.
 
     Parameters
     ----------

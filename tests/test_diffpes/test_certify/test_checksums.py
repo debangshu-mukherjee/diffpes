@@ -1,4 +1,4 @@
-"""Tests for non-security scientific-record checksums.
+"""Validate non-security scientific-record checksums.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.
@@ -37,7 +37,7 @@ class TestParseChecksum:
 
         Notes
         -----
-        Checks algorithm, record kind, and fixed-width CRC32 text.
+        The test checks algorithm, record kind, and fixed-width CRC32 text.
         """
         checksum: str = checksum_bytes(b"physics", record_kind="result")
         parsed: tuple[str, str, str, str] = parse_checksum(checksum)
@@ -93,7 +93,7 @@ class TestChecksumChunks:
 
     @pytest.mark.parametrize("record_kind", ["", "Result", "two words", "a/b"])
     def test_invalid_record_kind_is_rejected(self, record_kind: Any) -> None:
-        """Reject record labels that would make the checksum format ambiguous.
+        """Reject record labels that make the checksum format ambiguous.
 
         The case uses explicit inputs in the supported certification regime.
         It checks the public result or the documented failure state.

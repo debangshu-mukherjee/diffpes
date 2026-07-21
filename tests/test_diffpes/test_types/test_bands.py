@@ -44,7 +44,7 @@ class TestBandStructure:
 
         Notes
         -----
-        Constructs the carrier through its factory, flattens and unflattens it
+        The test constructs the carrier through its factory, flattens and unflattens it
         with JAX, and compares every array leaf with Chex.
         """
         bands: BandStructure = make_band_structure(
@@ -78,7 +78,7 @@ class TestOrbitalProjection:
 
         Notes
         -----
-        Constructs one projection through its public factory and uses Chex for
+        The test constructs one projection through its public factory and uses Chex for
         the array shape plus direct identity checks for optional fields.
         """
         projection: OrbitalProjection = make_orbital_projection(
@@ -107,7 +107,7 @@ class TestSpinOrbitalProjection:
 
         Notes
         -----
-        Constructs the spin carrier through its factory, performs a JAX tree
+        The test constructs the spin carrier through its factory, performs a JAX tree
         round trip, and compares all three array leaves with Chex.
         """
         projection: SpinOrbitalProjection = make_spin_orbital_projection(
@@ -146,7 +146,7 @@ class TestSpinBandStructure:
 
         Notes
         -----
-        Constructs the spin-resolved carrier, applies JAX flatten and unflatten,
+        The test constructs the spin-resolved carrier, applies JAX flatten and unflatten,
         and compares both energy channels with Chex.
         """
         bands: SpinBandStructure = make_spin_band_structure(
@@ -187,7 +187,7 @@ class TestArpesSpectrum:
 
         Notes
         -----
-        Constructs the spectrum through its public factory and checks both
+        The test constructs the spectrum through its public factory and checks both
         numerical dimensions with Chex.
         """
         spectrum: ArpesSpectrum = make_arpes_spectrum(
@@ -217,7 +217,7 @@ class TestMakeBandStructure(chex.TestCase):
 
         Notes
         -----
-        Wraps the public factory with ``self.variant`` and compares output
+        The test wraps the public factory with ``self.variant`` and compares output
         shapes, weights, and scalar array type with Chex.
         """
         factory: Callable[..., BandStructure] = self.variant(
@@ -241,7 +241,7 @@ class TestMakeBandStructure(chex.TestCase):
 
         Notes
         -----
-        Calls the raw and ``eqx.filter_jit`` factories with one NaN eigenvalue
+        The test calls the raw and ``eqx.filter_jit`` factories with one NaN eigenvalue
         and matches the same runtime diagnostic in both modes.
         """
         eigenvalues: jax.Array = jnp.array([[jnp.nan]])
@@ -264,7 +264,7 @@ class TestMakeBandStructure(chex.TestCase):
 
         Notes
         -----
-        Differentiates an independently defined sum through the carrier factory
+        The test differentiates an independently defined sum through the carrier factory
         and compares it with ``jax.grad(jnp.sum)`` using Chex.
         """
         eigenvalues: jax.Array = jnp.array([[0.25, -0.5]])
@@ -317,7 +317,7 @@ class TestMakeOrbitalProjection:
 
         Notes
         -----
-        Uses the rejection helper with an eight-orbital tensor and then with a
+        The test uses the rejection helper with an eight-orbital tensor and then with a
         negative nine-orbital tensor, matching each diagnostic.
         """
         assert_rejects(
@@ -418,7 +418,7 @@ class TestMakeSpinBandStructure:
 
         Notes
         -----
-        Uses the rejection helper with compatible spin arrays and a single
+        The test uses the rejection helper with compatible spin arrays and a single
         negative weight, matching the factory diagnostic.
         """
         assert_rejects(

@@ -1,8 +1,8 @@
-"""Tight-binding Hamiltonian builder in JAX.
+"""Build tight-binding Hamiltonians in JAX.
 
 Extended Summary
 ----------------
-Provides a minimal Slater-Koster Hamiltonian builder and convenience
+The module provides a minimal Slater-Koster Hamiltonian builder and convenience
 functions for creating test models (graphene, 1D chain). The
 Hamiltonian is fully JAX-traceable so that ``jax.grad`` can
 differentiate eigenvalues with respect to hopping parameters.
@@ -34,31 +34,24 @@ def build_hamiltonian_k(
             \exp(i \mathbf{k} \cdot \mathbf{R})
 
     where the sum runs over lattice vectors R defined by the
-    hopping indices. The result is Hermitianized:
+    hopping indices. The function makes the result Hermitian:
     ``H = (H_raw + H_raw^dag) / 2``.
 
-    The Bloch sum is evaluated entirely in **fractional coordinates**.
-    Because ``k`` is given in units of the reciprocal lattice vectors
-    and ``R`` (encoded in each hopping triple) is given in units of the
-    direct lattice vectors, the dot product ``k_frac . R_frac`` already
-    absorbs the metric: the Cartesian phase would be
-    ``exp(i k_cart . R_cart) = exp(2 pi i k_frac . R_frac)``, so the
-    lattice-vector matrix itself is never needed at this stage (it is
-    stored in the model for downstream Cartesian conversions).
+    The function computes the Bloch sum entirely in fractional coordinates.
+    ``k`` uses reciprocal lattice units, and each hopping ``R`` uses direct
+    lattice units. Therefore, ``k_frac . R_frac`` includes the metric. The
+    Cartesian phase equals
+    ``exp(2 pi i k_frac . R_frac)``. This stage does not need the lattice
+    matrix. The model retains it for Cartesian conversions.
 
-    The function iterates over every hopping entry in Python (not a
-    JAX scan) because the number of hoppings is typically small and
-    known at trace time.  For each hopping ``(orb_i, orb_j, R_ijk)``
-    the Bloch phase ``exp(2 pi i k . R)`` is computed and the
-    corresponding hopping amplitude is accumulated into entry
-    ``H[orb_i, orb_j]``.
+    The function iterates over each hopping in Python because the hopping count
+    is small and static. For each hopping, it computes the Bloch phase. It adds
+    the corresponding amplitude to ``H[orb_i, orb_j]``.
 
-    After all hoppings are accumulated the matrix is explicitly
-    Hermitianized via ``(H + H^dag) / 2``.  This is necessary because
-    the user-supplied hopping list may only contain the upper triangle
-    (e.g. only A -> B hops); the Hermitianization symmetrically fills
-    the lower triangle and also corrects floating-point round-off that
-    would otherwise break ``jnp.linalg.eigh``.
+    After the accumulation, the function applies ``(H + H^dag) / 2``. A
+    user-supplied hopping list can contain only the upper triangle. This
+    operation fills the lower triangle symmetrically. It also corrects
+    floating-point rounding that can prevent ``jnp.linalg.eigh`` from working.
 
     :see: :class:`~.test_hamiltonian.TestBuildHamiltonianK`
 
@@ -83,12 +76,11 @@ def build_hamiltonian_k(
     Notes
     -----
     The hopping amplitudes ``hopping_params`` are plain real floats.
-    Complex (spin-orbit) hoppings would require promoting them to
-    ``complex128`` and removing the Hermitianization short-cut.
+    Complex spin-orbit hoppings require ``complex128`` values and no automatic
+    Hermitian completion.
 
-    Because the function is decorated with ``@jaxtyped`` /
-    ``@beartype``, shape and dtype errors are caught at call time
-    rather than deep inside the JAX trace.
+    The ``@jaxtyped`` and ``@beartype`` decorators detect shape and dtype
+    errors when the caller invokes the function.
     """
     h_idx: int
     orb_i: int

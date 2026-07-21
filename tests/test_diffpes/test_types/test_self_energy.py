@@ -30,7 +30,7 @@ class TestSelfEnergyConfig:
 
         Notes
         -----
-        Constructs the carrier through its factory, flattens and unflattens it
+        The test constructs the carrier through its factory, flattens and unflattens it
         with JAX, then compares the static and array fields independently.
         """
         config: SelfEnergyConfig = make_self_energy_config(gamma=0.2)
@@ -60,7 +60,7 @@ class TestMakeSelfEnergyConfig:
 
         Notes
         -----
-        Calls the factory without arguments and compares every field defining
+        The test calls the factory without arguments and compares every field defining
         the default constant configuration.
         """
         config: SelfEnergyConfig = make_self_energy_config()
@@ -77,7 +77,7 @@ class TestMakeSelfEnergyConfig:
 
         Notes
         -----
-        Constructs the polynomial configuration with a JAX array and compares
+        The test constructs the polynomial configuration with a JAX array and compares
         the stored mode and coefficients directly.
         """
         coefficients: jax.Array = jnp.array([0.01, 0.1])
@@ -96,7 +96,7 @@ class TestMakeSelfEnergyConfig:
 
         Notes
         -----
-        Selects tabulated mode without ``energy_nodes`` and matches the static
+        The test selects tabulated mode without ``energy_nodes`` and matches the static
         factory diagnostic.
         """
         with pytest.raises(ValueError, match="energy_nodes required"):
@@ -124,7 +124,7 @@ class TestMakeSelfEnergyConfig:
 
         Notes
         -----
-        Uses the shared eager-and-JIT rejection helper for repeated nodes and
+        The test uses the shared eager-and-JIT rejection helper for repeated nodes and
         then for a three-node, two-coefficient length mismatch.
         """
         assert_rejects(

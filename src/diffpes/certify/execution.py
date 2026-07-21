@@ -2,11 +2,11 @@
 
 Extended Summary
 ----------------
-Separates filesystem and registry preparation from the pure compiled
-scientific kernel. The kernel evaluates the registered forward model once,
-retains its linearization, derives continuous claims and derivative evidence,
-and returns an Equinox certificate whose numerical leaves support JIT, VMAP,
-JVP, and VJP transformations.
+This module separates filesystem and registry preparation from the pure
+compiled scientific kernel. The kernel evaluates the registered forward model
+once and retains its linearization. It then derives continuous claims and
+derivative evidence. The kernel returns an Equinox certificate with numerical
+leaves that support JIT, VMAP, JVP, and VJP transformations.
 
 Routine Listings
 ----------------
@@ -367,8 +367,8 @@ def certify_forward(
     inputs : PyTree
         Numerical model inputs in the model's declared physical units.
     directions : Optional[PyTree]
-        Batched tangent probes. By default one probe is built per real input
-        coordinate.
+        Batched tangent probes. By default, the function builds one probe per
+        real input coordinate.
     scales : Optional[Float[Array, " n_probe"]]
         Positive physical scale for every tangent probe.
     spectrum_rank : int
@@ -425,7 +425,8 @@ def verify_certificate(certificate: ForwardCertificate) -> VerificationReport:
     Parameters
     ----------
     certificate : ForwardCertificate
-        Concrete certificate whose internal numerical relations are checked.
+        Concrete certificate. The function checks its internal numerical
+        relations.
 
     Returns
     -------

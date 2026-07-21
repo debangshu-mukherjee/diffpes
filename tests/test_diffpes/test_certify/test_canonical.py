@@ -1,4 +1,4 @@
-"""Tests for deterministic canonical scientific records.
+"""Validate deterministic canonical scientific records.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

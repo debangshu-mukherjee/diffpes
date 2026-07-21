@@ -1,9 +1,9 @@
-"""Tests for parser-adjacent workflow helpers.
+"""Validate parser-adjacent workflow helpers.
 
 Extended Summary
 ----------------
-Validates atom selection, atom-axis aggregation, shell reduction, and
-cross-file dimension checks with synthetic projection carriers.
+The tests validate atom selection, atom aggregation, shell reduction, and
+dimension checks across files. They use synthetic projection carriers.
 """
 
 import chex
@@ -34,13 +34,10 @@ from diffpes.types import (
 def _make_test_orb() -> OrbitalProjection:
     """Create a test OrbitalProjection with 2 k-points, 2 bands, 3 atoms.
 
-    Constructs a synthetic OrbitalProjection fixture with shape
-    (2, 2, 3, 9) where each atom has distinct s-orbital values
-    (1.0, 2.0, 3.0 for atoms 0, 1, 2 respectively), uniform p-orbital
-    values (0.1, 0.2, 0.3 for py, pz, px), and uniform d-orbital
-    values (0.01--0.05 for the five d channels). This provides
-    deterministic, analytically verifiable test data for select, aggregate,
-    and reduce operations.
+    The helper constructs an ``OrbitalProjection`` with shape ``(2, 2, 3, 9)``.
+    Each atom has a distinct s-orbital value. All atoms share fixed p-orbital
+    and d-orbital values. This fixture provides deterministic data for
+    selection, aggregation, and reduction.
 
     Returns
     -------
@@ -67,13 +64,11 @@ def _make_test_orb() -> OrbitalProjection:
 
 
 class TestSelectAtoms(chex.TestCase):
-    """Tests for :func:`diffpes.inout.select_atoms`.
+    """Validate :func:`diffpes.inout.select_atoms`.
 
-    Validates atom-axis slicing of OrbitalProjection and
-    SpinOrbitalProjection PyTrees. Covers single-atom selection,
-    multi-atom selection with value preservation, and type preservation
-    for the SpinOrbitalProjection subclass (ensuring both ``projections``
-    and ``spin`` arrays are sliced consistently along the atom axis).
+    The tests validate atom-axis slicing of both projection carriers.
+    They cover one atom and multiple atoms while preserving values.
+    They also verify the ``SpinOrbitalProjection`` type and both sliced arrays.
 
     :see: :func:`~diffpes.inout.select_atoms`
     """
@@ -81,15 +76,14 @@ class TestSelectAtoms(chex.TestCase):
     def test_select_single_atom(self) -> None:
         """Select a single atom by index and verify output shape and s-orbital value.
 
-        Uses the ``_make_test_orb`` fixture (3 atoms with distinct s-orbital
-        weights) and selects atom index 1. Asserts that the output projection
-        shape collapses from 3 atoms to 1 along axis 2, and that the s-orbital
-        value for the selected atom equals 2.0 (the value assigned to atom 1
-        in the fixture), verified to within ``atol=1e-12``.
+        The fixture has three atoms with distinct s-orbital weights.
+        The test selects atom 1 and checks the reduced atom axis.
+        It compares the selected s-orbital value with 2.0 by using
+        ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         orb: (
             diffpes.types.OrbitalProjection
             | diffpes.types.SpinOrbitalProjection
@@ -109,15 +103,14 @@ class TestSelectAtoms(chex.TestCase):
     def test_select_multiple_atoms(self) -> None:
         """Select two non-contiguous atoms and verify shape and ordering.
 
-        Selects atoms 0 and 2 from the 3-atom fixture. Asserts the output
-        shape is (2, 2, 2, 9) -- two atoms retained -- and that the
-        s-orbital values appear in selection order: atom 0 maps to output
-        index 0 with value 1.0, atom 2 maps to output index 1 with value
-        3.0. Both values are verified to within ``atol=1e-12``.
+        The test selects atoms 0 and 2 from the three-atom fixture.
+        It checks the output shape and selection order. Output indices 0 and 1
+        contain s-orbital values 1.0 and 3.0. The comparisons use
+        ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         orb: (
             diffpes.types.OrbitalProjection
             | diffpes.types.SpinOrbitalProjection
@@ -140,17 +133,15 @@ class TestSelectAtoms(chex.TestCase):
     def test_preserves_spin_orbital_projection_type(self) -> None:
         """Verify that selecting atoms from a SpinOrbitalProjection returns SpinOrbitalProjection.
 
-        Constructs a SpinOrbitalProjection with ``projections`` shape
+        The test constructs a SpinOrbitalProjection with ``projections`` shape
         (2, 2, 3, 9) and ``spin`` shape (2, 2, 3, 6), then selects atoms
-        0 and 2. Asserts the result is an instance of SpinOrbitalProjection
-        (not the base OrbitalProjection), and that both ``projections`` and
-        ``spin`` arrays are sliced to 2 atoms (shapes (2, 2, 2, 9) and
-        (2, 2, 2, 6) respectively). This is a regression guard ensuring the
-        function dispatches correctly on the input subtype.
+        0 and 2. The test verifies the ``SpinOrbitalProjection`` result type.
+        It also verifies the two-atom shapes of both arrays. This test checks
+        dispatch for the input subtype.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         proj: Array
         spin: Array
         orb: diffpes.types.SpinOrbitalProjection
@@ -169,12 +160,11 @@ class TestSelectAtoms(chex.TestCase):
 
 
 class TestAggregateAtoms(chex.TestCase):
-    """Tests for :func:`diffpes.inout.aggregate_atoms`.
+    """Validate :func:`diffpes.inout.aggregate_atoms`.
 
-    Validates summation of orbital projections over the atom axis. Covers
-    aggregation over all atoms (full sum) and over an explicit subset of
-    atom indices, verifying both output shape collapse and numerical
-    correctness of the summed s-orbital values.
+    The tests validate the sum of orbital projections over the atom axis.
+    They cover all atoms and an explicit subset. They verify the output shape
+    and the summed s-orbital values.
 
     :see: :func:`~diffpes.inout.aggregate_atoms`
     """
@@ -182,15 +172,14 @@ class TestAggregateAtoms(chex.TestCase):
     def test_aggregate_all(self) -> None:
         """Sum projections over all atoms and verify collapsed shape and total.
 
-        Calls ``aggregate_atoms`` with no atom indices (default: all atoms).
-        Asserts the output shape is (2, 2, 9) -- the atom dimension is
-        removed -- and that the s-orbital value at [0, 0, 0] equals 6.0
-        (the sum 1.0 + 2.0 + 3.0 from atoms 0, 1, 2 in the fixture),
-        verified to within ``atol=1e-12``.
+        The test calls ``aggregate_atoms`` without atom indices.
+        It checks the output shape after removal of the atom axis.
+        It compares the summed s-orbital value with 6.0 by using
+        ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         orb: (
             diffpes.types.OrbitalProjection
             | diffpes.types.SpinOrbitalProjection
@@ -209,15 +198,14 @@ class TestAggregateAtoms(chex.TestCase):
     def test_aggregate_subset(self) -> None:
         """Sum projections over a specified subset of atoms.
 
-        Calls ``aggregate_atoms`` with atom indices [0, 1]. Asserts the
-        output shape is (2, 2, 9) and the s-orbital value at [0, 0, 0]
-        equals 3.0 (1.0 + 2.0 from atoms 0 and 1 only), verified to
-        within ``atol=1e-12``. This exercises the explicit atom-selection
-        branch prior to summation.
+        The test calls ``aggregate_atoms`` with atom indices 0 and 1.
+        It checks the output shape and compares the s-orbital value with 3.0.
+        The comparison uses ``atol=1e-12``. This input covers explicit
+        atom selection before the sum.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         orb: (
             diffpes.types.OrbitalProjection
             | diffpes.types.SpinOrbitalProjection
@@ -235,12 +223,10 @@ class TestAggregateAtoms(chex.TestCase):
 
 
 class TestReduceOrbitals(chex.TestCase):
-    """Tests for :func:`diffpes.inout.reduce_orbitals`.
+    """Validate :func:`diffpes.inout.reduce_orbitals`.
 
-    Validates reduction of the 9-channel orbital decomposition
-    (s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2) into three aggregate
-    channels (s-total, p-total, d-total) by summing the appropriate
-    groups.
+    The tests reduce nine orbital channels to aggregate s, p, and d channels.
+    Each aggregate channel sums the applicable input channels.
 
     :see: :func:`~diffpes.inout.reduce_orbitals`
     """
@@ -248,19 +234,17 @@ class TestReduceOrbitals(chex.TestCase):
     def test_reduces_to_spd(self) -> None:
         """Reduce 9-channel orbital projections to s/p/d totals and verify sums.
 
-        Applies ``reduce_orbitals`` to the fixture's raw projections array.
-        Asserts the output shape is (2, 2, 3, 3) -- 9 orbital channels
+        The test applies ``reduce_orbitals`` to the fixture's raw projections array.
+        The test asserts the output shape is (2, 2, 3, 3) -- 9 orbital channels
         collapsed to 3 -- and checks atom 0's reduced values analytically:
 
-        - s = 1.0 (single channel, index 0)
-        - p = 0.1 + 0.2 + 0.3 = 0.6 (channels 1--3 summed)
-        - d = 0.01 + 0.02 + 0.03 + 0.04 + 0.05 = 0.15 (channels 4--8 summed)
+        The expected s, p, and d totals are 1.0, 0.6, and 0.15.
 
         All comparisons use ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         orb: (
             diffpes.types.OrbitalProjection
             | diffpes.types.SpinOrbitalProjection
@@ -286,7 +270,7 @@ class TestReduceOrbitals(chex.TestCase):
 
 
 class TestCheckConsistency(chex.TestCase):
-    """Tests for :func:`diffpes.inout.check_consistency`.
+    """Validate :func:`diffpes.inout.check_consistency`.
 
     Validates the dimension-compatibility checker that ensures
     BandStructure, OrbitalProjection, and (optionally) KPathInfo
@@ -298,16 +282,16 @@ class TestCheckConsistency(chex.TestCase):
     """
 
     def test_consistent_inputs(self) -> None:
-        """Verify no error is raised when BandStructure and OrbitalProjection agree.
+        """Verify successful checks for matching band and projection carriers.
 
-        Constructs a BandStructure with 2 k-points and 3 bands, and an
+        The test constructs a BandStructure with 2 k-points and 3 bands, and an
         OrbitalProjection with matching leading dimensions (2, 3, 1, 9).
-        Calls ``check_consistency`` and asserts it returns without
+        The test calls ``check_consistency`` and asserts it returns without
         raising, confirming the positive validation path.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
 
@@ -321,9 +305,9 @@ class TestCheckConsistency(chex.TestCase):
         check_consistency(bands, orb)
 
     def test_kpoint_mismatch(self) -> None:
-        """Verify ValueError is raised when k-point counts disagree.
+        """Verify ``ValueError`` for different k-point counts.
 
-        Constructs a BandStructure with 2 k-points but an
+        The test constructs a BandStructure with 2 k-points but an
         OrbitalProjection with 4 k-points. Asserts that
         ``check_consistency`` raises ``ValueError`` matching
         ``"K-point count mismatch"``, exercising the first dimension
@@ -331,7 +315,7 @@ class TestCheckConsistency(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
 
@@ -346,9 +330,9 @@ class TestCheckConsistency(chex.TestCase):
             check_consistency(bands, orb)
 
     def test_band_mismatch(self) -> None:
-        """Verify ValueError is raised when band counts disagree.
+        """Verify ``ValueError`` for different band counts.
 
-        Constructs a BandStructure with 3 bands but an
+        The test constructs a BandStructure with 3 bands but an
         OrbitalProjection with 5 bands (k-points match at 2). Asserts
         that ``check_consistency`` raises ``ValueError`` matching
         ``"Band count mismatch"``, exercising the second dimension
@@ -356,7 +340,7 @@ class TestCheckConsistency(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
 
@@ -371,18 +355,16 @@ class TestCheckConsistency(chex.TestCase):
             check_consistency(bands, orb)
 
     def test_with_kpath(self) -> None:
-        """Verify consistency check passes when optional KPathInfo is included.
+        """Verify consistency with an optional ``KPathInfo``.
 
-        Constructs a BandStructure (10 k-points, 3 bands), a matching
-        OrbitalProjection (10, 3, 1, 9), and a KPathInfo with
-        ``num_kpoints=10``, label indices at start and end, and
-        ``"Line-mode"`` mode. Calls ``check_consistency`` with all three
-        arguments and asserts no error is raised, confirming the three-way
-        dimension agreement path.
+        The test constructs matching band, projection, and k-path carriers.
+        The carriers have ten k-points and three bands. The test calls
+        ``check_consistency`` and expects no error. This result confirms that
+        all three dimensions agree.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         kpath: diffpes.types.KPathInfo
@@ -405,7 +387,7 @@ class TestCheckConsistency(chex.TestCase):
     def test_kpath_line_mode_mismatch_raises(self) -> None:
         """Verify ValueError when Line-mode KPathInfo has a different k-point count.
 
-        Constructs a BandStructure with 10 k-points and an OrbitalProjection
+        The test constructs a BandStructure with 10 k-points and an OrbitalProjection
         with matching dimensions, but a KPathInfo with ``num_kpoints=5`` in
         ``"Line-mode"``. Asserts that ``check_consistency`` raises
         ``ValueError`` matching ``"K-point count mismatch"``, covering the
@@ -413,7 +395,7 @@ class TestCheckConsistency(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         kpath: diffpes.types.KPathInfo
@@ -442,16 +424,15 @@ class TestSelectAtomsWithOAM(chex.TestCase):
     """
 
     def test_select_atoms_preserves_oam(self) -> None:
-        """Verify OAM is sliced along the atom axis when selecting atoms.
+        """Verify OAM slicing along the atom axis during selection.
 
-        Constructs an OrbitalProjection with OAM shape (2, 2, 3, 3) and
-        selects atoms 0 and 2. Asserts the resulting OAM has shape
-        (2, 2, 2, 3), confirming helpers.py line 89 is executed when
-        ``orb.oam is not None``.
+        The test constructs an OrbitalProjection with OAM shape (2, 2, 3, 3) and
+        selects atoms 0 and 2. The test checks the resulting OAM shape.
+        This input covers the path where ``orb.oam`` is not ``None``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         proj: Array
         oam: Array
         orb: diffpes.types.OrbitalProjection

@@ -1,15 +1,11 @@
-"""Tests for energy-dependent self-energy evaluation.
+"""Validate energy-dependent self-energy evaluation.
 
 Extended Summary
 ----------------
 Validates :func:`diffpes.simul.self_energy.evaluate_self_energy`, which
-computes the imaginary part of the electron self-energy (lifetime
-broadening gamma) as a function of binding energy. Three evaluation
-modes are tested: constant (energy-independent), polynomial (power-series
-in energy), and tabulated (piecewise-linear interpolation from energy
-nodes). Tests verify correct functional values and, for the constant and
-polynomial modes, finite gradients via ``jax.grad`` to ensure the
-self-energy is differentiable and usable in inverse fitting pipelines.
+computes lifetime broadening as a function of binding energy. Exercise
+constant, polynomial, and tabulated modes. Verify their values and JAX
+gradients.
 
 """
 
@@ -25,7 +21,7 @@ from diffpes.types import make_self_energy_config
 
 
 class TestEvaluateSelfEnergy:
-    """Tests for :func:`diffpes.simul.self_energy.evaluate_self_energy`.
+    """Validate :func:`diffpes.simul.self_energy.evaluate_self_energy`.
 
     Validates the three self-energy evaluation modes -- constant, polynomial,
     and tabulated -- by checking exact functional values at known energy
@@ -39,7 +35,7 @@ class TestEvaluateSelfEnergy:
     def test_constant_mode(self) -> None:
         """Verify that constant mode returns the same gamma at every energy.
 
-        This case establishes the constant mode contract for evaluate self energy with
+        The test establishes the constant mode contract for evaluate self energy with
         the concrete values and array shapes described below.
 
         Notes
@@ -51,9 +47,8 @@ class TestEvaluateSelfEnergy:
 
         **Expected assertions**
 
-        Every element of the output array equals 0.15, confirming that
-        constant mode ignores energy dependence and returns a uniform
-        broadening width, as expected for a simple Lorentzian lifetime.
+        Every output element equals 0.15. Thus, constant mode returns a
+        uniform broadening width.
         """
         config: diffpes.types.SelfEnergyConfig
         energy: Array
@@ -67,23 +62,20 @@ class TestEvaluateSelfEnergy:
     def test_polynomial_mode(self) -> None:
         """Verify that polynomial mode evaluates gamma(E) = c0 + c1*E correctly.
 
-        This case establishes the polynomial mode contract for evaluate self energy with
+        The test establishes the polynomial mode contract for evaluate self energy with
         the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Create a self-energy config with mode="polynomial"
-           and coefficients [0.05, 0.1] (highest degree first, matching
-           ``jnp.polyval`` convention), giving gamma(E) = 0.05*E + 0.1.
-           Evaluate at E = [0.0, 1.0, -1.0].
+        1. **Setup**: Create a polynomial configuration with coefficients
+           [0.05, 0.1]. Evaluate gamma(E) = 0.05*E + 0.1 at three points.
         2. **Check**: Assert the returned values match the analytically
            expected [0.1, 0.15, 0.05] to within atol=1e-10.
 
         **Expected assertions**
 
-        The polynomial self-energy is evaluated correctly at three
-        test energies, confirming that the coefficient ordering and
-        polynomial evaluation match ``jnp.polyval`` semantics.
+        The results match the analytic values at three energies. The
+        coefficient order follows ``jnp.polyval`` semantics.
         """
         config: diffpes.types.SelfEnergyConfig
         energy: Array
@@ -102,24 +94,23 @@ class TestEvaluateSelfEnergy:
     def test_tabulated_mode(self) -> None:
         """Verify that tabulated mode interpolates gamma between energy nodes.
 
-        This case establishes the tabulated mode contract for evaluate self energy with
+        The test establishes the tabulated mode contract for evaluate self energy with
         the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Setup**: Create a self-energy config with mode="tabulated",
            energy_nodes=[-3.0, 0.0, 1.0] and coefficients=[0.05, 0.1, 0.2].
-           Evaluate at E = [0.0, 0.5], where E=0.0 is an exact node and
-           E=0.5 lies midway between nodes 0.0 and 1.0.
+           Evaluate at E = [0.0, 0.5]. The first point is a node, and
+           the second point is midway between two nodes.
         2. **Check exact node**: Assert gamma(0.0) = 0.1 (direct lookup).
         3. **Check interpolated point**: Assert gamma(0.5) = 0.15, the
            linear interpolation midpoint between 0.1 and 0.2.
 
         **Expected assertions**
 
-        The tabulated self-energy returns exact values at nodes and
-        correct linearly interpolated values between nodes, confirming
-        that the piecewise-linear interpolation is implemented correctly.
+        The function returns exact node values and correct interpolated
+        values between nodes.
         """
         nodes: Array
         coeffs: Array
@@ -142,15 +133,13 @@ class TestEvaluateSelfEnergy:
     def test_constant_gradient(self) -> None:
         """Verify that the gradient w.r.t. constant self-energy coefficient is finite.
 
-        This case establishes the constant gradient contract for evaluate self energy
+        The test establishes the constant gradient contract for evaluate self energy
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Define a scalar loss function that creates a
-           constant-mode self-energy config from a single coefficient,
-           evaluates it at E = [0.0, 1.0], and returns the sum of the
-           resulting gamma values.
+        1. **Setup**: Define a loss from one constant coefficient.
+           Evaluate two energies and sum their gamma values.
         2. **Differentiate**: Call ``jax.grad(loss)(0.1)`` to compute
            the gradient w.r.t. the constant coefficient.
         3. **Check finiteness**: Assert the gradient is finite.
@@ -180,16 +169,13 @@ class TestEvaluateSelfEnergy:
     def test_polynomial_gradient(self) -> None:
         """Verify that gradients w.r.t. polynomial coefficients are finite.
 
-        This case establishes the polynomial gradient contract for evaluate self energy
+        The test establishes the polynomial gradient contract for evaluate self energy
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Define a scalar loss function that creates a
-           polynomial-mode self-energy config from a 2-element
-           coefficient array [c1, c0], evaluates it at 50 energy points
-           in [-1, 1] eV, and returns the sum of the resulting gamma
-           values.
+        1. **Setup**: Define a polynomial loss from coefficients [c1,
+           c0]. Evaluate 50 energies and sum their gamma values.
         2. **Differentiate**: Call ``jax.grad(loss)`` with initial
            coefficients [0.01, 0.1] to compute the gradient vector.
         3. **Check finiteness**: Assert all gradient components are
@@ -221,7 +207,7 @@ class TestEvaluateSelfEnergy:
 
 
 class TestSelfEnergyErrors:
-    """Tests for invalid mode handling in evaluate_self_energy.
+    """Validate invalid mode handling in evaluate_self_energy.
 
     Validates that ``evaluate_self_energy`` raises ``ValueError`` when
     given a ``SelfEnergyConfig`` with an unsupported mode string.
@@ -232,15 +218,13 @@ class TestSelfEnergyErrors:
     def test_unknown_mode_raises(self) -> None:
         """Verify that an unknown self-energy mode raises ValueError.
 
-        Directly constructs a ``SelfEnergyConfig`` with mode="bad_mode"
-        to bypass the factory validation, then calls
-        ``evaluate_self_energy``.  Asserts a ``ValueError`` matching
-        "Unknown self-energy mode" is raised, covering the final
-        fallthrough branch in ``evaluate_self_energy``.
+        Construct a ``SelfEnergyConfig`` with mode="bad_mode". Call
+        ``evaluate_self_energy`` and require ``ValueError`` with the
+        expected message.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         config: diffpes.types.SelfEnergyConfig
         energy: Array
 

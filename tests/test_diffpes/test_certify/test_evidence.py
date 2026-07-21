@@ -1,4 +1,4 @@
-"""Tests for differentiable certification evidence.
+"""Validate differentiable certification evidence.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.

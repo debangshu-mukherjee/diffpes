@@ -4,8 +4,8 @@ Extended Summary
 ----------------
 Provides small, fixed-policy inputs for forward, tight-binding, and radial
 tests. Random factories are deterministic for a supplied JAX key; analytic
-factories use fixed grids and physical parameters. Every returned traced leaf
-is checked for finiteness at construction.
+factories use fixed grids and physical parameters. Each factory checks every
+returned traced leaf for finiteness.
 """
 
 import chex
@@ -51,7 +51,7 @@ def toy_band_structure(
 ) -> BandStructure:
     """Build a reproducible occupied-state toy band structure.
 
-    Eigenvalues are sampled in [-2.5, 0.25] eV, safely below
+    The factory samples eigenvalues in [-2.5, 0.25] eV, safely below
     ``E_F + 0.5`` eV. This intentionally avoids the known upper-state
     ``fermi_dirac`` gradient defect until plan 02 repairs it. The supplied key
     is the entire seed policy and is never mutated.
@@ -120,8 +120,8 @@ def toy_simulation_params(fidelity: int = 512) -> SimulationParams:
     """Build fixed low-temperature simulation parameters.
 
     Uses an energy window of [-3, 0.5] eV, 40 meV Gaussian resolution,
-    100 meV Lorentzian width, 15 K temperature, and 21.2 eV photons. No random
-    seed is used because these values are an analytic fixture policy.
+    100 meV Lorentzian width, 15 K temperature, and 21.2 eV photons. These
+    analytical fixture values require no random seed.
     """
     params: SimulationParams = make_simulation_params(
         energy_min=-3.0,
@@ -160,8 +160,8 @@ def toy_graphene_diagonalized(
     """Diagonalize the native graphene model on a fixed Gamma-to-K path.
 
     Uses the production -2.7 eV nearest-neighbor model and an
-    endpoint-inclusive fractional path from Gamma to K = (1/3, 1/3, 0). No
-    random seed is used.
+    endpoint-inclusive fractional path from Gamma to K = (1/3, 1/3, 0).
+    The factory uses no random seed.
     """
     model: TBModel = make_graphene_model()
     path_coordinate: Float[Array, " n_k"] = jnp.linspace(
@@ -183,7 +183,7 @@ def toy_chain_diagonalized(
     """Diagonalize the native one-dimensional chain on a fixed k-path.
 
     Uses the production -1 eV hopping and an endpoint-inclusive fractional
-    path from -1/2 to 1/2 along kx. No random seed is used.
+    path from -1/2 to 1/2 along kx. The factory uses no random seed.
     """
     model: TBModel = make_1d_chain_model()
     kx: Float[Array, " n_k"] = jnp.linspace(-0.5, 0.5, n_k, dtype=jnp.float64)

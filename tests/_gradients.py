@@ -4,10 +4,10 @@ Extended Summary
 ----------------
 Every differentiability gate in the diffpes plan series calls
 ``gradient_gate`` or ``assert_grad_matches_fd`` from this module. Ad-hoc finite
-differences in a gate are a review-blocking defect. A failure of this harness
-on a physics function is a physics failure: the Fisher matrix is built from
-the gradients this module certifies, and a spuriously zero parameter-Jacobian
-column removes the corresponding Fisher row and column.
+differences in a gate are a review-blocking defect. A harness failure on a
+physics function indicates a physics failure. The certified gradients
+construct the Fisher matrix. A false zero in the parameter Jacobian removes
+the applicable Fisher row and column.
 
 The harness combines JAX's randomized directional checks with scale-aware,
 elementwise central differences and explicit zero-gradient tripwires. Complex
@@ -119,7 +119,7 @@ def central_fd_grad(
     leaves separately perturb real and imaginary components and combine them
     as ``d/dRe - 1j*d/dIm``, matching JAX's complex-to-real convention. The
     cost is two forward evaluations per real parameter and four per complex
-    parameter, so this helper is restricted to toy-model gates.
+    parameter. This cost restricts the helper to toy-model gates.
     """
     leaves: list[Any]
     treedef: jax.tree_util.PyTreeDef
@@ -148,8 +148,8 @@ def assert_grad_matches_fd(
 ) -> None:
     """Assert autodiff agrees with directional and elementwise FD checks.
 
-    The relative tolerance is selected from :data:`RTOL_LADDER`. If ``atol``
-    is omitted, it is estimated from the central-FD round-off floor
+    :data:`RTOL_LADDER` selects the relative tolerance. If the caller omits
+    ``atol``, the central-FD round-off floor estimates it from
     ``EPS_F64**(2/3) * max(1, abs(fn(theta))) / median(h)``. Failures identify
     the exact PyTree leaf path and largest absolute discrepancy.
     """
@@ -228,7 +228,7 @@ def assert_nonzero_grad(
 ) -> None:
     """Assert every selected gradient leaf has physically useful sensitivity.
 
-    By default every leaf is checked. ``sensitive_paths`` selects exact JAX
+    The helper checks every leaf by default. ``sensitive_paths`` selects exact JAX
     key-path strings, and each selected leaf must have Euclidean norm strictly
     greater than ``min_norm``.
     """
@@ -271,7 +271,8 @@ def gradient_gate(
     """Run finite, finite-difference, and nonzero gradient checks together.
 
     This is the single entry point used by sibling-plan differentiability
-    gates. Keyword arguments are forwarded to :func:`assert_grad_matches_fd`.
+    gates. The helper forwards keyword arguments to
+    :func:`assert_grad_matches_fd`.
     """
     gradient: PyTree = jax.grad(fn)(theta)
     assert_tree_finite(gradient)

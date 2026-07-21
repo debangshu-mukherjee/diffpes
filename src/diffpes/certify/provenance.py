@@ -1,11 +1,11 @@
-"""Artifact lineage and semantic information-loss graphs.
+"""Trace artifact lineage and semantic information loss.
 
 Extended Summary
 ----------------
 This module builds a deterministic directed acyclic graph from immutable
-``TransformationRecord`` carriers.  It rejects missing parents, cycles,
-multiple producers, and unused declared inputs.  Semantic properties,
-information losses, and claim invalidations are propagated to every output.
+``TransformationRecord`` carriers. It rejects missing parents, cycles,
+multiple producers, and unused declared inputs. The module propagates semantic
+properties, information losses, and claim invalidations to every output.
 
 Propagation is deliberately conservative: inherited semantics remain active
 only when a transformation explicitly lists them in ``preserves``.  A missing
@@ -17,7 +17,7 @@ Routine Listings
 :func:`build_provenance`
     Build a deterministic provenance DAG and propagate information.
 :func:`validate_provenance`
-    Independently re-evaluate graph structure and derived state.
+    Re-evaluate graph structure and derived state independently.
 :func:`effective_information`
     Return propagated semantics, losses, and invalidations for one node.
 :func:`invalidated_claims`
@@ -50,7 +50,7 @@ from .checksums import checksum_pytree
 
 
 class _Analysis(eqx.Module):
-    """Internal complete analysis before construction or comparison."""
+    """Store complete internal analysis before construction or comparison."""
 
     ordered_records: tuple[TransformationRecord, ...]
     topological_order: tuple[str, ...] = eqx.field(static=True)
@@ -426,8 +426,8 @@ def build_provenance(
                    graph_checksum=checksum,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -485,7 +485,7 @@ def build_provenance(
 
 @jaxtyped(typechecker=beartype)
 def validate_provenance(graph: ProvenanceGraph) -> ProvenanceReport:
-    """Independently re-evaluate graph structure and derived state.
+    """Re-evaluate graph structure and derived state independently.
 
     The operation propagates semantic state, information loss, and claim
     invalidation through a directed artifact graph. It reports contradictions
@@ -508,8 +508,8 @@ def validate_provenance(graph: ProvenanceGraph) -> ProvenanceReport:
                    graph_checksum=expected_checksum,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -571,8 +571,8 @@ def effective_information(
 
            msg: str = f"unknown provenance node: {output_id}"
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -622,8 +622,8 @@ def invalidated_claims(
                    output_id,
                ).invalidated_claims
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -661,8 +661,8 @@ def lineage(graph: ProvenanceGraph, output_id: str) -> tuple[str, ...]:
 
            result: tuple[str, ...] = tuple(sorted(ancestors))
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

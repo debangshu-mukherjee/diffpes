@@ -33,7 +33,7 @@ class TestInformationState:
 
         Notes
         -----
-        Constructs the state through its public factory and reads every static
+        The test constructs the state through its public factory and reads every static
         information-flow field directly from the resulting carrier.
         """
         state: InformationState = make_information_state(
@@ -65,7 +65,7 @@ class TestProvenanceGraph:
 
         Notes
         -----
-        Builds one root state and an edge-free graph, then compares root,
+        The test builds one root state and an edge-free graph, then compares root,
         order, state, and checksum fields with their explicit inputs.
         """
         state: InformationState = make_information_state(
@@ -104,7 +104,7 @@ class TestProvenanceReport:
 
         Notes
         -----
-        Constructs a valid report through the public factory and compares its
+        The test constructs a valid report through the public factory and compares its
         static endpoint fields with independently specified tuples.
         """
         report: ProvenanceReport = make_provenance_report(
@@ -152,7 +152,7 @@ class TestMakeInformationState:
 
         Notes
         -----
-        Calls the factory for each malformed static input and matches the
+        The test calls the factory for each malformed static input and matches the
         diagnostic emitted by the corresponding validation branch.
         """
         with pytest.raises(ValueError, match=message):

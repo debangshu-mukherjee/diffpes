@@ -1,15 +1,10 @@
-"""Tests for tight-binding Hamiltonian builder.
+"""Validate the tight-binding Hamiltonian builder.
 
 Extended Summary
 ----------------
-Validates the k-space Hamiltonian construction function
-``build_hamiltonian_k`` and the two built-in model factories
-``make_1d_chain_model`` and ``make_graphene_model``.  Tests verify
-Hermiticity of H(k), correct matrix shape, JIT compatibility, the
-analytically known cosine dispersion of the 1D chain, the eigenvalue
-bandwidth [-2|t|, 2|t|], the graphene Gamma-point eigenvalues (+/-3|t|),
-the Dirac-point degeneracy at K=(2/3, 1/3, 0), and differentiability of
-eigenvalues with respect to hopping parameters.
+The tests validate ``build_hamiltonian_k`` and the two model factories.
+They cover Hermiticity, the matrix shape, JIT, analytic dispersions, and
+gradients with respect to hopping parameters.
 
 """
 
@@ -29,27 +24,25 @@ from diffpes.types import (
 
 
 class TestBuildHamiltonianK:
-    """Tests for ``build_hamiltonian_k``.
+    """Validate ``build_hamiltonian_k``.
 
-    Validates the Bloch Hamiltonian H(k) = sum_R t_R * exp(i k.R)
-    construction from hopping parameters and lattice vectors.  Tests
-    verify Hermiticity (H = H^dag), correct matrix shape, and JIT
-    compatibility.
+    The tests cover the Bloch Hamiltonian ``H(k)`` from hopping parameters
+    and lattice vectors. They verify Hermiticity, the matrix shape, and JIT.
 
     :see: :func:`~diffpes.tightb.build_hamiltonian_k`
     """
 
     def test_hermitian(self) -> None:
-        """Verify H(k) is Hermitian at an arbitrary k-point.
+        """Verify H(k) satisfies Hermiticity at the specified k-point.
 
-        Builds the graphene Hamiltonian at k=(0.3, 0.2, 0.0) and asserts
-        H == H^dag to within 1e-12.  Hermiticity is a fundamental
-        requirement for a physical Hamiltonian and ensures real
-        eigenvalues upon diagonalization.
+        The graphene Hamiltonian satisfies ``H = H^dag``. This property
+        permits a real eigenspectrum.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test computes ``H`` at ``k=(0.3, 0.2, 0.0)``. It compares ``H``
+        with its conjugate transpose at an absolute tolerance of 1e-12.
+        """
         model: diffpes.types.TBModel
         k: Array
         H: Array
@@ -68,14 +61,13 @@ class TestBuildHamiltonianK:
     def test_correct_shape(self) -> None:
         """Verify H(k) has shape (n_orbitals, n_orbitals).
 
-        Builds the graphene Hamiltonian (2 orbitals: pz on sublattices A
-        and B) at an arbitrary k-point and asserts the output shape is
-        (2, 2).  This confirms the Hamiltonian matrix dimension matches
-        the model's orbital count.
+        The Hamiltonian has one row and one column for each model orbital.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test computes the two-orbital graphene Hamiltonian at one k-point.
+        It compares the output shape with ``(2, 2)``.
+        """
         model: diffpes.types.TBModel
         k: Array
         H: Array
@@ -92,17 +84,16 @@ class TestBuildHamiltonianK:
         assert H.shape == (2, 2)
 
     def test_jit_compatible(self) -> None:
-        """Verify ``build_hamiltonian_k`` is JAX-JIT-compatible.
+        """Verify JAX compiles ``build_hamiltonian_k``.
 
-        Wraps the Hamiltonian construction for the 1D chain model in
-        ``jax.jit`` with k as the traced argument.  Evaluates at
-        k=(0.25, 0, 0) and asserts all matrix elements are finite,
-        confirming no Python-side control flow or non-JAX operations
-        break tracing.
+        The compiled builder accepts a traced k-point and produces finite
+        matrix elements.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test compiles the builder for the 1D chain model with ``jax.jit``.
+        It checks the result at ``k=(0.25, 0, 0)`` for finite values.
+        """
         model: diffpes.types.TBModel
         f: Callable[..., Any]
         H: Array
@@ -122,12 +113,10 @@ class TestBuildHamiltonianK:
 
 
 class TestMake1DChainModel:
-    """Tests for the 1D chain tight-binding model factory.
+    """Validate the 1D chain tight-binding model factory.
 
-    Validates ``make_1d_chain_model`` by checking the analytically known
-    dispersion E(k) = 2t*cos(2*pi*k) and the eigenvalue bandwidth
-    [-2|t|, 2|t|].  The 1D chain is the simplest tight-binding system
-    and serves as a regression test for the Hamiltonian builder.
+    The tests compare the model with its analytic cosine dispersion.
+    They also verify the eigenvalue interval ``[-2|t|, 2|t|]``.
 
     :see: :func:`~diffpes.types.make_1d_chain_model`
     """
@@ -135,17 +124,15 @@ class TestMake1DChainModel:
     def test_cosine_dispersion(self) -> None:
         """Verify E(k) = 2t*cos(2*pi*k) for the 1D chain.
 
-        Constructs the 1D chain with t=-1.0 and diagonalizes at 101
-        k-points spanning the full Brillouin zone [-0.5, 0.5].  The
-        single-band dispersion is E(k) = -2*cos(2*pi*k) (since t=-1).
-        Asserts the numerical eigenvalues match this analytical cosine
-        to within 1e-10 across the entire BZ, validating both the
-        Hamiltonian construction (Fourier sum of hoppings) and the
-        diagonalization.
+        The single-band model with ``t=-1.0`` has the dispersion
+        ``E(k) = -2*cos(2*pi*k)``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test diagonalizes 101 k-points in the Brillouin zone
+        ``[-0.5, 0.5]``. It compares all eigenvalues at an absolute tolerance
+        of 1e-10.
+        """
         model: diffpes.types.TBModel
         kpoints: Array
         diag: diffpes.types.DiagonalizedBands
@@ -165,17 +152,14 @@ class TestMake1DChainModel:
     def test_eigenvalue_range(self) -> None:
         """Verify eigenvalue bandwidth spans [-2|t|, 2|t|].
 
-        Constructs the 1D chain with t=-1.5 and diagonalizes at 201
-        k-points spanning the full BZ.  The bandwidth of a single-
-        orbital nearest-neighbor chain is exactly 4|t| = 6.0, with
-        extrema at -3.0 and +3.0.  Asserts min and max eigenvalues
-        match these expected values to within 0.05 (accounting for
-        finite k-grid sampling that may not exactly hit the BZ center
-        and edge).
+        A chain with ``t=-1.5`` has eigenvalue limits of -3.0 and 3.0 eV.
+        The corresponding bandwidth is 6.0 eV.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test diagonalizes 201 k-points across the Brillouin zone. It
+        compares both extrema at an absolute tolerance of 0.05 eV.
+        """
         model: diffpes.types.TBModel
         kpoints: Array
         diag: diffpes.types.DiagonalizedBands
@@ -193,29 +177,25 @@ class TestMake1DChainModel:
 
 
 class TestMakeGrapheneModel:
-    """Tests for the graphene tight-binding model factory.
+    """Validate the graphene tight-binding model factory.
 
-    Validates ``make_graphene_model`` using analytically known properties
-    of the graphene pi-band structure: the Gamma-point eigenvalue
-    splitting +/-3|t|, the Dirac-point degeneracy at K=(2/3, 1/3, 0),
-    and differentiability of eigenvalues with respect to the hopping
-    parameter t.
+    The tests use analytic properties of the graphene pi-band structure.
+    They cover the Gamma point, the Dirac point, and hopping gradients.
 
     :see: :func:`~diffpes.types.make_graphene_model`
     """
 
     def test_gamma_point(self) -> None:
-        """Verify Gamma-point eigenvalues are +/-3|t| for graphene.
+        """Verify graphene has Gamma-point eigenvalues of +/-3|t|.
 
-        Constructs the graphene model with t=-2.7 eV and diagonalizes
-        at Gamma=(0,0,0).  The two-orbital nearest-neighbor model yields
-        E(Gamma) = +/-3|t| = +/-8.1 eV, corresponding to the bonding
-        and anti-bonding combinations of the two sublattice pz orbitals.
-        Asserts sorted eigenvalues match -8.1 and +8.1 to within 0.01 eV.
+        The two-orbital model with ``t=-2.7`` eV has eigenvalues of -8.1
+        and 8.1 eV at the Gamma point.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test diagonalizes the model at ``Gamma=(0, 0, 0)``. It compares
+        both eigenvalues at an absolute tolerance of 0.01 eV.
+        """
         model: diffpes.types.TBModel
         Gamma: Array
         diag: diffpes.types.DiagonalizedBands
@@ -234,15 +214,14 @@ class TestMakeGrapheneModel:
     def test_k_point_dirac(self) -> None:
         """Verify the Dirac point at K=(2/3, 1/3, 0) has zero-energy eigenvalues.
 
-        Constructs the graphene model with t=-2.7 eV and diagonalizes at
-        the high-symmetry K-point in fractional reciprocal coordinates.
-        At this point the off-diagonal Bloch sum vanishes identically,
-        producing a two-fold degeneracy at E=0 (the Dirac cone apex).
-        Asserts both eigenvalues are zero to within 1e-10 eV.
+        The off-diagonal Bloch sum vanishes at this k-point. Both eigenvalues
+        consequently equal zero.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test diagonalizes the model with ``t=-2.7`` eV at the Dirac
+        point. It compares both eigenvalues with zero at a tolerance of 1e-10 eV.
+        """
         model: diffpes.types.TBModel
         K: Array
         diag: diffpes.types.DiagonalizedBands
@@ -256,17 +235,16 @@ class TestMakeGrapheneModel:
         assert jnp.allclose(diag.eigenvalues[0], 0.0, atol=1e-10)
 
     def test_gradient_wrt_hopping(self) -> None:
-        """Verify gradient of eigenvalue sum-of-squares w.r.t. hopping is finite.
+        """Verify JAX produces a finite hopping gradient for ``sum(E**2)``.
 
-        Defines loss = sum(E^2) for the graphene model at k=(0.1, 0.2, 0)
-        and differentiates with respect to the hopping parameter array
-        using ``jax.grad``.  Asserts all gradient elements are finite,
-        confirming end-to-end differentiability of the Hamiltonian
-        construction and eigendecomposition for the multi-orbital case.
+        The graphene eigenspectrum carries sensitivity to the hopping
+        parameters through the Hamiltonian and the eigendecomposition.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test differentiates ``sum(E**2)`` with ``jax.grad`` at
+        ``k=(0.1, 0.2, 0)``. It checks every hopping gradient for a finite value.
+        """
         model: diffpes.types.TBModel
         kpoints: Array
         grad: Array

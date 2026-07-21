@@ -1,8 +1,8 @@
-"""Crystal geometry data structure for VASP crystal structures.
+"""Define crystal-geometry data structures for VASP crystal structures.
 
 Extended Summary
 ----------------
-Defines the :class:`CrystalGeometry` PyTree for representing
+This module defines the :class:`CrystalGeometry` PyTree for
 crystal structures parsed from VASP POSCAR files. Includes real-space
 lattice vectors, reciprocal lattice, atomic coordinates, element
 symbols, and atom counts per species.
@@ -16,9 +16,9 @@ Routine Listings
 
 Notes
 -----
-The ``symbols`` field is stored as auxiliary data in the PyTree
-since JAX cannot trace Python strings. All numeric fields are
-stored as JAX arrays for compatibility with JAX transformations.
+JAX stores the ``symbols`` field as auxiliary PyTree data because JAX cannot
+trace Python strings. JAX stores all numerical fields as arrays for
+compatibility with its transformations.
 """
 
 import equinox as eqx
@@ -37,17 +37,14 @@ _MIN_SCALED_SINGULAR_VALUE: float = 1e-12
 class CrystalGeometry(eqx.Module):
     """Store VASP POSCAR crystal geometry in a JAX PyTree.
 
-    Encapsulates the full crystal structure information parsed from a
-    VASP POSCAR file: real-space lattice vectors, the corresponding
-    reciprocal lattice, fractional atomic coordinates, per-species
-    element symbols, and per-species atom counts. Together these fields
-    fully describe the periodic crystal needed for ARPES simulation.
+    This type contains the complete crystal structure from a VASP POSCAR file.
+    It contains real-space lattice vectors, the reciprocal lattice,
+    fractional coordinates, element symbols, and atom counts. Together, these
+    fields describe the periodic crystal for an ARPES simulation.
 
-    This class is registered as a JAX PyTree via
-    reciprocal_lattice, coords, atom_counts) are stored as children
-    visible to JAX tracing, while the ``symbols`` tuple of Python
-    strings is stored as auxiliary data because JAX cannot trace
-    Python strings.
+    JAX stores the numerical fields as PyTree children. JAX tracing can access
+    these fields. JAX stores the ``symbols`` tuple as auxiliary data because
+    JAX cannot trace Python strings.
 
 
     :see: :class:`~.test_geometry.TestCrystalGeometry`
@@ -148,11 +145,11 @@ def make_crystal_geometry(  # noqa: DOC503
 ) -> CrystalGeometry:
     """Create a validated CrystalGeometry instance.
 
-    Validates and normalises the inputs, then automatically computes
+    The factory validates and normalizes the inputs. It then computes
     the reciprocal lattice from the real-space lattice so the caller
-    does not need to supply it. Numeric arrays are cast to the
-    appropriate JAX dtypes (float64 for real-valued fields, int32
-    for atom counts).
+    does not need to supply it. The factory casts numerical arrays to the
+    applicable JAX dtypes. Real-valued fields use float64, and atom counts use
+    int32.
 
     :see: :class:`~.test_geometry.TestMakeCrystalGeometry`
 
@@ -210,10 +207,9 @@ def make_crystal_geometry(  # noqa: DOC503
         or if the atom counts do not sum to the number of positions. Empty
         symbols remain valid for VASP 4 files without a species line.
     EquinoxRuntimeError
-        If coordinates or lattice entries are non-finite, if the
-        lattice is not right-handed, or if its scaled smallest
-        singular value or condition number violates the named
-        numerical stability limits.
+        If coordinates or lattice entries are non-finite. The function also
+        rejects a left-handed lattice or a lattice that violates the numerical
+        stability limits.
 
     Notes
     -----

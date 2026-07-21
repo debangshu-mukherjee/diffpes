@@ -1,10 +1,10 @@
-"""Small immutable numerical tables used by simulation routines.
+"""Store small immutable numerical tables for simulation routines.
 
 Extended Summary
 ----------------
-Tabulated physical data shared by the simulation layer, stored as
-JAX arrays so they can be consumed directly inside jitted kernels.
-Currently holds the simplified Yeh-Lindau photoionization
+This module stores shared physical data as JAX arrays. Jitted simulation
+kernels can use these arrays directly.
+The module currently holds the simplified Yeh-Lindau photoionization
 cross-section tabulation: the photon-energy grid and the s, p, and
 d subshell cross sections evaluated on it. Like
 :mod:`diffpes.types.constants`, this module imports JAX so its
@@ -23,11 +23,10 @@ Routine Listings
 
 Notes
 -----
-Values are simplified from Yeh & Lindau, Atomic Data and Nuclear
-Data Tables 32, 1-155 (1985), tabulated at 20, 40, and 60 eV.
-Consumers interpolate with constant extrapolation outside the grid;
-extending the grid changes the photon-energy sensitivity of every
-consumer and must rerun the grad-vs-finite-difference gates.
+The values use a simplified Yeh-Lindau tabulation at 20, 40, and 60 eV.
+Consumers interpolate with constant extrapolation outside the grid. A grid
+extension changes each consumer's photon-energy sensitivity. Rerun the
+gradient and finite-difference gates after this change.
 """
 
 import jax.numpy as jnp

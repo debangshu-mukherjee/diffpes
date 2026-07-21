@@ -1,9 +1,9 @@
-"""Static identifiers and schema constants for forward certification.
+"""Define static identifiers and schema constants for forward certification.
 
 Extended Summary
 ----------------
-Keeps the declarative vocabulary shared by the JAX-native certification and
-certificate-persistence layers in the package's types-owned constant surface.
+This module keeps the declarative vocabulary that the JAX-native certification
+and certificate-persistence layers share in the types-owned constant surface.
 
 Routine Listings
 ----------------

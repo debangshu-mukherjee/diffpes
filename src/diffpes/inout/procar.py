@@ -1,8 +1,8 @@
-"""VASP PROCAR file parser.
+"""Parse a VASP PROCAR file.
 
 Extended Summary
 ----------------
-Reads VASP PROCAR files containing orbital-resolved band projections and
+The module reads VASP PROCAR files with orbital-resolved band projections. It
 returns an :class:`~diffpes.types.OrbitalProjection` carrier. It supports
 non-spin, spin-polarized (ISPIN=2), and SOC layouts.
 
@@ -46,7 +46,7 @@ def read_procar(
 ) -> Union[OrbitalProjection, SpinOrbitalProjection]:
     r"""Parse a VASP PROCAR file.
 
-    Reads a VASP PROCAR file that contains the orbital-resolved
+    The function reads a VASP PROCAR file that contains the orbital-resolved
     projections of Kohn-Sham wave functions onto site-centred
     spherical harmonics. Supports three layouts:
 
@@ -58,15 +58,15 @@ def read_procar(
 
     The PROCAR file written by VASP (when ``LORBIT=11`` or ``12``)
     contains site- and orbital-resolved projections of each Kohn-Sham
-    eigenstate. The file is organised into one or more *blocks*, each
-    containing:
+    eigenstate. The file contains one or more blocks with the following data:
 
     * A header line with ``# of k-points``, ``# of bands``,
       ``# of ions``.
-    * For each k-point: a coordinate line, then for each band: a
-      band-energy line, an orbital-name header, one projection line
-      per atom (columns: ion index, s, py, pz, px, dxy, dyz, dz2,
-      dxz, dx2-y2, tot), a ``tot`` summation line, and a blank line.
+    * For each k-point: one coordinate line and one record for each band.
+      Each band record contains the energy and an orbital header. It also
+      contains one projection line for each atom. The projection columns are
+      the ion index, nine orbitals, and ``tot``. A ``tot`` line and a blank
+      line follow each record.
 
     The number of blocks determines the spin layout:
 
@@ -129,20 +129,18 @@ def read_procar(
     Raises
     ------
     ValueError
-        If no valid PROCAR blocks are found in the file.
+        If the parser finds no valid PROCAR blocks in the file.
 
     Notes
     -----
     The 9 orbital channels follow the VASP convention:
     ``[s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]``.
-    The ``tot`` column printed by VASP is **not** stored; only the
-    individual orbital columns are kept. For ISPIN=2 in full mode, the
-    spin-averaged projection ``(up + down) / 2`` is used as the
-    orbital weight because many downstream consumers expect a single
-    projection array rather than separate spin channels. The spin
-    texture is encoded as 6 non-negative channels
-    ``[Sx+, Sx-, Sy+, Sy-, Sz+, Sz-]`` following the convention used
-    by the ARPES simulation pipeline.
+    The parser does not store the VASP ``tot`` column. It retains only the
+    individual orbital columns. In the ISPIN=2 full mode, the parser uses
+    ``(up + down) / 2`` as the orbital weight. Downstream consumers expect one
+    projection array instead of separate spin channels. The parser encodes the
+    spin texture as six nonnegative channels. These channels follow the ARPES
+    simulation convention ``[Sx+, Sx-, Sy+, Sy-, Sz+, Sz-]``.
     """
     fid: TextIO
 
@@ -222,9 +220,9 @@ def _parse_procar_blocks(
     Extended Summary
     ----------------
     A PROCAR file may contain 1, 2, or 4 consecutive blocks depending
-    on the spin configuration. Each block begins with a header line
-    matching ``"# of k-points: K  # of bands: B  # of ions: A"`` and
-    is followed by nested k-point / band / atom projection data.
+    on the spin configuration. A header line starts each block. The header
+    matches ``"# of k-points: K  # of bands: B  # of ions: A"``. Nested
+    projection data follows the header.
 
     Implementation Logic
     --------------------
@@ -240,8 +238,7 @@ def _parse_procar_blocks(
           ``k-point <index> : kx ky kz`` using a regex.
        b. For each band within the k-point:
 
-          i.   Skip forward until a line containing ``"band"`` is
-               found (the band energy header).
+          i.   Skip lines until the helper finds the band energy header.
           ii.  Skip the orbital-name header line (``ion  s  py ...``).
           iii. Read ``natoms`` lines, parsing columns 1 through 9
                (skipping the ion index in column 0) as the orbital
@@ -273,9 +270,8 @@ def _parse_procar_blocks(
     -----
     The parser uses 1-based k-point indices from the file to place
     data into the 0-based NumPy array (``k_idx = parsed_index - 1``).
-    Band and atom lines are read positionally (sequential order) rather
-    than by parsed index. The ``tot`` column (column 10 in the PROCAR
-    line) is not stored.
+    The parser reads band and atom lines in sequence, not by their parsed
+    indices. It does not store the ``tot`` column.
     """
     b: int
     a: int

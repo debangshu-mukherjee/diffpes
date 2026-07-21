@@ -1,16 +1,16 @@
-"""Canonical scientific-record representations for certification.
+"""Represent scientific records canonically for certification.
 
 Extended Summary
 ----------------
-This module turns the deliberately small set of values accepted by the
-certification layer into deterministic byte records.  The representation is
-typed: lists and tuples differ, array dtype and shape are retained, and Python
-scalars are distinct from zero-dimensional arrays.  Text is normalized to NFC
-and numerical arrays use little-endian C-order bytes.
+This module turns the certification layer's supported values into
+deterministic byte records. The representation distinguishes lists from
+tuples and records each array dtype and shape. It also distinguishes Python
+scalars from zero-dimensional arrays. The module normalizes text to NFC.
+Numerical arrays use little-endian C-order bytes.
 
-Canonicalization is bookkeeping at the Python/JAX boundary.  It must never be
-called from a traced numerical kernel and it contributes no physical or
-numerical certification claim.
+Canonicalization provides bookkeeping at the Python/JAX boundary. Do not call
+it from a traced numerical kernel. It contributes no physical or numerical
+certification claim.
 
 Routine Listings
 ----------------
@@ -143,14 +143,14 @@ def canonical_json(value: object) -> bytes:
 
            encoded: bytes = CANONICAL_JSON_PREFIX + payload
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
     value : object
-        JSON-like data. Mapping keys must be strings. Tuples are accepted.
-        Tuples deliberately remain distinguishable from lists.
+        JSON-like data. Mapping keys must be strings. The function accepts
+        tuples and distinguishes them from lists.
 
     Returns
     -------
@@ -362,8 +362,8 @@ def iter_canonical_pytree_chunks(
 
            yield from _iter_value_chunks(tree, chunk_bytes=chunk_bytes)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

@@ -1,8 +1,8 @@
-r"""Gaunt coefficient table for dipole transitions.
+r"""Build the Gaunt coefficient table for dipole transitions.
 
 Extended Summary
 ----------------
-Precomputes real-valued Gaunt integrals for electric dipole
+The module precomputes real-valued Gaunt integrals for electric dipole
 transitions in real spherical harmonics:
 
 .. math::
@@ -14,8 +14,8 @@ operator expressed in the real spherical harmonic basis (q = -1, 0, +1).
 
 Selection rules: :math:`l' = l \pm 1` and :math:`|m' - m| \leq 1`.
 
-The table is computed once at module load time using pure Python
-(not JAX-traced) and stored as a JAX array for O(1) lookup.
+Pure Python computes the table once during module loading. The module stores
+the result as a JAX array for constant-time lookup.
 
 Routine Listings
 ----------------
@@ -44,14 +44,14 @@ def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
 
     Extended Summary
     ----------------
-    Computes the Wigner 3-j symbol
+    The function computes the Wigner 3-j symbol
 
     .. math::
 
         \begin{pmatrix} j_1 & j_2 & j_3 \\ m_1 & m_2 & m_3 \end{pmatrix}
 
-    using the explicit Racah formula, which expresses the 3-j symbol as a
-    finite sum over factorials. The formula is:
+    It uses the explicit Racah formula, which expresses the symbol as a finite
+    sum over factorials. The formula is:
 
     .. math::
 
@@ -75,22 +75,21 @@ def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
 
         P = \sqrt{(j_1+m_1)!(j_1-m_1)!(j_2+m_2)!(j_2-m_2)!(j_3+m_3)!(j_3-m_3)!}
 
-    The summation index *t* runs over all integers for which all
-    factorial arguments are non-negative, determined by ``t_min`` and
-    ``t_max``.
+    The summation index *t* includes each integer with nonnegative factorial
+    arguments. The ``t_min`` and ``t_max`` values define this range.
 
-    **Selection rules** enforced before computation:
+    **Apply the selection rules before computation:**
 
     - :math:`m_1 + m_2 + m_3 = 0` (magnetic quantum number conservation)
     - :math:`|m_i| \le j_i` for each i (projection bounds)
     - :math:`|j_1 - j_2| \le j_3 \le j_1 + j_2` (triangle inequality)
 
-    If any selection rule is violated, the function returns 0.0 immediately
-    without computing the sum.
+    The function returns 0.0 without computing the sum when an input violates
+    a selection rule.
 
-    Only needed for small angular momenta (l_max <= 5), so the
-    factorial-based formula is efficient and exact (no floating-point
-    cancellation issues at this scale).
+    The application only needs small angular momenta with l_max <= 5. At this
+    scale, the factorial formula is efficient and avoids floating-point
+    cancellation.
 
     Parameters
     ----------
@@ -163,11 +162,11 @@ def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
 def _complex_gaunt(
     l1: int, m1: int, l2: int, m2: int, l3: int, m3: int
 ) -> float:
-    r"""Complex Gaunt integral for three complex spherical harmonics.
+    r"""Compute a complex Gaunt integral for three spherical harmonics.
 
     Extended Summary
     ----------------
-    Computes the Gaunt integral (three-Y integral) defined as:
+    The function computes the Gaunt integral defined as:
 
     .. math::
 
@@ -183,11 +182,10 @@ def _complex_gaunt(
             \begin{pmatrix} l_1 & l_2 & l_3 \\ 0 & 0 & 0 \end{pmatrix}
             \begin{pmatrix} l_1 & l_2 & l_3 \\ m_1 & m_2 & -m_3 \end{pmatrix}
 
-    The first 3-j symbol enforces the parity selection rule
-    :math:`l_1 + l_2 + l_3 = \text{even}`, and is evaluated first as
-    an early-exit optimization. The result is cached via
-    ``functools.cache`` since the same (l, m) combinations appear
-    repeatedly during Gaunt table construction.
+    The first 3-j symbol enforces the even parity selection rule. The function
+    computes this symbol first to permit an early return. ``functools.cache``
+    retains the result because the table construction repeats (l, m)
+    combinations.
 
     Parameters
     ----------
@@ -226,18 +224,18 @@ def _complex_gaunt(
 
 
 def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
-    r"""Gaunt coefficient for real spherical harmonics with dipole operator.
+    r"""Compute a Gaunt coefficient for real harmonics and a dipole operator.
 
     Extended Summary
     ----------------
-    Computes the integral of :math:`Y_l^m(\text{real}) \cdot r_q \cdot
-    Y_{l'}^{m'}(\text{real})` over the unit sphere, where
+    The function computes the integral of
+    :math:`Y_l^m(\text{real}) \cdot r_q \cdot Y_{l'}^{m'}(\text{real})` over
+    the unit sphere, where
     :math:`r_q` (q = -1, 0, +1) is a dipole operator component.
 
-    Because the Gaunt integral is natively defined for complex spherical
-    harmonics, this function performs a basis transformation: each real
-    harmonic is expanded in the complex basis using unitary coefficients,
-    and the resulting triple sum of complex Gaunt integrals is accumulated.
+    The standard Gaunt integral uses complex spherical harmonics. Therefore,
+    the function transforms each real harmonic into the complex basis. It then
+    accumulates the resulting triple sum of complex Gaunt integrals.
 
     **Real-to-complex transformation:**
 
@@ -253,15 +251,14 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
             \bigl((-1)^{|m|} Y_l^{|m|} - Y_l^{-|m|}\bigr)
             \quad (m < 0)
 
-    Each real harmonic thus becomes a sum of at most two complex harmonics
-    with known coefficients (computed by the nested helper
-    ``_real_to_complex_coeffs``).
+    Each real harmonic becomes a sum of at most two complex harmonics. The
+    nested ``_real_to_complex_coeffs`` helper computes their coefficients.
 
     **Dipole operator in complex basis:**
 
-    The position operator component :math:`r_q` corresponds to the l=1
-    real spherical harmonic :math:`Y_1^q(\text{real})`, which is itself
-    expanded in the complex basis using the same transformation.
+    The position operator component :math:`r_q` corresponds to the l=1 real
+    spherical harmonic. The function applies the same complex-basis
+    transformation to this harmonic.
 
     **Assembly:**
 
@@ -281,8 +278,8 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
     because the complex Gaunt integral involves :math:`Y_{l'}^{\rho *}`,
     and :math:`Y_l^{m *} = (-1)^m Y_l^{-m}`.
 
-    The result is guaranteed to be real; an imaginary part exceeding
-    :math:`10^{-12}` triggers a ``ValueError`` as a consistency check.
+    The mathematical result is real. The function raises ``ValueError`` when
+    the imaginary part exceeds :math:`10^{-12}`.
 
     Parameters
     ----------
@@ -319,8 +316,9 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
     def _real_to_complex_coeffs(ll: int, mm: int) -> list[tuple[complex, int]]:
         r"""Return real-to-complex expansion coefficients.
 
-        Computes the unitary transformation coefficients :math:`U_{m,\mu}`
-        such that :math:`Y_l^m(\text{real}) = \sum_\mu U_{m,\mu} Y_l^\mu`.
+        The helper computes the unitary transformation coefficients
+        :math:`U_{m,\mu}` such that
+        :math:`Y_l^m(\text{real}) = \sum_\mu U_{m,\mu} Y_l^\mu`.
         For m > 0, two terms with :math:`\mu = \pm m` contribute with
         coefficients :math:`1/\sqrt{2}` and :math:`(-1)^m/\sqrt{2}`.
         For m = 0, a single term with coefficient 1. For m < 0, two
@@ -383,10 +381,9 @@ def build_gaunt_table(
 ) -> Float[Array, "L_src M_src 3 L_dst M_dst"]:
     r"""Build the dipole Gaunt coefficient lookup table.
 
-    Precomputes every non-zero real Gaunt coefficient for electric
-    dipole transitions up to angular momentum ``l_max``. The table
-    is stored as a dense 5-D NumPy array and then converted to a
-    JAX array for O(1) lookup during forward-model evaluation.
+    The function computes each nonzero real Gaunt coefficient through
+    ``l_max``. It stores the coefficients in a dense five-dimensional NumPy
+    array. It then converts the table to a JAX array for constant-time lookup.
 
     The five axes correspond to:
 
@@ -400,12 +397,11 @@ def build_gaunt_table(
     - **axis 4** (``mp + l_max``): offset final magnetic quantum number,
       size ``2 * (l_max + 1) + 1``.
 
-    The construction loops over all valid quantum number combinations
-    respecting the dipole selection rules :math:`l' = l \pm 1` and
-    calls `_real_gaunt_dipole` for each. Zero entries (forbidden
-    transitions) are left at their initialized value.
+    The construction visits each valid combination of quantum numbers. It
+    applies the dipole selection rules and calls `_real_gaunt_dipole`. The
+    initialized zero values represent forbidden transitions.
 
-    The table is indexed as
+    Use the following expression to index the table:
     ``GAUNT_TABLE[l, m + l_max, q + 1, lp, mp + l_max]``
     where q in {-1, 0, +1} indexes the three dipole components.
 
@@ -443,10 +439,9 @@ def build_gaunt_table(
 
     Notes
     -----
-    This function uses pure Python / NumPy (not JAX-traced) because it
-    runs once at module import time. The result is frozen as a JAX
-    array constant, so it does not appear as a trainable parameter in
-    any gradient computation.
+    The function uses pure Python and NumPy because it runs once during module
+    import. The module stores the result as a JAX array constant. Therefore,
+    gradient computations do not include it as a trainable parameter.
     """
     l: int
     m: int
@@ -489,10 +484,9 @@ GAUNT_TABLE: Float[Array, "..."] = build_gaunt_table(l_max=L_MAX)
 def gaunt_lookup(l: int, m: int, q: int, lp: int, mp: int) -> float:
     r"""Look up a single Gaunt coefficient from the precomputed table.
 
-    Provides a convenience accessor for the module-level ``GAUNT_TABLE``
-    array, converting the physical quantum numbers (l, m, q, l', m')
-    into the offset indices used by the dense storage layout. The
-    index mapping is:
+    The function provides an accessor for the module-level ``GAUNT_TABLE``.
+    It converts the physical quantum numbers into offsets for the dense
+    storage layout. The index mapping is:
 
     - ``l`` indexes axis 0 directly.
     - ``m + L_MAX`` offsets the magnetic quantum number to a
@@ -501,9 +495,9 @@ def gaunt_lookup(l: int, m: int, q: int, lp: int, mp: int) -> float:
     - ``lp`` indexes axis 3 directly.
     - ``mp + L_MAX`` offsets m' on axis 4.
 
-    The returned value is cast to a Python float for use in
-    non-JAX contexts. For JAX-traced code, direct indexing into
-    ``GAUNT_TABLE`` is preferred to avoid Python-level overhead.
+    The function converts the returned value to a Python float for non-JAX
+    contexts. In JAX-traced code, index ``GAUNT_TABLE`` directly to avoid
+    Python overhead.
 
     :see: :class:`~.test_gaunt.TestGauntLookup`
 

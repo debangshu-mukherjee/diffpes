@@ -1,16 +1,16 @@
-"""Non-security consistency checksums for scientific records.
+"""Compute non-security consistency checksums for scientific records.
 
 Extended Summary
 ----------------
 Checksums in this module detect accidental disagreement between canonical
 records.  They are ordinary CRC32 bookkeeping values and provide no evidence
 of authorship, authenticity, physical validity, numerical correctness, or
-reproducibility.  Certification policy is forbidden from treating a checksum
-as a scientific claim.
+reproducibility. Certification policy must not treat a checksum as a
+scientific claim.
 
 Every returned string records the algorithm, canonicalization version, record
-kind, and checksum value.  Large carrier and file payloads are processed in
-bounded chunks.
+kind, and checksum value. The functions process large carrier and file
+payloads in bounded chunks.
 
 Routine Listings
 ----------------
@@ -97,8 +97,8 @@ def checksum_chunks(
 
            checksum: str = _format_checksum(value, record_kind=record_kind)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -137,8 +137,8 @@ def checksum_bytes(data: bytes, *, record_kind: str) -> str:
 
            checksum: str = checksum_chunks((data,), record_kind=record_kind)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -172,8 +172,8 @@ def checksum_pytree(tree: object, *, record_kind: str) -> str:
 
            checksum: str = checksum_chunks(chunks, record_kind=record_kind)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -208,8 +208,8 @@ def checksum_file(path: str | Path, *, record_kind: str) -> str:
 
            checksum: str = checksum_chunks(chunks(), record_kind=record_kind)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -257,8 +257,8 @@ def parse_checksum(checksum: str) -> tuple[str, str, str, str]:
                    match.group("value"),
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -308,8 +308,8 @@ def semantic_checksum(
 
            checksum: str = checksum_pytree(payload, record_kind="semantic")
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -349,8 +349,8 @@ def result_checksum(value: object, numerical: object) -> str:
 
            checksum: str = checksum_pytree(payload, record_kind="result")
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -406,13 +406,13 @@ def artifact_ref(
                    role=role,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
     path : str | Path
-        Source artifact whose exact bytes are recorded.
+        Source artifact with a record of its exact bytes.
     normalized : object
         Parsed, normalized scientific carrier derived from the source.
     role : str

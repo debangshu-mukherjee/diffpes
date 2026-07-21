@@ -1,18 +1,17 @@
-"""Utility functions for ARPES simulations.
+"""Provide utility functions for ARPES simulations.
 
 Extended Summary
 ----------------
-Provides mathematical utilities used throughout the ARPES simulation
-pipeline. The Faddeeva function (complex error function) is implemented
-via a 64-term Taylor series and is used by the Voigt broadening profile.
-Z-score normalization is provided for preprocessing spectra before
-comparison with experiment. Complex packing functions provide the sanctioned
-real-valued optimizer boundary for complex physics parameters.
+The subpackage provides mathematical utilities for ARPES simulations. The
+Faddeeva function uses a 64-term Taylor series. The Voigt broadening profile
+uses this function. Z-score normalization prepares spectra for comparisons
+with experiments. Complex packing functions provide the required real-valued
+optimizer boundary for complex physics parameters.
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`math`
-    Mathematical utility functions for ARPES simulations.
+    Compute mathematical utilities for ARPES simulations.
 
 Routine Listings
 ----------------
@@ -27,9 +26,8 @@ Routine Listings
 
 Notes
 -----
-All functions are JAX-compatible and support JIT compilation and
-automatic differentiation. The Faddeeva implementation uses
-``jax.lax.scan`` for the coefficient recurrence (no Python for loops).
+All functions support JAX transformations and automatic differentiation. The
+Faddeeva implementation uses ``jax.lax.scan`` for the coefficient recurrence.
 """
 
 from .math import faddeeva, pack_complex, unpack_complex, zscore_normalize

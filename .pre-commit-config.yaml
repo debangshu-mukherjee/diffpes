@@ -28,4 +28,4 @@ repos:
           --quiet --output-file requirements.txt
         language: system
         pass_filenames: false
-        files: ^(pyproject\.toml|uv\.lock)$
+        always_run: true

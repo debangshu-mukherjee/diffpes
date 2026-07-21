@@ -1,15 +1,14 @@
-"""Tests for Gaunt coefficient table.
+"""Validate Gaunt coefficient table.
 
 Extended Summary
 ----------------
-Validates the precomputed Gaunt coefficient table used for angular
-coupling in dipole matrix elements.  The Gaunt coefficients
-G(l, m, q, l', m') encode the integral of three spherical harmonics
-over the unit sphere and enforce dipole selection rules (Delta l = +/-1,
-Delta m = q).  Tests verify the table shape, the Delta-l and Delta-m
-selection rules, nonzero values for allowed transitions (s->p, p->s,
-p->d), reproducibility of the build procedure, real-valuedness of all
-entries, and a known positive value for the fundamental s-p coupling.
+The tests validate the precomputed Gaunt coefficient table for angular
+coupling in dipole matrix elements. Gaunt coefficients encode the integral
+of three spherical harmonics over the unit sphere. They enforce the dipole
+selection rules ``Delta l = +/-1`` and ``Delta m = q``. The tests verify the
+table shape and both selection rules. They also verify allowed transitions,
+reproducible construction, real values, and the positive fundamental s-p
+coupling.
 
 """
 
@@ -25,11 +24,11 @@ from diffpes.types import L_MAX
 
 
 class TestBuildGauntTable:
-    """Tests for the precomputed Gaunt coefficient table.
+    """Validate the precomputed Gaunt coefficient table.
 
     Validates the module-level ``GAUNT_TABLE`` array and the
-    ``gaunt_lookup`` accessor function.  The table is built at import
-    time by ``build_gaunt_table(l_max=4)`` and stores real-valued Gaunt
+    ``gaunt_lookup`` accessor function. ``build_gaunt_table(l_max=4)`` builds
+    the table at import time. The table stores real-valued Gaunt
     coefficients indexed by (l, m, q, l', m').  Tests systematically
     check selection rules, allowed transitions, table shape, dtype,
     reproducibility, and a known analytical value.
@@ -40,26 +39,26 @@ class TestBuildGauntTable:
     def test_table_shape(self) -> None:
         """Verify the precomputed table has the expected 5-D shape.
 
-        For l_max=4 the table axes are: l in [0..4] (5), m in [-4..4]
-        (9), q in [-1..1] (3), l' in [0..5] (6), m' in [-5..5] (11).
-        Asserts the shape is exactly ``(5, 9, 3, 6, 11)``.
+        The five axes represent ``l``, ``m``, ``q``, ``l'``, and ``m'``.
+        Their respective sizes are 5, 9, 3, 6, and 11 for ``l_max=4``.
+        The test asserts the exact shape ``(5, 9, 3, 6, 11)``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         assert GAUNT_TABLE.shape == (5, 9, 3, 6, 11)
 
     def test_selection_rule_delta_l(self) -> None:
         """Verify the dipole selection rule Delta l = +/-1.
 
-        Iterates over every valid combination of (l, m, q, l', m') in the
-        table and asserts that whenever ``|l' - l| != 1`` the Gaunt
+        The test iterates over every valid table index combination.
+        It asserts that whenever ``|l' - l| != 1`` the Gaunt
         coefficient is zero (< 1e-12).  This is the fundamental angular
         momentum selection rule for electric-dipole transitions.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         l: int
         m: int
         q: int
@@ -88,7 +87,7 @@ class TestBuildGauntTable:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         val = gaunt_lookup(0, 0, 0, 1, 0)
@@ -103,7 +102,7 @@ class TestBuildGauntTable:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         val = gaunt_lookup(1, 0, 0, 0, 0)
@@ -119,7 +118,7 @@ class TestBuildGauntTable:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         val = gaunt_lookup(1, 0, 0, 2, 0)
@@ -129,12 +128,12 @@ class TestBuildGauntTable:
         """Verify the magnetic selection rule forbids ``|Delta m| > 1``.
 
         Looks up G(l=2, m=0, q=0, l'=1, m'=2) where m' - m = 2 != q = 0.
-        The selection rule requires m' = m + q, so m' = 2 is forbidden.
-        Asserts the coefficient is zero (< 1e-12).
+        The selection rule requires ``m' = m + q`` and forbids ``m'=2`` here.
+        The test asserts the coefficient is zero (< 1e-12).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         val = gaunt_lookup(2, 0, 0, 1, 2)
@@ -143,14 +142,14 @@ class TestBuildGauntTable:
     def test_rebuild_matches_precomputed(self) -> None:
         """Verify that rebuilding the table reproduces the precomputed values.
 
-        Calls ``build_gaunt_table(l_max=4)`` at test time and compares to
+        The test calls ``build_gaunt_table(l_max=4)`` at test time and compares to
         the module-level ``GAUNT_TABLE`` with ``jnp.allclose``.  This
         guards against silent corruption of the cached table and confirms
         deterministic construction.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         table2: Array
 
         table2 = build_gaunt_table(l_max=4)
@@ -165,7 +164,7 @@ class TestBuildGauntTable:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
 
         assert GAUNT_TABLE.dtype == jnp.float64
 
@@ -180,7 +179,7 @@ class TestBuildGauntTable:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         val = gaunt_lookup(0, 0, 0, 1, 0)
@@ -204,7 +203,7 @@ class TestGauntLookup:
 
         Notes
         -----
-        Evaluates two scalar lookups and compares them with their directly indexed
+        The test evaluates two scalar lookups and compares them with their directly indexed
         ``GAUNT_TABLE`` entries at zero absolute and relative tolerance.
         """
         allowed: Array
@@ -231,11 +230,10 @@ class TestGauntLookup:
 
 
 class TestWigner3jSelectionRules:
-    """Tests for internal Wigner 3-j and complex Gaunt zero paths.
+    """Validate internal Wigner 3-j and complex Gaunt zero paths.
 
-    Exercises the early-return branches in ``_wigner3j`` and
-    ``_complex_gaunt`` that return 0.0 when selection rules are
-    violated, ensuring those lines are covered.
+    The tests exercise early returns in ``_wigner3j`` and ``_complex_gaunt``.
+    These branches return 0.0 for violations of selection rules.
 
     :see: :func:`~diffpes.maths.build_gaunt_table`
     """
@@ -243,13 +241,13 @@ class TestWigner3jSelectionRules:
     def test_abs_m_exceeds_j_returns_zero(self) -> None:
         """Verify ``|m1| > j1`` causes _wigner3j to return 0.0.
 
-        Constructs a call where ``|m1| = 2 > j1 = 1``, violating the
+        The test constructs a call where ``|m1| = 2 > j1 = 1``, violating the
         ``|mi| <= ji`` constraint, and asserts the result is 0.0
         (line 111).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         from diffpes.maths.gaunt import _wigner3j
@@ -260,12 +258,12 @@ class TestWigner3jSelectionRules:
     def test_triangle_inequality_violated_returns_zero(self) -> None:
         """Verify triangle inequality violation causes _wigner3j to return 0.0.
 
-        Uses j1=2, j2=1, j3=0 where ``j3 < |j1 - j2| = 1``, violating the
+        The test uses j1=2, j2=1, j3=0 where ``j3 < |j1 - j2| = 1``, violating the
         triangle inequality, and asserts the result is 0.0 (line 113).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         from diffpes.maths.gaunt import _wigner3j
@@ -276,13 +274,13 @@ class TestWigner3jSelectionRules:
     def test_complex_gaunt_zero_w3j_000_returns_zero(self) -> None:
         """Verify that zero w3j_000 (parity violation) causes _complex_gaunt to return 0.0.
 
-        For l1=2, l2=1, l3=0 the three-j symbol (2,1,0 | 0,0,0) is zero
-        because l1+l2+l3 = 3 is odd (parity selection rule). Asserts
-        the complex Gaunt integral returns 0.0 (line 194).
+        The three-j symbol ``(2,1,0 | 0,0,0)`` is zero for this input.
+        The parity rule gives zero because ``l1+l2+l3 = 3`` is odd.
+        The test asserts that the complex Gaunt integral returns 0.0.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         val: Array
 
         from diffpes.maths.gaunt import _complex_gaunt

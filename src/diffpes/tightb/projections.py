@@ -1,14 +1,11 @@
-"""Eigenvector to orbital weight conversions.
+"""Convert eigenvectors to orbital weights.
 
 Extended Summary
 ----------------
-Provides utilities to extract orbital weights and coefficients
-from diagonalized band structures.  The two functions in this
-module form the bridge between the tight-binding eigenvectors
-(complex coefficients in the orbital basis) and the physical
-observables used in ARPES simulations -- namely the orbital-
-resolved spectral weight and the full complex amplitudes needed
-for coherent photoemission matrix elements.
+The module extracts orbital weights and coefficients from diagonalized band
+structures. These functions convert complex tight-binding eigenvectors into
+ARPES observables. The observables include orbital-resolved spectral weights
+and complex amplitudes for coherent photoemission matrix elements.
 
 Routine Listings
 ----------------
@@ -44,13 +41,13 @@ def eigenvector_orbital_weights(
 
     This is the probability of finding the electron in orbital ``o``
     given that it occupies eigenstate ``(k, b)``.  By construction,
-    the weights sum to 1 over orbitals for each ``(k, b)`` pair when
-    the eigenvectors are properly normalized.
+    normalized eigenvectors give weights that sum to 1 over orbitals for each
+    ``(k, b)`` pair.
 
-    Orbital weights are the fundamental quantity behind fat-band
-    plots, orbital-resolved DOS, and the starting point for
-    photoemission matrix element calculations (where the full complex
-    coefficients are also needed; see ``orbital_coefficients``).
+    Fat-band plots and orbital-resolved DOS use orbital weights. Photoemission
+    matrix element computations also start from these weights. These
+    computations also need the complex coefficients; see
+    ``orbital_coefficients``.
 
     :see: :class:`~.test_projections.TestEigenvectorOrbitalWeights`
 
@@ -81,32 +78,29 @@ def orbital_coefficients(
 ) -> Complex[Array, "K B O"]:
     """Return the raw complex orbital coefficients.
 
-    For full matrix element calculation the complex coefficients
-    c_{k,b,orb} are needed (not just ``|c|^2``).
+    A full matrix element computation needs the complex coefficients
+    c_{k,b,orb}, not only ``|c|^2``.
 
     This is an **identity function**: it returns its input unchanged.
-    Its purpose is purely semantic -- to make call sites self-documenting
-    when both ``eigenvector_orbital_weights`` (which squares the
-    modulus) and the raw coefficients are needed in the same pipeline.
+    Its purpose gives a clear name to each call site. A pipeline can need both
+    ``eigenvector_orbital_weights`` and the raw coefficients.
     Callers can write::
 
         weights = eigenvector_orbital_weights(evecs)
         coeffs = orbital_coefficients(evecs)
 
-    making it immediately obvious which downstream code path uses
-    magnitudes only and which requires full phase information.
+    Thus, each downstream path clearly identifies whether it uses only
+    magnitudes or the full phase information.
 
-    In the photoemission matrix element calculation (Chinook-style),
-    the full complex coefficients ``c_{k,b,o}`` are multiplied by the
-    one-electron dipole matrix elements for each orbital ``o`` and
-    then coherently summed.  Interference between orbital channels
-    depends on the relative phases of these coefficients, which is
-    why the complex values -- not just ``|c|^2`` -- are essential.
+    In the Chinook-style matrix element computation, the function multiplies
+    each complex coefficient by the applicable one-electron dipole matrix
+    element. It then adds the products coherently. Interference between
+    orbital channels depends on the relative phases of these coefficients.
+    Therefore, this computation needs the complex values, not only ``|c|^2``.
 
-    When the eigenvectors originate from ``vasp_to_diagonalized``
-    (the PROCAR adapter), the phases are lost and all coefficients
-    are real and non-negative.  In that regime, coherent interference
-    terms are approximate.
+    When ``vasp_to_diagonalized`` supplies the eigenvectors, the adapter loses
+    the phases. The adapter then returns real, nonnegative coefficients. In
+    that regime, the coherent interference terms are approximate.
 
     :see: :class:`~.test_projections.TestOrbitalCoefficients`
 

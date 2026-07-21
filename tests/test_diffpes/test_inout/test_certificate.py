@@ -1,4 +1,4 @@
-"""Tests for portable forward-certificate persistence.
+"""Validate portable forward-certificate persistence.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.
@@ -261,7 +261,7 @@ class TestSaveCertificateJson:
 
         Notes
         -----
-        Writes the shared complete certificate fixture and reloads it before
+        The test writes the shared complete certificate fixture and reloads it before
         comparing the permanent model identity.
         """
         path: Path = tmp_path / "certificate-class.json"
@@ -382,7 +382,7 @@ class TestLoadCertificateJson:
         self,
         tmp_path: Any,
     ) -> None:
-        """Verify unknown schema major is rejected before interpretation.
+        """Verify rejection of an unknown schema major before interpretation.
 
         The case uses explicit inputs in the supported certification regime.
         It checks the public result or the documented failure state.

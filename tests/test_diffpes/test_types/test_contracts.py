@@ -31,7 +31,7 @@ class TestTransformationContract:
 
         Notes
         -----
-        Constructs one contract through the validated factory and compares its
+        The test constructs one contract through the validated factory and compares its
         immutable tuples and Boolean flag with the independent input values.
         """
         contract: TransformationContract = make_transformation_contract(
@@ -66,7 +66,7 @@ class TestCompositionReport:
 
         Notes
         -----
-        Builds a valid report with two transformation references and compares
+        The test builds a valid report with two transformation references and compares
         each static field with the independently specified tuples.
         """
         report: CompositionReport = make_composition_report(
@@ -140,8 +140,8 @@ class TestMakeTransformationContract:
 
         Notes
         -----
-        Calls the factory once per invalid declaration and matches the
-        diagnostic text so every static validation branch is identified.
+        The test calls the factory once for each invalid declaration.
+        It matches the diagnostic text and identifies each static branch.
         """
         with pytest.raises(ValueError, match=message):
             make_transformation_contract(**kwargs)
@@ -163,8 +163,8 @@ class TestMakeCompositionReport:
 
         Notes
         -----
-        Supplies one explicit error with ``valid=True`` and matches the
-        consistency diagnostic raised before the report is constructed.
+        The test supplies one explicit error with ``valid=True``.
+        It matches the consistency diagnostic before report construction.
         """
         with pytest.raises(ValueError, match="valid must be true"):
             make_composition_report(

@@ -1,34 +1,34 @@
-r"""ARPES simulation functions at six complexity levels.
+r"""Provide ARPES simulation functions at six complexity levels.
 
 Extended Summary
 ----------------
-Provides a complete ARPES simulation pipeline from basic pseudo-Voigt
+The subpackage provides a complete ARPES simulation pipeline from pseudo-Voigt
 convolution to full polarization-dependent dipole matrix element
 calculations. Also exports broadening functions, cross-section
 models, polarization utilities, and orbital angular momentum.
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`broadening`
-    Energy broadening functions for ARPES simulations.
+    Compute energy broadening functions for ARPES simulations.
 - :mod:`crosssections`
-    Photoionization cross-section weights for ARPES.
+    Compute photoionization cross-section weights for ARPES.
 - :mod:`expanded`
-    Expanded-input workflows for ARPES simulation.
+    Run expanded-input workflows for ARPES simulation.
 - :mod:`forward`
-    End-to-end differentiable ARPES forward model.
+    Run an end-to-end differentiable ARPES forward model.
 - :mod:`oam`
-    Orbital angular momentum calculation.
+    Compute orbital angular momentum.
 - :mod:`polarization`
-    Photon polarization and dipole matrix element calculations.
+    Compute photon polarization and dipole matrix elements.
 - :mod:`resolution`
-    Momentum resolution broadening for ARPES simulations.
+    Apply momentum resolution broadening to ARPES simulations.
 - :mod:`self_energy`
-    Energy-dependent self-energy evaluation for ARPES simulations.
+    Evaluate energy-dependent self-energy for ARPES simulations.
 - :mod:`spectrum`
-    ARPES spectrum simulation at six complexity levels (incl. spin-orbit).
+    Simulate ARPES spectra at six complexity levels.
 - :mod:`workflow`
-    High-level workflow helpers for VASP-to-ARPES simulation.
+    Run high-level workflows for VASP-to-ARPES simulation.
 
 Routine Listings
 ----------------

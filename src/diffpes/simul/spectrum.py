@@ -1,12 +1,11 @@
-"""ARPES spectrum simulation at six complexity levels (incl. spin-orbit).
+"""Simulate ARPES spectra at six complexity levels.
 
 Extended Summary
 ----------------
-Provides six simulation functions of increasing physical
-sophistication, from basic Voigt convolution (novice) to full
-polarization-dependent dipole matrix element calculations
-(expert) and spin-orbit (soc). All functions are vectorized with
-``jax.vmap`` for efficient GPU execution.
+The module provides six simulation functions with increasing physical detail.
+They range from basic Voigt convolution to polarization-dependent matrix
+elements and spin-orbit effects. ``jax.vmap`` vectorizes all functions for
+efficient GPU execution.
 
 Routine Listings
 ----------------
@@ -31,8 +30,9 @@ Orbital data uses :class:`~diffpes.types.OrbitalProjection`.
 Settings use :class:`~diffpes.types.SimulationParams`.
 Results use :class:`~diffpes.types.ArpesSpectrum`.
 
-The ``if is_unpolarized`` branches are intentional Python-side dispatch
-(config choice); they are not traced, so only one path is compiled per call.
+The ``if is_unpolarized`` branches perform intentional Python dispatch. JAX
+does not trace the configuration choice. Therefore, it compiles one path for
+each call.
 """
 
 import jax
@@ -70,11 +70,10 @@ def simulate_novice(
 ) -> ArpesSpectrum:
     """Simulate ARPES spectrum with Voigt broadening and uniform weights.
 
-    Entry-level simulation that convolves each band with a Voigt profile
-    (combined Gaussian + Lorentzian) and applies Fermi-Dirac occupation.
-    All non-s orbital projections (p, d) are summed with equal weight,
-    making this the simplest model that still captures lifetime and
-    instrumental broadening simultaneously.
+    This entry-level simulation convolves each band with a Voigt profile and
+    applies the Fermi-Dirac occupation. The function adds all non-s orbital
+    projections with equal weights. This simple model includes lifetime and
+    instrument broadening.
 
     :see: :class:`~.test_spectrum.TestSimulateNovice`
 
@@ -113,9 +112,9 @@ def simulate_novice(
         Electronic band structure containing eigenvalues of shape
         ``(K, B)`` and the Fermi energy.
     orb_proj : OrbitalProjection
-        Orbital projections of shape ``(K, B, A, 9)`` where A is the
-        number of atoms and 9 is the number of orbital channels
-        (s, p_y, p_z, p_x, d_xy, d_yz, d_z2, d_xz, d_x2-y2).
+        Orbital projections with shape ``(K, B, A, 9)``. A is the atom count,
+        and 9 is the orbital channel count. The channels follow the VASP
+        order.
     params : SimulationParams
         Simulation parameters including ``sigma``, ``gamma``,
         ``temperature``, ``energy_min``, ``energy_max``, and
@@ -154,7 +153,7 @@ def simulate_novice(
         energy: Float[Array, " "],
         weight: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band at one k-point (Voigt).
+        """Compute one band contribution at one k-point with a Voigt profile.
 
         Evaluates ``weight * f(E_band) * V(E; E_band, sigma, gamma)``
         where ``f`` is the Fermi-Dirac distribution and ``V`` is the
@@ -229,10 +228,9 @@ def simulate_basic(
 
     Intermediate simulation that replaces the Voigt profile with a pure
     Gaussian and introduces energy-dependent heuristic orbital weights.
-    The heuristic weights enhance p-orbital contributions below ~50 eV
-    photon energy and d-orbital contributions above, providing a
-    first-order approximation to photoionization cross-sections without
-    requiring tabulated atomic data.
+    Below about 50 eV, the heuristic weights enhance p-orbital contributions.
+    Above this energy, they enhance d-orbital contributions. This method
+    approximates photoionization cross-sections without tabulated atomic data.
 
     :see: :class:`~.test_spectrum.TestSimulateBasic`
 
@@ -271,9 +269,9 @@ def simulate_basic(
         Electronic band structure containing eigenvalues of shape
         ``(K, B)`` and the Fermi energy.
     orb_proj : OrbitalProjection
-        Orbital projections of shape ``(K, B, A, 9)`` where A is the
-        number of atoms and 9 is the number of orbital channels
-        (s, p_y, p_z, p_x, d_xy, d_yz, d_z2, d_xz, d_x2-y2).
+        Orbital projections with shape ``(K, B, A, 9)``. A is the atom count,
+        and 9 is the orbital channel count. The channels follow the VASP
+        order.
     params : SimulationParams
         Simulation parameters including ``sigma``, ``photon_energy``,
         ``temperature``, ``energy_min``, ``energy_max``, and
@@ -289,8 +287,8 @@ def simulate_basic(
     -----
     Uses Gaussian broadening with energy-dependent heuristic orbital
     weights (p-enhanced below 50 eV, d-enhanced above). This level is
-    suitable when Yeh-Lindau cross-section tables are not available but
-    some orbital selectivity is desired.
+    useful without Yeh-Lindau cross-section tables. Use it when the simulation
+    needs some orbital selectivity.
     """
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min,
@@ -310,7 +308,7 @@ def simulate_basic(
         energy: Float[Array, " "],
         weight: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band at one k-point (Gaussian).
+        """Compute one band contribution at one k-point with a Gaussian.
 
         Evaluates ``weight * f(E_band) * G(E; E_band, sigma)``
         where ``f`` is the Fermi-Dirac distribution and ``G`` is the
@@ -383,13 +381,10 @@ def simulate_basicplus(
 ) -> ArpesSpectrum:
     """Simulate ARPES with Gaussian broadening and Yeh-Lindau cross-sections.
 
-    Upgrades the heuristic weights of ``simulate_basic`` to physically
-    motivated Yeh-Lindau photoionization cross-sections interpolated at
-    the experimental photon energy. Unlike the basic level, ALL orbital
-    projections (including s) are first weighted by their respective
-    cross-sections before summing the non-s channels, ensuring that
-    cross-section magnitudes are correctly applied before orbital
-    selection.
+    The function replaces the heuristic weights with interpolated Yeh-Lindau
+    photoionization cross-sections. It applies the applicable cross-section to
+    each orbital projection, including s. It then sums the non-s channels. This
+    order preserves the cross-section magnitudes before orbital selection.
 
     :see: :class:`~.test_spectrum.TestSimulateBasicplus`
 
@@ -428,9 +423,9 @@ def simulate_basicplus(
         Electronic band structure containing eigenvalues of shape
         ``(K, B)`` and the Fermi energy.
     orb_proj : OrbitalProjection
-        Orbital projections of shape ``(K, B, A, 9)`` where A is the
-        number of atoms and 9 is the number of orbital channels
-        (s, p_y, p_z, p_x, d_xy, d_yz, d_z2, d_xz, d_x2-y2).
+        Orbital projections with shape ``(K, B, A, 9)``. A is the atom count,
+        and 9 is the orbital channel count. The channels follow the VASP
+        order.
     params : SimulationParams
         Simulation parameters including ``sigma``, ``photon_energy``,
         ``temperature``, ``energy_min``, ``energy_max``, and
@@ -446,8 +441,8 @@ def simulate_basicplus(
     -----
     Uses Gaussian broadening with interpolated Yeh-Lindau
     photoionization cross-section weights per orbital type. The
-    cross-sections are computed from tabulated atomic data and
-    interpolated to the specified photon energy.
+    the function computes the cross-sections from tabulated atomic data. It
+    interpolates them to the specified photon energy.
     """
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min,
@@ -469,7 +464,7 @@ def simulate_basicplus(
         energy: Float[Array, " "],
         weight: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band (Gaussian, Yeh-Lindau weights).
+        """Compute one Gaussian band contribution with Yeh-Lindau weights.
 
         Evaluates ``weight * f(E_band) * G(E; E_band, sigma)``
         where ``f`` is the Fermi-Dirac distribution and ``G`` is the
@@ -543,12 +538,11 @@ def simulate_advanced(
 ) -> ArpesSpectrum:
     """Simulate ARPES with Gaussian broadening and polarization rules.
 
-    Extends ``simulate_basicplus`` by incorporating light polarization
-    dependence through dipole matrix elements. The intensity for each
-    orbital channel is weighted by ``|E . d_orbital|^2`` where E is the
-    electric-field polarization vector and d_orbital is the dipole
-    selection vector. Supports both polarized (linear, circular) and
-    unpolarized light configurations.
+    The function adds light-polarization dependence to ``simulate_basicplus``
+    through dipole matrix elements. The factor
+    ``|E . d_orbital|^2`` weights each orbital channel. E is the electric
+    field, and d_orbital is the dipole selection vector. The function supports
+    polarized and unpolarized light.
 
     :see: :class:`~.test_spectrum.TestSimulateAdvanced`
 
@@ -587,9 +581,9 @@ def simulate_advanced(
         Electronic band structure containing eigenvalues of shape
         ``(K, B)`` and the Fermi energy.
     orb_proj : OrbitalProjection
-        Orbital projections of shape ``(K, B, A, 9)`` where A is the
-        number of atoms and 9 is the number of orbital channels
-        (s, p_y, p_z, p_x, d_xy, d_yz, d_z2, d_xz, d_x2-y2).
+        Orbital projections with shape ``(K, B, A, 9)``. A is the atom count,
+        and 9 is the orbital channel count. The channels follow the VASP
+        order.
     params : SimulationParams
         Simulation parameters including ``sigma``, ``photon_energy``,
         ``temperature``, ``energy_min``, ``energy_max``, and
@@ -610,9 +604,9 @@ def simulate_advanced(
     -----
     Uses Gaussian broadening with Yeh-Lindau cross-sections and
     polarization-dependent orbital selection via
-    ``|E . d_orbital|^2`` weighting. For unpolarized light, the s- and
-    p-polarization intensities are averaged, which is exact for
-    incoherent superposition of orthogonal polarization states.
+    ``|E . d_orbital|^2`` weighting. For unpolarized light, the function
+    averages the s-polarization and p-polarization intensities. This average is
+    exact for an incoherent superposition of orthogonal polarization states.
     """
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min,
@@ -664,13 +658,11 @@ def simulate_advanced(
         energy: Float[Array, " "],
         bi: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band (Gaussian, polarization-weighted).
+        """Compute one polarization-weighted Gaussian band contribution.
 
-        Evaluates ``bi * f(E_band) * G(E; E_band, sigma)`` where
-        ``bi`` is the polarization-weighted band intensity (already
-        including Yeh-Lindau cross-sections and dipole matrix element
-        weighting), ``f`` is the Fermi-Dirac distribution, and ``G``
-        is the Gaussian profile.
+        The function computes ``bi * f(E_band) * G(E; E_band, sigma)``.
+        ``bi`` contains the cross-section and dipole weights. ``f`` is the
+        Fermi-Dirac distribution, and ``G`` is the Gaussian profile.
 
         Parameters
         ----------
@@ -742,9 +734,9 @@ def simulate_expert(
     The most physically complete simulation model. Combines Voigt
     broadening (capturing both instrumental Gaussian and lifetime
     Lorentzian contributions via ``sigma`` and ``gamma``), Yeh-Lindau
-    photoionization cross-sections, and full polarization-dependent
-    dipole matrix element weighting. This level should be used when
-    quantitative comparison with experimental spectra is required.
+    photoionization cross-sections, and full polarization-dependent dipole
+    matrix element weighting. Use this level for quantitative comparisons with
+    experimental spectra.
 
     :see: :class:`~.test_spectrum.TestSimulateExpert`
 
@@ -783,9 +775,9 @@ def simulate_expert(
         Electronic band structure containing eigenvalues of shape
         ``(K, B)`` and the Fermi energy.
     orb_proj : OrbitalProjection
-        Orbital projections of shape ``(K, B, A, 9)`` where A is the
-        number of atoms and 9 is the number of orbital channels
-        (s, p_y, p_z, p_x, d_xy, d_yz, d_z2, d_xz, d_x2-y2).
+        Orbital projections with shape ``(K, B, A, 9)``. A is the atom count,
+        and 9 is the orbital channel count. The channels follow the VASP
+        order.
     params : SimulationParams
         Simulation parameters including ``sigma``, ``gamma``,
         ``photon_energy``, ``temperature``, ``energy_min``,
@@ -807,9 +799,8 @@ def simulate_expert(
     Uses Voigt broadening with Yeh-Lindau cross-sections, polarization
     selection rules, and dipole matrix element weighting. This is the
     most physically complete model. For unpolarized light, averages s
-    and p contributions. The Voigt profile is essential for accurate
-    lineshape fitting where both instrumental and intrinsic broadening
-    must be deconvolved.
+    and p contributions. The Voigt profile supports accurate line shape fits
+    when the analysis must separate instrument and intrinsic broadening.
     """
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min,
@@ -861,14 +852,12 @@ def simulate_expert(
         energy: Float[Array, " "],
         bi: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band (Voigt, polarization-weighted).
+        """Compute one polarization-weighted Voigt band contribution.
 
-        Evaluates ``bi * f(E_band) * V(E; E_band, sigma, gamma)``
-        where ``bi`` is the polarization-weighted band intensity
-        (including Yeh-Lindau cross-sections and dipole matrix element
-        weighting), ``f`` is the Fermi-Dirac distribution, and ``V``
-        is the Voigt profile combining Gaussian (instrumental) and
-        Lorentzian (lifetime) broadening.
+        The function computes
+        ``bi * f(E_band) * V(E; E_band, sigma, gamma)``. ``bi`` contains the
+        cross-section and dipole weights. ``f`` is the Fermi-Dirac
+        distribution. ``V`` is the Voigt profile.
 
         Parameters
         ----------
@@ -938,10 +927,10 @@ def simulate_soc(
 ) -> ArpesSpectrum:
     """Simulate ARPES with spin-orbit coupling (spin-dependent intensity).
 
-    Extends the expert model with a spin-orbit correction: the
-    orbital-derived band intensity is modulated by the spin projection
-    along the photon wavevector, enabling spin-ARPES and circular
-    dichroism. Requires ``orb_proj.spin`` of shape ``(K, B, A, 6)``
+    The function extends the expert model with a spin-orbit correction. The
+    spin projection along the photon wavevector modulates the orbital band
+    intensity. This model supports spin-ARPES and circular dichroism. It
+    requires ``orb_proj.spin`` with shape ``(K, B, A, 6)``
     (spin up/down for x, y, z). Uses Voigt broadening and the same
     Yeh-Lindau and polarization logic as ``simulate_expert``.
 
@@ -996,12 +985,11 @@ def simulate_soc(
 
     Notes
     -----
-    The spin array has six channels (up/down for x, y, z). The net
-    spin vector (Sx, Sy, Sz) per (k, band, atom) is formed by
-    summing the two components for each axis, then summed over
-    atoms to get a per-band spin used in the modulation
-    (1 + ls_scale * S·k_photon). With ``ls_scale=0`` the result
-    coincides with ``simulate_expert``.
+    The spin array has six channels for the two directions on each axis. The
+    function adds the two components for each axis. It then sums over atoms to
+    obtain one spin vector for each band. The modulation uses
+    ``1 + ls_scale * S·k_photon``. With ``ls_scale=0``, the result equals the
+    output from ``simulate_expert``.
 
     See Also
     --------
@@ -1077,14 +1065,12 @@ def simulate_soc(
         energy: Float[Array, " "],
         bi: Float[Array, " "],
     ) -> Float[Array, " E"]:
-        """Spectral contribution of one band (Voigt, SOC-corrected).
+        """Compute one SOC-corrected Voigt band contribution.
 
-        Evaluates ``bi * f(E_band) * V(E; E_band, sigma, gamma)``
-        where ``bi`` is the spin-orbit-corrected band intensity
-        (including Yeh-Lindau cross-sections, dipole matrix element
-        weighting, and the ``1 + ls_scale * S.k_photon`` modulation),
-        ``f`` is the Fermi-Dirac distribution, and ``V`` is the Voigt
-        profile.
+        The function computes
+        ``bi * f(E_band) * V(E; E_band, sigma, gamma)``. ``bi`` contains the
+        cross-section, dipole, and spin-orbit weights. ``f`` is the Fermi-Dirac
+        distribution. ``V`` is the Voigt profile.
 
         Parameters
         ----------

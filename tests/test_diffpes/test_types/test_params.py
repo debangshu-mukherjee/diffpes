@@ -35,7 +35,7 @@ class TestSimulationParams:
 
         Notes
         -----
-        Constructs default parameters, flattens and unflattens them with JAX,
+        The test constructs default parameters, flattens and unflattens them with JAX,
         and compares traced and static fields independently.
         """
         params: SimulationParams = make_simulation_params()
@@ -65,7 +65,7 @@ class TestPolarizationConfig:
 
         Notes
         -----
-        Constructs a 45-degree LVP configuration through the public factory
+        The test constructs a 45-degree LVP configuration through the public factory
         and checks the selector and array dimensions with Chex.
         """
         config: PolarizationConfig = make_polarization_config(
@@ -96,7 +96,7 @@ class TestMakeSimulationParams:
 
         Notes
         -----
-        Calls the factory without arguments and compares all defining default
+        The test calls the factory without arguments and compares all defining default
         fields with independent constants using Chex.
         """
         params: SimulationParams = make_simulation_params()
@@ -115,7 +115,7 @@ class TestMakeSimulationParams:
 
         Notes
         -----
-        Constructs a custom parameter set and compares the stored temperature
+        The test constructs a custom parameter set and compares the stored temperature
         with an independent 300 K scalar using Chex.
         """
         params: SimulationParams = make_simulation_params(temperature=300.0)
@@ -130,7 +130,7 @@ class TestMakeSimulationParams:
 
         Notes
         -----
-        Uses the eager-and-JIT rejection helper with a negative Gaussian width
+        The test uses the eager-and-JIT rejection helper with a negative Gaussian width
         and then with ``energy_min`` greater than ``energy_max``.
         """
         assert_rejects(
@@ -161,7 +161,7 @@ class TestMakePolarizationConfig:
 
         Notes
         -----
-        Calls the factory without arguments and checks the static selector and
+        The test calls the factory without arguments and checks the static selector and
         traced array shapes with Chex.
         """
         config: PolarizationConfig = make_polarization_config()
@@ -192,7 +192,7 @@ class TestMakeExpandedSimulationParams:
     """Validate :func:`~diffpes.types.make_expanded_simulation_params`.
 
     The factory must derive its energy window from band extrema and symmetric
-    padding while retaining the differentiable dependence on those inputs.
+    padding. It must retain differentiable dependence on these inputs.
 
     :see: :func:`~diffpes.types.make_expanded_simulation_params`
     """

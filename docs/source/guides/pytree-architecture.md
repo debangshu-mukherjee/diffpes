@@ -1,31 +1,26 @@
 # PyTree Architecture
 
-Every structured piece of data in diffpes — a band structure, an orbital
-projection, a simulated spectrum, a bundle of simulation parameters — is a
-JAX PyTree defined in `diffpes.types`. This guide tours that package: what
-types exist, how they are registered and validated, how they flow through
-`jit`/`grad`/`vmap`, how they persist to HDF5, and where the architecture is
-headed (Equinox modules).
+`diffpes.types` defines every structured value as a JAX PyTree. These values
+include band structures, orbital projections, spectra, and simulation
+parameters. This guide describes the available types and their validation.
+It also describes JAX transformations, HDF5 persistence, and Equinox modules.
 
 ## The Single-Home Rule
 
-diffpes enforces one structural rule without exception: **all types live in
-`diffpes.types`**. Every PyTree, every type alias, and every `make_*` factory
-that builds one is defined under `src/diffpes/types/` and nowhere else. The
-consuming subpackages (`simul`, `tightb`, `radial`, `maths`, `inout`,
-`utils`) import their types from `diffpes.types`; they never define their
-own carriers.
+diffpes enforces one structural rule: **all types live in `diffpes.types`**.
+The `src/diffpes/types/` directory owns every PyTree, type alias, and
+`make_*` factory. The consuming subpackages import these types from
+`diffpes.types`. They do not define local carriers.
 
-The reason is the inverse problem. The fitting layer compares `ArpesSpectrum`
-objects produced by different paths (simulation vs. measurement, one
-parameter set vs. another), so there must be exactly *one* `ArpesSpectrum` —
-one import surface, one registration, one validation contract. A result
-container that "feels local" to a solver is still a type, and it still goes
-in `diffpes.types`.
+The inverse problem requires this rule. The fitting layer compares
+`ArpesSpectrum` objects from simulations, measurements, and different
+parameter sets. Therefore, one `ArpesSpectrum` must have one import surface
+and one validation contract. A solver result container is also a type. Define
+it in `diffpes.types`.
 
 ## The Type Inventory
 
-The package is organized by physics domain, one module per family:
+The package groups types by physics domain, with one module for each family:
 
 | Module | PyTrees | Factories |
 |---|---|---|
@@ -40,75 +35,69 @@ The package is organized by physics domain, one module per family:
 | `types/tb_model.py` | `TBModel`, `DiagonalizedBands` | `make_tb_model`, `make_diagonalized_bands` |
 | `types/aliases.py` | — | scalar aliases (below) |
 
-A few carriers worth calling out:
+The following carriers define important contracts:
 
-- **`BandStructure`** — `eigenvalues [K, B]`, `kpoints [K, 3]`,
+- **`BandStructure`** contains `eigenvalues [K, B]`, `kpoints [K, 3]`,
   `kpoint_weights [K]`, `fermi_energy` (0-d). The spin-resolved variant
   `SpinBandStructure` carries `eigenvalues_up` / `eigenvalues_down` instead.
-- **`OrbitalProjection`** — `projections [K, B, A, 9]` in the VASP orbital
+- **`OrbitalProjection`** contains `projections [K, B, A, 9]` in the VASP
   ordering, plus optional `spin [K, B, A, 6]` and `oam [K, B, A, 3]`
-  channels. `SpinOrbitalProjection` is the same shape contract but with
-  `spin` *mandatory* — the type system distinguishes "spin data may exist"
-  from "spin data must exist" (SOC simulation requires the latter).
-- **`ArpesSpectrum`** — the simulation output: `intensity [K, E]` and
+  channels. `SpinOrbitalProjection` uses the same shapes but requires `spin`.
+  This contract distinguishes optional spin data from required SOC data.
+- **`ArpesSpectrum`** contains the simulation output: `intensity [K, E]` and
   `energy_axis [E]`.
-- **`SimulationParams`** — six 0-d float arrays (`energy_min`, `energy_max`,
+- **`SimulationParams`** contains six 0-d float arrays (`energy_min`,
+  `energy_max`,
   `sigma`, `gamma`, `temperature`, `photon_energy`) plus one Python `int`,
   `fidelity`, which sets the energy-axis length.
-- **`SelfEnergyConfig`** — `coefficients [P]`, optional `energy_nodes [P]`,
-  and a `mode` string; the coefficients are differentiable, which is what
-  makes self-energy *fitting* a `jax.grad` call.
+- **`SelfEnergyConfig`** contains `coefficients [P]`, optional
+  `energy_nodes [P]`, and a `mode` string. Its coefficients are
+  differentiable, so `jax.grad` supports self-energy fitting.
 
-The scalar aliases in `types/aliases.py` (`ScalarFloat`, `ScalarInteger`,
-`ScalarComplex`, `ScalarBool`, `ScalarNumeric`, `NonJaxNumber`) are unions
-accepting both Python scalars and 0-d JAX arrays, so `sigma=0.04` and
-`sigma=jnp.asarray(0.04)` are both valid at every API boundary.
+The scalar aliases in `types/aliases.py` accept Python scalars and 0-d JAX
+arrays. The aliases include `ScalarFloat`, `ScalarInteger`, `ScalarComplex`,
+`ScalarBool`, `ScalarNumeric`, and `NonJaxNumber`. Therefore, APIs accept both
+`sigma=0.04` and `sigma=jnp.asarray(0.04)`.
 
 ## Registration: Children vs. Auxiliary Data
 
-Every carrier is an `eqx.Module`: the field declarations drive the
-flatten/unflatten machinery automatically, with no hand-written
-registration. The field split draws the most important line in the whole
-architecture:
+Every carrier is an `eqx.Module`. Field declarations automatically define
+the flatten and unflatten operations. The fields have two categories:
 
-- **Children** are JAX arrays. They are traced, differentiated, and batched.
-  Eigenvalues, projections, intensities, broadening widths — anything you
-  might attach a loss to.
+- **Children** are JAX arrays. JAX traces, differentiates, and batches them.
+  Examples include eigenvalues, projections, intensities, and broadening
+  widths.
 - **Auxiliary data** is static Python metadata, declared with
-  `eqx.field(static=True)`. It is a compile-time constant: changing it
-  retriggers compilation of any `jit`-ted function that receives the
+  `eqx.field(static=True)`. This metadata is a compile-time constant. A change
+  retriggers compilation for each `jit`-compiled function that receives the
   PyTree.
 
 Two deliberate examples of auxiliary data:
 
-- `SimulationParams.fidelity` is a Python `int` because it determines the
-  *length* of the energy axis, and JAX requires static shapes under `jit`.
+- `SimulationParams.fidelity` is a Python `int` because it sets the energy-axis
+  length. JAX requires static shapes under `jit`.
 - `PolarizationConfig.polarization_type` is a Python `str` (`"LVP"`,
-  `"LHP"`, `"RCP"`, `"LCP"`, `"LAP"`, `"unpolarized"`) because it selects
-  code branches in the matrix-element calculation.
+  `"LHP"`, `"RCP"`, `"LCP"`, `"LAP"`, `"unpolarized"`). It selects branches
+  in the matrix-element calculation.
 
-Neither can be traced, and neither should be: a gradient with respect to
-"number of energy points" or "polarization label" is not physics.
+JAX does not trace these fields. A gradient for an energy-point count or a
+polarization label has no physical meaning.
 
 ## Factories and Two-Tier Validation
 
-PyTrees are never constructed directly in user code — each has a `make_*`
-factory that validates inputs and casts arrays to `float64`. Validation is
-two-tier:
+Use the `make_*` factories to construct PyTrees. Each factory validates inputs
+and casts float arrays to `float64`. Validation has two tiers:
 
 1. **Static checks** resolve at trace time and use ordinary Python errors.
-   Shape consistency is enforced by the `@jaxtyped(typechecker=beartype)`
-   decorator on the factory itself — passing `eigenvalues [3, 2]` with
-   `kpoints [4, 3]` to `make_band_structure` fails immediately because the
-   `K` dimension names disagree — while structural checks raise
-   `ValueError` (e.g. `make_slater_params` rejects a `zeta` whose length
-   disagrees with the orbital basis, and `make_self_energy_config` rejects
-   `mode="tabulated"` without `energy_nodes`).
+   The `@jaxtyped(typechecker=beartype)` decorator enforces shape consistency.
+   For example, unequal `K` dimensions in `eigenvalues` and `kpoints` fail
+   immediately. Structural checks raise `ValueError`. `make_slater_params`
+   rejects a `zeta` length that differs from the orbital basis.
+   `make_self_energy_config` rejects `mode="tabulated"` without
+   `energy_nodes`.
 2. **Traced checks** are data-dependent (finiteness, non-negativity) and
-   cannot use Python `if` under `jit`. The current code guards them with
-   `lax.cond` constructions that keep the factory traceable;
-   `equinox.error_if` is the codified replacement pattern as factories are
-   revisited.
+   cannot use Python `if` under `jit`. The factories use
+   `equinox.error_if` to keep these checks traceable.
 
 ```python
 import jax.numpy as jnp
@@ -122,21 +111,20 @@ bands = make_band_structure(
 print(bands.eigenvalues.shape, float(bands.fermi_energy))  # (20, 5) 0.0
 ```
 
-`kpoint_weights` defaults to uniform weights when omitted; every float field
-comes back as a `float64` JAX array because diffpes enables x64 at import
-(see [JAX Transformability and Gradients](jax-transformability-and-gradients.md)).
+When omitted, `kpoint_weights` uses uniform weights. Every float field returns
+as a `float64` JAX array because diffpes enables x64 at import. See
+[JAX Transformability and Gradients](jax-transformability-and-gradients.md).
 
 ## Immutability and the jit/grad/vmap Flow
 
-PyTrees are immutable — `eqx.Module` is a frozen dataclass, so field
-assignment raises. Updates are functional:
+`eqx.Module` keeps PyTrees immutable, so field assignment raises an error.
+Updates use functional operations:
 `eqx.tree_at(lambda t: t.fermi_energy, bands, jnp.asarray(0.1))` builds a
-new instance with one leaf swapped. This is not a style preference; it is
-what makes a PyTree safe to pass through JAX transformations, which assume
-values are never mutated behind the tracer's back.
+new instance with one changed leaf. This behavior lets JAX transformations
+assume that traced values do not change unexpectedly.
 
-Because children are ordinary leaves, a whole carrier can be the argument of
-a transformation:
+JAX transformations can accept a whole carrier because children are ordinary
+leaves:
 
 ```python
 import jax
@@ -157,18 +145,17 @@ def peak(ef):
 print(jax.grad(peak)(0.0))  # d(peak intensity)/d(E_F), a 0-d array
 ```
 
-The gradient flows *into and out of* the `ArpesSpectrum` PyTree without any
-unpacking: JAX flattens it to leaves, differentiates, and reassembles.
-`vmap` behaves the same way — mapping a spectrum-returning function over a
-batch of photon energies yields an `ArpesSpectrum` whose `intensity` has a
-leading batch axis.
+The gradient flows through the `ArpesSpectrum` PyTree without manual
+unpacking. JAX flattens the carrier, differentiates its leaves, and
+reassembles it. `vmap` uses the same process. A photon-energy batch adds a
+leading batch axis to `ArpesSpectrum.intensity`.
 
 ## HDF5 Round-Trip
 
-`diffpes.inout.hdf5` persists any registered PyTree losslessly. Each named
-PyTree becomes an HDF5 group; array children become datasets named after
-their fields; auxiliary data is stored as a JSON group attribute; `None`
-optional fields are recorded in a `_none_fields` attribute.
+`diffpes.inout.hdf5` preserves any registered PyTree without data loss. Each
+named PyTree becomes an HDF5 group. Array children become datasets named after
+their fields. A JSON group attribute stores auxiliary data. The
+`_none_fields` attribute records optional fields that contain `None`.
 
 ```python
 from diffpes.inout import load_from_h5, save_to_h5
@@ -179,19 +166,19 @@ everything = load_from_h5("run.h5")        # dict: {"bands": ..., "spectrum": ..
 bands_back = load_from_h5("run.h5", name="bands")  # single PyTree
 ```
 
-The type name travels in a `_pytree_type` attribute, so `load_from_h5`
-reconstructs the exact class via `tree_unflatten` — including static
-auxiliary data like `fidelity` and `polarization_type`. Unknown type names
-raise, rather than returning a lossy dict of arrays. See
+The `_pytree_type` attribute stores the type name. `load_from_h5` uses
+`tree_unflatten` to reconstruct the exact class and its static auxiliary data.
+Unknown type names raise an error. The loader does not return a lossy array
+dictionary. See
 [VASP Data Ingestion](vasp-data-ingestion.md) for the full ingest-simulate-save
 pipeline.
 
 ## The Equinox Module Pattern
 
 The [contributing guide](https://github.com/debangshu-mukherjee/diffpes/blob/main/CONTRIBUTING.md)
-pins the architecture for `diffpes.types`, and the codebase implements it:
-every structured type is an **Equinox module** (`eqx.Module`), with static
-metadata declared via `eqx.field(static=True)`:
+defines the `diffpes.types` architecture. Every structured type is an
+**Equinox module** (`eqx.Module`). The `eqx.field(static=True)` declaration
+marks static metadata:
 
 ```python
 import equinox as eqx
@@ -204,24 +191,20 @@ class BandStructure(eqx.Module):
     fermi_energy: Float[Array, ""]
 ```
 
-This is the children/auxiliary split described above with zero
-boilerplate: `eqx.Module` derives `tree_flatten`/`tree_unflatten` from the
-field declarations, and `eqx.field(static=True)` carries the aux metadata
-(`fidelity`, `polarization_type`). The migration from the earlier
-hand-registered `NamedTuple` form is complete — per the project's
-zero-legacy policy it happened in place, with no compatibility shims — and
-the user-facing contract is unchanged: immutable PyTrees built by
-validating `make_*` factories, imported only from `diffpes.types`. The one
-remaining codified step is swapping the `lax.cond` guard constructions in
-factories for `equinox.error_if`.
+This pattern implements the child and auxiliary-data split without custom
+registration. `eqx.Module` derives flattening operations from the field
+declarations. `eqx.field(static=True)` identifies metadata such as `fidelity`
+and `polarization_type`. The zero-legacy migration removed the earlier
+hand-registered `NamedTuple` form. The user contract remains unchanged. Use
+validated, immutable PyTrees from `diffpes.types`.
 
 ## Related Reading
 
 - [JAX Transformability and Gradients](jax-transformability-and-gradients.md)
-  — how these PyTrees behave under `jit`, `grad`, and `vmap`, and the
-  gradient-correctness doctrine.
-- [VASP Data Ingestion](vasp-data-ingestion.md) — the readers that produce
-  these PyTrees from VASP output files.
+  describes PyTrees under `jit`, `grad`, and `vmap`. It also defines the
+  gradient-correctness rules.
+- [VASP Data Ingestion](vasp-data-ingestion.md) describes readers that create
+  PyTrees from VASP output files.
 - [Expanded Wrappers and Conventions](expanded-wrappers-and-conventions.md)
-  — the plain-array entry points that assemble these PyTrees for you.
+  describes plain-array functions that assemble these PyTrees.
 - API reference: {doc}`../api/types`, {doc}`../api/inout`.

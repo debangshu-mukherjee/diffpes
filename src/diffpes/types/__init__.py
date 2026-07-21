@@ -1,55 +1,55 @@
-"""Type definitions and factory functions for diffpes.
+"""Define types and factory functions for diffpes.
 
 Extended Summary
 ----------------
-Provides PyTree-compatible data structures and their factory
-functions for representing ARPES simulation data including crystal
-geometry, band structures, orbital projections, simulation
-parameters, and polarization configurations. Fields that
-participate in autodiff are stored as JAX array children, while
-shape-determining values (e.g., ``SimulationParams.fidelity``)
-and code-path selectors (e.g., ``PolarizationConfig.polarization_type``)
-are stored as auxiliary data so they remain concrete at trace time
-and trigger recompilation only when changed.
+This package provides PyTree-compatible data structures and their factory
+functions for ARPES simulation data. The data includes crystal geometry,
+band structures, orbital projections, simulation parameters, and
+polarization configurations. JAX stores fields that participate in autodiff
+as array children. It stores shape values, such as
+``SimulationParams.fidelity``, as auxiliary data. It also stores code-path
+selectors, such as ``PolarizationConfig.polarization_type``, as auxiliary
+data. These values remain concrete during tracing. Changes to these values
+trigger recompilation.
 
-The submodules are organized as follows:
+The package contains these submodules:
 
 - :mod:`aliases`
-    Scalar type aliases for JAX-compatible numeric types.
+    Define scalar type aliases for JAX-compatible numeric types.
 - :mod:`bands`
-    Band structure and orbital projection data structures.
+    Define band-structure and orbital-projection data structures.
 - :mod:`constants`
-    Numerical, physical, orbital, and VASP-format constants for diffpes.
+    Define numerical, physical, orbital, and VASP-format constants for diffpes.
 - :mod:`dos`
-    Density of states data structures.
+    Define density-of-states data structures.
 - :mod:`geometry`
-    Crystal geometry data structure for VASP crystal structures.
+    Define crystal-geometry data structures for VASP crystal structures.
 - :mod:`kpath`
-    K-point path information data structure.
+    Define the k-point path information data structure.
 - :mod:`params`
-    Simulation parameter data structures.
+    Define simulation-parameter data structures.
 - :mod:`tables`
-    Small immutable numerical tables used by simulation routines.
+    Store small immutable numerical tables for simulation routines.
 - :mod:`radial_params`
-    Radial wavefunction parameter data structures.
+    Define radial-wavefunction parameter structures.
 - :mod:`self_energy`
-    Self-energy configuration data structures.
+    Define self-energy configuration data structures.
 - :mod:`tb_model`
-    Tight-binding model and diagonalized band data structures.
+    Define tight-binding model and diagonalized-band data structures.
 - :mod:`volumetric`
-    Volumetric data structures for VASP CHGCAR files.
+    Define volumetric data structures for VASP CHGCAR files.
 - :mod:`context`
-    Structured inputs for high-level VASP simulation workflows.
+    Define structured inputs for high-level VASP simulation workflows.
 - :mod:`certification`
-    JAX-native carriers for certified forward-model executions.
+    Store JAX-native carriers for certified forward-model executions.
 - :mod:`certification_constants`
-    Static identifiers and schema constants for forward certification.
+    Define static identifiers and schema constants for forward certification.
 - :mod:`contracts`
-    Static carriers for certified transformation contracts.
+    Define static carriers for certified transformation contracts.
 - :mod:`inspection`
-    Types-owned records produced by certificate inspection.
+    Store types-owned records from certificate inspection.
 - :mod:`provenance`
-    Types-owned carriers for artifact provenance and information flow.
+    Store types-owned carriers for artifact provenance and information flow.
 
 Routine Listings
 ----------------

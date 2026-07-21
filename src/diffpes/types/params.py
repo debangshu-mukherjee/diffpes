@@ -1,8 +1,8 @@
-"""Simulation parameter data structures.
+"""Define simulation-parameter data structures.
 
 Extended Summary
 ----------------
-Defines PyTree types for ARPES simulation parameters including
+This module defines PyTree types for ARPES simulation parameters, including
 energy resolution, broadening widths, temperature, photon energy,
 and light polarization configuration.
 
@@ -47,18 +47,16 @@ _MIN_FIDELITY: int = 2
 class SimulationParams(eqx.Module):
     """Store ARPES simulation parameters in a JAX PyTree.
 
-    Collects all scalar physical parameters that control an ARPES
-    simulation: the energy window and its discretisation, Gaussian
-    and Lorentzian broadening widths, sample temperature, and photon
-    energy. These parameters are consumed by the spectral-function
-    convolution and Fermi-Dirac weighting routines.
+    This type collects the scalar physical parameters that control an ARPES
+    simulation. These parameters define the energy window, discretization,
+    broadening widths, sample temperature, and photon energy. The spectral
+    function and Fermi-Dirac weighting routines use these parameters.
 
     This class is an immutable :class:`equinox.Module` PyTree. All
-    float-valued fields are
-    stored as JAX array children (visible to autodiff), while the
-    ``fidelity`` field is a plain Python ``int`` stored as auxiliary
-    data because it controls array shapes and must be known at
-    compile time.
+    JAX stores the float-valued fields as array children that support
+    autodiff. It stores the Python ``int`` field ``fidelity`` as auxiliary
+    data. This field controls array shapes and must remain concrete during
+    compilation.
 
 
     :see: :class:`~.test_params.TestSimulationParams`
@@ -110,17 +108,15 @@ class SimulationParams(eqx.Module):
 class PolarizationConfig(eqx.Module):
     """Store photon-polarization geometry in a JAX PyTree.
 
-    Describes the photon polarization state and incidence geometry
-    for an ARPES experiment. The three angular fields define the
-    light direction and polarization orientation, while the string
-    ``polarization_type`` selects among standard optics conventions
-    (s-pol, p-pol, circular, arbitrary linear, or unpolarized).
+    This type describes the photon-polarization state and incidence geometry
+    for an ARPES experiment. Three angular fields define the light direction
+    and polarization orientation. The string ``polarization_type`` selects an
+    optics convention: s-pol, p-pol, circular, arbitrary linear, or
+    unpolarized.
 
-    This class is an immutable :class:`equinox.Module` PyTree. The three
-    float-valued angular
-    fields are stored as JAX array children (visible to autodiff),
-    while ``polarization_type`` is a Python string stored as
-    auxiliary data because JAX cannot trace strings.
+    This class is an immutable :class:`equinox.Module` PyTree. JAX stores the
+    three angular fields as array children that support autodiff. It stores
+    ``polarization_type`` as auxiliary data because JAX cannot trace strings.
 
 
     :see: :class:`~.test_params.TestPolarizationConfig`
@@ -172,16 +168,14 @@ def make_simulation_params(  # noqa: DOC503
 ) -> SimulationParams:
     """Create a validated SimulationParams instance.
 
-    Validates and normalises the inputs before constructing the
-    SimulationParams PyTree. All float-valued parameters are cast to
-    0-D float64 JAX arrays, while ``fidelity`` is kept as a plain
-    Python int (it becomes auxiliary data in the PyTree). Sensible
-    defaults are provided for a typical low-temperature ARPES
-    experiment: the energy window defaults to [-3.0, 1.0] eV, which
-    is wide enough for most valence-band spectra near the Fermi
-    level. In higher-level simulation drivers the ``energy_min`` and
-    ``energy_max`` defaults may be overridden based on the actual
-    eigenband energy range supplied via an ``eigenbands`` parameter.
+    The factory validates and normalizes the inputs before it constructs the
+    SimulationParams PyTree. It casts float-valued parameters to 0-D float64
+    JAX arrays. It keeps ``fidelity`` as a Python int in the PyTree auxiliary
+    data.
+
+    The defaults represent a typical low-temperature ARPES experiment. The
+    energy window defaults to [-3.0, 1.0] eV. Higher-level simulation drivers
+    can override this window from the supplied eigenband energy range.
 
     :see: :class:`~.test_params.TestMakeSimulationParams`
 
@@ -349,16 +343,14 @@ def make_polarization_config(  # noqa: DOC503
 ) -> PolarizationConfig:
     """Create a validated PolarizationConfig instance.
 
-    Validates and normalises the inputs before constructing the
-    PolarizationConfig PyTree. All float-valued angular parameters
-    are cast to 0-D float64 JAX arrays, while
-    ``polarization_type`` is kept as a plain Python string (it
-    becomes auxiliary data in the PyTree).
+    The factory validates and normalizes the inputs before it constructs the
+    PolarizationConfig PyTree. It casts angular parameters to 0-D float64 JAX
+    arrays. It keeps ``polarization_type`` as a Python string in the PyTree
+    auxiliary data.
 
-    The default incidence angle ``theta = 0.7854`` rad corresponds
-    to pi/4 (approximately 45 degrees), a common experimental
-    geometry that provides balanced sensitivity to both in-plane
-    and out-of-plane orbital components.
+    The default incidence angle ``theta = 0.7854`` rad equals pi/4, or
+    approximately 45 degrees. This common geometry provides sensitivity to
+    in-plane and out-of-plane orbital components.
 
     :see: :class:`~.test_params.TestMakePolarizationConfig`
 
@@ -419,8 +411,8 @@ def make_polarization_config(  # noqa: DOC503
 
     Notes
     -----
-    Static validation raises ``ValueError`` before traced construction when
-    ``polarization_type`` is unsupported. Traced validation uses
+    Static validation raises ``ValueError`` before traced construction for an
+    unsupported ``polarization_type``. Traced validation uses
     ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when an angle is
     non-finite.
 
@@ -483,9 +475,9 @@ def make_expanded_simulation_params(  # noqa: DOC503
 ) -> SimulationParams:
     """Build simulation parameters with auto-derived energy window.
 
-    Constructs a :class:`~diffpes.types.SimulationParams` PyTree whose
-    energy window is derived from the actual band energies rather than
-    from fixed defaults.  The window spans
+    The factory constructs a :class:`~diffpes.types.SimulationParams` PyTree.
+    It derives the energy window from the actual band energies instead of
+    fixed defaults. The window spans
     ``[min(eigenbands) - energy_padding, max(eigenbands) + energy_padding]``,
     ensuring every band falls within the simulated range.
 

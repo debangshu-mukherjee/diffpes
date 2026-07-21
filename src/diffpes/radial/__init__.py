@@ -1,26 +1,26 @@
-r"""Differentiable radial primitives for ARPES matrix elements.
+r"""Provide differentiable radial primitives for ARPES matrix elements.
 
 Extended Summary
 ----------------
-Provides JAX-compatible spherical Bessel functions, atomic radial
-wavefunctions, and fixed-grid radial-integral evaluation used by the
-dipole-matrix-element pipeline.  The central quantity is the radial
-integral
+The subpackage provides JAX-compatible spherical Bessel functions and atomic
+radial wavefunctions. It also computes radial integrals on a fixed grid. The
+dipole matrix element pipeline uses these functions. The central quantity is
+the radial integral
 
 .. math::
 
     B^{l'}(k) = (i)^{l'} \int_0^\infty R(r)\, r^3\, j_{l'}(kr)\, dr
 
-evaluated on a fixed radial grid via composite trapezoidal quadrature.
+The functions compute this integral with composite trapezoidal quadrature.
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`bessel`
-    Spherical Bessel functions in JAX.
+    Compute spherical Bessel functions in JAX.
 - :mod:`integrate`
-    Radial-integral evaluation utilities.
+    Evaluate radial integrals on fixed grids.
 - :mod:`wavefunctions`
-    Atomic radial wavefunction models in JAX.
+    Evaluate atomic radial wavefunction models in JAX.
 
 Routine Listings
 ----------------
@@ -35,9 +35,8 @@ Routine Listings
 
 Notes
 -----
-All functions are JAX-compatible and support JIT compilation and
-automatic differentiation.  Recurrences (Bessel, Laguerre) use
-``jax.lax.fori_loop`` for traceability.
+All functions support JAX transformations and automatic differentiation.
+The Bessel and Laguerre recurrences use ``jax.lax.fori_loop``.
 """
 
 from .bessel import spherical_bessel_jl

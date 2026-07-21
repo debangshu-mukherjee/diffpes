@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-Turns continuous JAX measurements into explicit evidence and claim PyTrees.
-Boolean outcomes are derived only after residuals and margins are retained, so
-optimization and experiment-design code can differentiate the meaningful
-quantities beneath a certification threshold.
+This module turns continuous JAX measurements into explicit evidence and
+claim PyTrees. It retains residuals and margins before it derives Boolean
+outcomes. Optimization and experiment-design code can therefore differentiate
+the quantities below a certification threshold.
 
 Routine Listings
 ----------------
@@ -181,7 +181,8 @@ def evaluate_claim(
     Notes
     -----
     The margin is differentiable almost everywhere with respect to measured
-    values; the Boolean outcome is derived only after retaining that margin.
+    values. The function derives the Boolean outcome after it retains that
+    margin.
     """
     measured_array: Array = _as_vector(measured)
     reference_array: Array = _as_vector(reference)
@@ -258,7 +259,7 @@ def evaluate_domain(
     Notes
     -----
     The signed margin remains differentiable away from the absolute-value
-    cusp and may be optimized directly without differentiating a Boolean.
+    cusp. Optimization can use it directly without differentiating a Boolean.
     """
     measured_array: Array = jnp.asarray(measured, dtype=jnp.float64)
     reference_array: Array = jnp.asarray(reference, dtype=jnp.float64)
@@ -352,7 +353,8 @@ def derivative_evidence(
     Notes
     -----
     JVP, VJP, residual, and spectrum leaves remain differentiable. Boolean
-    evidence fields are derived only after the continuous values are retained.
+    The function derives the evidence fields after it retains the continuous
+    values.
     """
     linearized: tuple[Array, Callable[[PyTree], Array]] = jax.linearize(
         forward_fn,

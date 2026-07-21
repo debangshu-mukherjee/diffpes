@@ -1,11 +1,10 @@
-"""Spherical Bessel functions in JAX.
+"""Compute spherical Bessel functions in JAX.
 
 Extended Summary
 ----------------
-Implements :math:`j_l(x)` using stable low-order seeds and upward
-recurrence in a JIT-compatible form. A small-argument limit
-:math:`j_l(x) ~ x^l / (2l + 1)!!` avoids divide-by-zero issues at
-the origin.
+The module computes :math:`j_l(x)` with stable low-order seeds and an
+upward recurrence. A small-argument limit avoids division by zero at the
+origin.
 
 Routine Listings
 ----------------
@@ -28,22 +27,22 @@ def _odd_double_factorial(order: int) -> float:
 
     Extended Summary
     ----------------
-    Evaluates the double factorial :math:`n!!` for odd positive
-    integers, defined as:
+    The function computes the double factorial :math:`n!!` for positive odd
+    integers:
 
     .. math::
 
         n!! = 1 \cdot 3 \cdot 5 \cdots n = \prod_{k=0}^{(n-1)/2} (2k + 1)
 
-    This is used as the denominator in the small-argument limit of
-    the spherical Bessel function:
+    The spherical Bessel function uses this value in its small-argument
+    limit:
 
     .. math::
 
         j_l(x) \approx \frac{x^l}{(2l+1)!!} \quad \text{for } |x| \ll 1
 
-    The computation uses ``math.prod`` over ``range(1, order+1, 2)``
-    for exact integer arithmetic, then casts to float.
+    The function applies ``math.prod`` to ``range(1, order+1, 2)``. It then
+    converts the exact integer result to a float.
 
     Parameters
     ----------
@@ -75,9 +74,9 @@ def spherical_bessel_jl(
 ) -> Float[Array, " ..."]:
     r"""Evaluate spherical Bessel function :math:`j_l(x)`.
 
-    Computes the spherical Bessel function of the first kind
-    :math:`j_l(x)` using closed-form seeds for l=0 and l=1, followed
-    by upward recurrence for l >= 2.
+    The function computes the spherical Bessel function of the first kind.
+    It uses closed-form seeds for l=0 and l=1. It uses an upward recurrence
+    for l >= 2.
 
     **Seed values:**
 
@@ -93,10 +92,9 @@ def spherical_bessel_jl(
 
         j_{l+1}(x) = \frac{2l + 1}{x} \, j_l(x) - j_{l-1}(x)
 
-    This is implemented via ``jax.lax.fori_loop`` for JIT
-    compatibility. The loop runs from index 1 to ``order - 1``,
-    carrying the pair :math:`(j_{l-1}, j_l)` and producing
-    :math:`j_{l+1}` at each step.
+    The function implements the recurrence with ``jax.lax.fori_loop``. The
+    loop runs from index 1 to ``order - 1``. It carries the pair
+    :math:`(j_{l-1}, j_l)` and produces :math:`j_{l+1}` at each step.
 
     **Small-argument limit:**
 
@@ -107,23 +105,21 @@ def spherical_bessel_jl(
 
         j_l(x) \approx \frac{x^l}{(2l+1)!!}
 
-    to avoid the divide-by-zero singularity in the seed formulas.
-    A boolean mask ``small_mask`` selects between the recurrence
-    result and the small-argument limit element-wise via
-    ``jnp.where``. The "safe" input ``x_safe`` replaces masked-out
-    entries with 1.0 so that the recurrence branch does not produce
-    NaN or Inf values that could pollute gradients.
+    This expansion avoids division by zero in the seed formulas. The
+    ``small_mask`` value selects the recurrence or the small-argument limit.
+    The ``x_safe`` input replaces the masked entries with 1.0. This replacement
+    prevents invalid recurrence values from affecting the gradients.
 
     **Numerical stability notes:**
 
-    - Upward recurrence for :math:`j_l` is stable because
-      :math:`j_l(x)` is the dominant solution of the recurrence
-      relation for moderate x. For very large l relative to x,
-      downward (Miller) recurrence would be more stable, but this
-      regime is not encountered in ARPES simulations where l <= 5
-      and kr is typically O(1)--O(10).
-    - The ``jnp.where``-based masking ensures that gradients are
-      well-defined everywhere, including at x = 0.
+    - The upward recurrence remains stable when :math:`j_l(x)` dominates the
+      recurrence at moderate x.
+    - A downward Miller recurrence offers more stability when l is very large
+      relative to x.
+    - ARPES simulations do not use this regime. They use l <= 5 and usually
+      use kr values from O(1) to O(10).
+    - The ``jnp.where`` mask defines the gradients everywhere, including at
+      x = 0.
 
     :see: :class:`~.test_bessel.TestSphericalBesselJl`
 
@@ -146,11 +142,10 @@ def spherical_bessel_jl(
 
     Notes
     -----
-    The ``order`` parameter is a Python-level integer (not a JAX
-    tracer), so changing it requires re-tracing. This is by design
-    because the loop bounds and the double-factorial constant depend
-    on ``order`` statically. The series branch preserves the nonzero
-    analytic limiting gradient near zero.
+    The ``order`` parameter is a Python integer, not a JAX tracer. A change to
+    this parameter causes JAX to trace the function again. The loop bounds
+    and the double-factorial constant depend on ``order`` statically. The
+    series branch preserves the nonzero analytic limiting gradient near zero.
     """
     if order < 0:
         msg: str = "order must be non-negative"

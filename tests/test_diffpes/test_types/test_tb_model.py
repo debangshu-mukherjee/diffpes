@@ -55,7 +55,7 @@ class TestDiagonalizedBands:
 
         Notes
         -----
-        Constructs the carrier through its factory, flattens and unflattens it
+        The test constructs the carrier through its factory, flattens and unflattens it
         with JAX, and compares both numerical leaves with Chex.
         """
         bands: DiagonalizedBands = make_diagonalized_bands(
@@ -93,7 +93,7 @@ class TestTBModel:
 
         Notes
         -----
-        Constructs a one-hop model, differentiates an independently defined
+        The test constructs a one-hop model, differentiates an independently defined
         quadratic loss with JAX, and compares the hopping leaf with 2.
         """
         model: TBModel = make_tb_model(
@@ -151,7 +151,7 @@ class TestMakeDiagonalizedBands:
 
         Notes
         -----
-        Uses the eager-and-JIT rejection helper first with a NaN vector and
+        The test uses the eager-and-JIT rejection helper first with a NaN vector and
         then with unequal one- and two-point eigensystem arrays.
         """
         assert_rejects(
@@ -187,7 +187,7 @@ class TestMakeTBModel:
 
         Notes
         -----
-        Constructs a validated model with two static connectivity entries and
+        The test constructs a validated model with two static connectivity entries and
         checks the differentiable hopping leaf shape with Chex.
         """
         model: TBModel = make_tb_model(
@@ -241,7 +241,7 @@ class TestMake1dChainModel:
 
         Notes
         -----
-        Calls the convenience factory with an explicit hopping value and
+        The test calls the convenience factory with an explicit hopping value and
         compares the carrier's static size and numerical hopping leaf.
         """
         model: TBModel = make_1d_chain_model(t=-1.5)
@@ -269,7 +269,7 @@ class TestMakeGrapheneModel:
 
         Notes
         -----
-        Calls the convenience factory, checks its static orbital count, and
+        The test calls the convenience factory, checks its static orbital count, and
         compares all numerical hopping leaves with an independent constant.
         """
         model: TBModel = make_graphene_model(t=-2.7)

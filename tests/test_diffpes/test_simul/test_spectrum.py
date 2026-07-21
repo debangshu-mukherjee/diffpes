@@ -1,16 +1,10 @@
-"""Tests for ARPES simulation spectrum functions.
+"""Validate ARPES simulation spectrum functions.
 
 Extended Summary
 ----------------
-Validates the simulation levels in :mod:`diffpes.simul.spectrum`:
-novice, basic, basicplus, advanced, expert, and soc. Tests check
-output tensor shapes (intensity and energy_axis), value constraints
-(non-negativity, finiteness), and sensitivity to physical parameters
-(photon energy, polarization type, spin-orbit scale). Synthetic band
-structure and orbital projections are built via _make_synthetic_data.
-SOC tests verify that spin is required and that ls_scale=0 matches
-expert. All test logic and assertions are documented in the
-docstrings of each test class and method.
+Validate all simulation levels in :mod:`diffpes.simul.spectrum`. Check
+shapes, value constraints, and sensitivity to physical parameters.
+Generate synthetic data for the tests. Require spin data for SOC tests.
 
 """
 
@@ -49,10 +43,8 @@ def _make_synthetic_data(
 ) -> tuple[BandStructure, OrbitalProjection]:
     """Generate synthetic band structure and orbital projections for testing.
 
-    Creates a minimal but physically plausible dataset: eigenvalues are
-    linearly spaced from -2.0 to 0.5 eV across ``nk * nb`` entries (then
-    reshaped to ``(nk, nb)``), k-points lie along the x-axis from 0 to 1,
-    and all orbital projections are set to a uniform value of 0.1.
+    Create linearly spaced eigenvalues from -2.0 to 0.5 eV. Place
+    k-points along the x-axis and set all orbital projections to 0.1.
 
     Parameters
     ----------
@@ -94,7 +86,7 @@ def _make_synthetic_data(
 
 
 class TestSimulateNovice(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_novice`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_novice`.
 
     Verifies the novice-level simulation (Voigt broadening with uniform
     orbital weights) including output tensor shapes and non-negativity of
@@ -106,7 +98,7 @@ class TestSimulateNovice(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify that intensity and energy axis have the expected shapes.
 
-        This case establishes the output shape contract for simulate novice with the
+        The test establishes the output shape contract for simulate novice with the
         concrete values and array shapes described below.
 
         Notes
@@ -141,7 +133,7 @@ class TestSimulateNovice(chex.TestCase):
     def test_nonnegative_intensity(self) -> None:
         """Verify that all intensity values are non-negative.
 
-        This case establishes the nonnegative intensity contract for simulate novice
+        The test establishes the nonnegative intensity contract for simulate novice
         with the concrete values and array shapes described below.
 
         Notes
@@ -175,7 +167,7 @@ class TestSimulateNovice(chex.TestCase):
 
 
 class TestSimulateBasic(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_basic`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_basic`.
 
     Verifies the basic-level simulation (Gaussian broadening with heuristic
     orbital weights) including output tensor shape and finiteness of all
@@ -187,7 +179,7 @@ class TestSimulateBasic(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify that the intensity array has the expected shape.
 
-        This case establishes the output shape contract for simulate basic with the
+        The test establishes the output shape contract for simulate basic with the
         concrete values and array shapes described below.
 
         Notes
@@ -219,7 +211,7 @@ class TestSimulateBasic(chex.TestCase):
     def test_finite_values(self) -> None:
         """Verify that all intensity values are finite (no NaN or Inf).
 
-        This case establishes the finite values contract for simulate basic with the
+        The test establishes the finite values contract for simulate basic with the
         concrete values and array shapes described below.
 
         Notes
@@ -253,7 +245,7 @@ class TestSimulateBasic(chex.TestCase):
 
 
 class TestSimulateBasicplus(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_basicplus`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_basicplus`.
 
     Verifies the basicplus-level simulation (Gaussian broadening with
     Yeh-Lindau photoionization cross-sections) including output tensor
@@ -265,7 +257,7 @@ class TestSimulateBasicplus(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify that the intensity array has the expected shape.
 
-        This case establishes the output shape contract for simulate basicplus with the
+        The test establishes the output shape contract for simulate basicplus with the
         concrete values and array shapes described below.
 
         Notes
@@ -297,7 +289,7 @@ class TestSimulateBasicplus(chex.TestCase):
     def test_yeh_lindau_affects_weights(self) -> None:
         """Verify that different photon energies produce different spectra.
 
-        This case establishes the yeh lindau affects weights contract for simulate
+        The test establishes the yeh lindau affects weights contract for simulate
         basicplus with the concrete values and array shapes described below.
 
         Notes
@@ -316,10 +308,8 @@ class TestSimulateBasicplus(chex.TestCase):
 
         **Expected assertions**
 
-        The summed absolute intensity difference is strictly positive,
-        confirming that Yeh-Lindau cross-section weights are
-        photon-energy-dependent and produce measurably different orbital
-        weightings at 20 eV versus 60 eV.
+        The summed absolute intensity difference is positive. Thus,
+        photon energy changes the Yeh-Lindau orbital weights.
         """
         bands: diffpes.types.BandStructure
         orb_proj: diffpes.types.OrbitalProjection
@@ -339,7 +329,7 @@ class TestSimulateBasicplus(chex.TestCase):
 
 
 class TestSimulateAdvanced(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_advanced`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_advanced`.
 
     Verifies the advanced-level simulation (Gaussian broadening with
     Yeh-Lindau cross-sections and polarization selection rules) including
@@ -351,7 +341,7 @@ class TestSimulateAdvanced(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify that intensity has the expected shape under LVP polarization.
 
-        This case establishes the output shape contract for simulate advanced with the
+        The test establishes the output shape contract for simulate advanced with the
         concrete values and array shapes described below.
 
         Notes
@@ -388,7 +378,7 @@ class TestSimulateAdvanced(chex.TestCase):
     def test_unpolarized(self) -> None:
         """Verify that unpolarized light produces finite intensity values.
 
-        This case establishes the unpolarized contract for simulate advanced with the
+        The test establishes the unpolarized contract for simulate advanced with the
         concrete values and array shapes described below.
 
         Notes
@@ -425,12 +415,10 @@ class TestSimulateAdvanced(chex.TestCase):
 
 
 class TestSimulateExpert(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_expert`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_expert`.
 
-    Verifies the expert-level simulation (Voigt broadening with Yeh-Lindau
-    cross-sections, polarization selection rules, and dipole matrix
-    elements) including output tensor shape, finiteness under unpolarized
-    light, and finiteness under circular (RCP) polarization.
+    Verify the expert simulation shape. Check finite results for
+    unpolarized and circular light.
 
     :see: :func:`~diffpes.simul.simulate_expert`
     """
@@ -438,7 +426,7 @@ class TestSimulateExpert(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify that intensity has the expected shape under LHP polarization.
 
-        This case establishes the output shape contract for simulate expert with the
+        The test establishes the output shape contract for simulate expert with the
         concrete values and array shapes described below.
 
         Notes
@@ -476,7 +464,7 @@ class TestSimulateExpert(chex.TestCase):
     def test_unpolarized(self) -> None:
         """Verify that unpolarized light produces finite intensity values.
 
-        This case establishes the unpolarized contract for simulate expert with the
+        The test establishes the unpolarized contract for simulate expert with the
         concrete values and array shapes described below.
 
         Notes
@@ -514,7 +502,7 @@ class TestSimulateExpert(chex.TestCase):
     def test_circular_polarization(self) -> None:
         """Verify that right circular polarization (RCP) produces finite values.
 
-        This case establishes the circular polarization contract for simulate expert
+        The test establishes the circular polarization contract for simulate expert
         with the concrete values and array shapes described below.
 
         Notes
@@ -534,10 +522,8 @@ class TestSimulateExpert(chex.TestCase):
 
         **Expected assertions**
 
-        All intensity values are finite, verifying that the circular
-        polarization code path (complex-valued electric field) does not
-        produce numerical overflow or undefined values in the expert-level
-        simulation.
+        All intensity values are finite. The complex electric field does
+        not cause overflow or undefined values.
         """
         bands: diffpes.types.BandStructure
         orb_proj: diffpes.types.OrbitalProjection
@@ -560,11 +546,8 @@ def _make_synthetic_data_with_spin(
 ) -> tuple[BandStructure, SpinOrbitalProjection]:
     """Generate synthetic band and orbital data including spin projections.
 
-    Same as :func:`_make_synthetic_data` but adds a non-zero spin array
-    of shape ``(nk, nb, na, 6)`` (x up/down, y up/down, z up/down) and
-    returns a :class:`~diffpes.types.SpinOrbitalProjection` built with
-    :func:`~diffpes.types.make_spin_orbital_projection`. Used by SOC
-    simulation tests.
+    Add a nonzero spin array to the base synthetic data. Return a
+    :class:`~diffpes.types.SpinOrbitalProjection` for SOC tests.
 
     Parameters
     ----------
@@ -607,12 +590,10 @@ def _make_synthetic_data_with_spin(
 
 
 class TestSimulateSoc(chex.TestCase):
-    """Tests for :func:`diffpes.simul.spectrum.simulate_soc`.
+    """Validate :func:`diffpes.simul.spectrum.simulate_soc`.
 
-    Verifies that the SOC simulation requires non-None spin data,
-    produces the expected output shapes, that ``ls_scale=0`` recovers
-    the expert result, and that non-zero ``ls_scale`` changes the
-    intensity relative to expert.
+    Verify that SOC requires spin data and produces the expected shapes.
+    Compare zero and nonzero ``ls_scale`` values with expert results.
 
     :see: :func:`~diffpes.simul.simulate_soc`
     """
@@ -620,7 +601,7 @@ class TestSimulateSoc(chex.TestCase):
     def test_output_shape(self) -> None:
         """Verify SOC spectrum has intensity (K, E) and energy_axis (E).
 
-        This case establishes the output shape contract for simulate soc with the
+        The test establishes the output shape contract for simulate soc with the
         concrete values and array shapes described below.
 
         Notes
@@ -655,9 +636,9 @@ class TestSimulateSoc(chex.TestCase):
         chex.assert_tree_all_finite(spectrum.intensity)
 
     def test_soc_ls_scale_zero_matches_expert(self) -> None:
-        """With ls_scale=0, SOC intensity should match expert (same orbital part).
+        """Verify that zero ls_scale reproduces the expert intensity.
 
-        This case establishes the soc ls scale zero matches expert contract for simulate
+        The test establishes the soc ls scale zero matches expert contract for simulate
         soc with the concrete values and array shapes described below.
 
         Notes
@@ -671,8 +652,7 @@ class TestSimulateSoc(chex.TestCase):
 
         **Expected assertions**
 
-        When the spin-orbit correction is disabled (ls_scale=0),
-        the SOC simulation reproduces the expert result exactly.
+        With ls_scale=0, the SOC simulation reproduces the expert result.
         """
         bands: diffpes.types.BandStructure
         soc_proj: diffpes.types.SpinOrbitalProjection
@@ -699,9 +679,9 @@ class TestSimulateSoc(chex.TestCase):
         )
 
     def test_soc_nonzero_ls_scale_differs_from_expert(self) -> None:
-        """With ls_scale != 0, SOC intensity can differ from expert.
+        """Verify that nonzero ``ls_scale`` can change the SOC intensity.
 
-        This case establishes the soc nonzero ls scale differs from expert contract for
+        The test establishes the soc nonzero ls scale differs from expert contract for
         simulate soc with the concrete values and array shapes described below.
 
         Notes
@@ -716,9 +696,8 @@ class TestSimulateSoc(chex.TestCase):
 
         **Expected assertions**
 
-        A non-zero ls_scale produces a different intensity map
-        from the expert-only simulation, confirming the spin
-        correction is applied.
+        A nonzero ls_scale changes the intensity map. Thus, the spin
+        correction affects the result.
         """
         bands: diffpes.types.BandStructure
         soc_proj: diffpes.types.SpinOrbitalProjection
@@ -744,29 +723,22 @@ class TestSimulateSoc(chex.TestCase):
     def test_soc_polarized_light(self) -> None:
         """Verify that SOC simulation runs with polarized light (LHP).
 
-        This case establishes the soc polarized light contract for simulate soc with the
+        The test establishes the soc polarized light contract for simulate soc with the
         concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Build bands and spin-orbital projections via
-           :func:`_make_synthetic_data_with_spin`; create params with
-           fidelity=100 and LHP polarization config. This exercises the
-           polarized code branch within ``simulate_soc``, which differs
-           from the unpolarized branch (used in other SOC tests) by
-           computing dipole matrix elements with an explicit electric
-           field vector rather than averaging over polarizations.
+        1. **Setup**: Build bands and spin-orbital projections. Create
+           parameters with fidelity=100 and an LHP configuration. Use an
+           explicit electric field for the dipole matrix elements.
         2. **Simulate**: Run ``simulate_soc`` with ls_scale=0.02.
         3. **Check shape and finiteness**: Assert intensity shape is
            ``(n_kpoints, 100)`` and all values are finite.
 
         **Expected assertions**
 
-        The SOC simulation produces correctly shaped, finite output
-        under polarized (LHP) light, confirming that the polarized
-        branch of ``simulate_soc`` handles the spin-orbit correction
-        in combination with directional dipole matrix elements without
-        numerical instability.
+        The SOC simulation returns finite output with the expected shape.
+        The polarized branch includes spin-orbit and dipole effects.
         """
         bands: diffpes.types.BandStructure
         soc_proj: diffpes.types.SpinOrbitalProjection

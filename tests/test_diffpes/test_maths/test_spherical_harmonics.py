@@ -1,14 +1,13 @@
-"""Tests for real spherical harmonics.
+"""Validate real spherical harmonics.
 
 Extended Summary
 ----------------
-Validates the real spherical harmonic functions
+The tests validate the real spherical harmonic functions
 ``real_spherical_harmonic`` and ``real_spherical_harmonics_all``.
-Tests cover known analytical values for low-order harmonics (Y_0^0,
-Y_1^0, Y_1^{+1}, Y_1^{-1}) using the Condon-Shortley phase convention,
-numerical orthonormality via quadrature, JIT compatibility, autodiff
-gradients with respect to theta and phi, input validation (negative l,
-``|m| > l``), output shape of the batch function, and consistency between
+They cover known analytical values for low-order harmonics with the
+Condon-Shortley phase convention. They verify numerical orthonormality,
+JIT compatibility, and autodiff gradients for ``theta`` and ``phi``.
+They also verify input validation, batch shape, and consistency between
 the single and batch interfaces.
 
 """
@@ -28,13 +27,12 @@ from diffpes.maths import (
 
 
 class TestRealSphericalHarmonic:
-    """Tests for ``real_spherical_harmonic``.
+    """Validate ``real_spherical_harmonic``.
 
-    Validates the scalar real spherical harmonic Y_l^m(theta, phi) using
-    the Condon-Shortley phase convention.  Tests compare against closed-
-    form expressions for l=0 and l=1 harmonics, verify orthonormality
-    via numerical quadrature, check JIT and autodiff support, and confirm
-    proper input validation for invalid quantum numbers.
+    The tests validate the scalar real spherical harmonic with the
+    Condon-Shortley phase convention. They compare ``l=0`` and ``l=1``
+    harmonics with closed-form expressions. They verify orthonormality with
+    numerical quadrature. They also check JIT, autodiff, and input validation.
 
     :see: :func:`~diffpes.maths.real_spherical_harmonic`
     """
@@ -42,14 +40,14 @@ class TestRealSphericalHarmonic:
     def test_y00_constant(self) -> None:
         """Verify Y_0^0 = 1/(2*sqrt(pi)) is constant over the sphere.
 
-        Evaluates Y_0^0 at four different (theta, phi) pairs using
+        The test evaluates Y_0^0 at four different (theta, phi) pairs using
         ``jax.vmap``.  The l=0 harmonic is the unique isotropic solution
         with the well-known value 1/(2*sqrt(pi)).  Asserts all four
         outputs match this constant to within 1e-12.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         expected: Array
         theta: Array
         phi: Array
@@ -66,7 +64,7 @@ class TestRealSphericalHarmonic:
     def test_y10_cosine(self) -> None:
         """Verify Y_1^0 = sqrt(3/(4*pi)) * cos(theta) along the meridian.
 
-        Evaluates Y_1^0 at 50 theta values from 0 to pi with phi=0
+        The test evaluates Y_1^0 at 50 theta values from 0 to pi with phi=0
         using ``jax.vmap``.  Compares against the analytical expression
         sqrt(3/(4*pi)) * cos(theta).  Asserts agreement to within 1e-10,
         validating the associated Legendre polynomial P_1^0 = cos(theta)
@@ -74,7 +72,7 @@ class TestRealSphericalHarmonic:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         theta: Array
         phi: Array
         vals: Array
@@ -91,14 +89,14 @@ class TestRealSphericalHarmonic:
     def test_y11_sin_cos(self) -> None:
         """Verify Y_1^1 = -sqrt(3/(4*pi)) * sin(theta) * cos(phi).
 
-        Evaluates Y_1^{+1} at theta=pi/4, phi=0 and compares against the
+        The test evaluates Y_1^{+1} at theta=pi/4, phi=0 and compares against the
         Condon-Shortley convention expression.  The negative sign comes
         from the (-1)^m phase factor for m > 0.  Asserts agreement to
         within 1e-10.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         theta: Array
         phi: Array
         val: Array
@@ -118,14 +116,14 @@ class TestRealSphericalHarmonic:
     def test_y1m1_sin_sin(self) -> None:
         """Verify Y_1^{-1} = +sqrt(3/(4*pi)) * sin(theta) * sin(phi).
 
-        Evaluates Y_1^{-1} at theta=pi/3, phi=pi/4 and compares against
+        The test evaluates Y_1^{-1} at theta=pi/3, phi=pi/4 and compares against
         the analytical expression.  For m < 0, the real spherical harmonic
         uses ``sin(|m|*phi)`` and the Condon-Shortley phase cancels, yielding
         a positive prefactor.  Asserts agreement to within 1e-10.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         theta: Array
         phi: Array
         val: Array
@@ -145,7 +143,7 @@ class TestRealSphericalHarmonic:
     def test_orthonormality_low_l(self) -> None:
         """Verify orthonormality of Y_0^0 and Y_1^0 via numerical quadrature.
 
-        Constructs a (100 x 200) grid in (theta, phi) using midpoint
+        The test constructs a (100 x 200) grid in (theta, phi) using midpoint
         quadrature in cos(theta) and uniform spacing in phi.  Computes
         the cross-overlap integral Y_0^0 * Y_1^0 * sin(theta) and the
         self-overlap integral ``|Y_0^0|^2 * sin(theta)``.  Asserts the
@@ -156,7 +154,7 @@ class TestRealSphericalHarmonic:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         n_theta: int
         n_phi: int
         x: Array
@@ -220,14 +218,14 @@ class TestRealSphericalHarmonic:
     def test_jit_compatible(self) -> None:
         """Verify ``real_spherical_harmonic`` is JAX-JIT-compatible.
 
-        Wraps a call to Y_2^1(theta, phi) in ``jax.jit`` and evaluates
+        The test wraps a call to Y_2^1(theta, phi) in ``jax.jit`` and evaluates
         at theta=1.0, phi=0.5.  Asserts the output is finite, confirming
         no Python-side operations (e.g., if-branches on traced values)
         break JAX tracing for the l=2 case.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         f: Callable[..., Any]
         val: Array
 
@@ -238,7 +236,7 @@ class TestRealSphericalHarmonic:
     def test_gradient_theta(self) -> None:
         """Verify autodiff gradient of Y_1^0 w.r.t. theta is finite.
 
-        Differentiates Y_1^0(theta, phi=0) at theta=pi/4 using
+        The test differentiates Y_1^0(theta, phi=0) at theta=pi/4 using
         ``jax.grad``.  The analytical derivative is
         -sqrt(3/(4*pi)) * sin(theta), which is nonzero at pi/4.  Asserts
         finiteness, confirming the associated Legendre polynomial
@@ -246,7 +244,7 @@ class TestRealSphericalHarmonic:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         grad_fn: Callable[..., Any]
         g: Array
 
@@ -259,15 +257,15 @@ class TestRealSphericalHarmonic:
     def test_gradient_phi(self) -> None:
         """Verify autodiff gradient of Y_1^1 w.r.t. phi is finite.
 
-        Differentiates Y_1^1(theta=pi/4, phi) at phi=0.5 using
+        The test differentiates Y_1^1(theta=pi/4, phi) at phi=0.5 using
         ``jax.grad``.  The m=1 harmonic has a cos(phi) dependence, so
         the derivative involves -sin(phi) and is nonzero at phi=0.5.
-        Asserts finiteness, confirming the azimuthal (phi) branch of
+        The test asserts finiteness, confirming the azimuthal (phi) branch of
         the implementation supports AD.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         grad_fn: Callable[..., Any]
         g: Array
 
@@ -280,39 +278,36 @@ class TestRealSphericalHarmonic:
     def test_invalid_l_raises(self) -> None:
         """Verify that negative l raises ``ValueError``.
 
-        Calls ``real_spherical_harmonic(-1, 0, 0, 0)`` and asserts a
-        ``ValueError`` is raised with a message matching "l must be
-        non-negative".  This tests the input-validation guard for the
+        The test calls ``real_spherical_harmonic(-1, 0, 0, 0)`` and expects a
+        ``ValueError`` with a matching message. This tests the guard for the
         boundary condition l >= 0.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         with pytest.raises(ValueError, match="l must be non-negative"):
             real_spherical_harmonic(-1, 0, jnp.array(0.0), jnp.array(0.0))
 
     def test_invalid_m_raises(self) -> None:
         """Verify that ``|m| > l`` raises ``ValueError``.
 
-        Calls ``real_spherical_harmonic(1, 2, 0, 0)`` where m=2 > l=1
-        and asserts a ``ValueError`` is raised with a message matching
-        "must be <= l".  This tests the input-validation guard for the
+        The test calls ``real_spherical_harmonic(1, 2, 0, 0)`` with ``m > l``.
+        It expects a ``ValueError`` with a matching message. This tests the
         constraint ``|m| <= l``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         with pytest.raises(ValueError, match="must be <= l"):
             real_spherical_harmonic(1, 2, jnp.array(0.0), jnp.array(0.0))
 
 
 class TestRealSphericalHarmonicsAll:
-    """Tests for ``real_spherical_harmonics_all``.
+    """Validate ``real_spherical_harmonics_all``.
 
-    Validates the batch function that returns all (l_max+1)^2 real
-    spherical harmonics up to a given l_max at a single (theta, phi)
-    point.  Tests verify the output shape and consistency with
-    individual ``real_spherical_harmonic`` calls.
+    The batch function returns all real spherical harmonics through ``l_max``
+    at one ``(theta, phi)`` point. The tests verify the output shape and
+    consistency with individual ``real_spherical_harmonic`` calls.
 
     :see: :func:`~diffpes.maths.real_spherical_harmonics_all`
     """
@@ -320,13 +315,12 @@ class TestRealSphericalHarmonicsAll:
     def test_output_shape(self) -> None:
         """Verify output has (l_max+1)^2 entries.
 
-        Calls ``real_spherical_harmonics_all(2, theta, phi)`` at a single
-        point and asserts the output shape is ``(9,)`` since
-        (2+1)^2 = 9 harmonics span l=0, 1, 2.
+        The test calls ``real_spherical_harmonics_all`` at one point.
+        It expects shape ``(9,)`` because nine harmonics span ``l=0, 1, 2``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         theta: Array
         phi: Array
         vals: Array
@@ -339,16 +333,14 @@ class TestRealSphericalHarmonicsAll:
     def test_matches_individual(self) -> None:
         """Verify batch results match individual ``real_spherical_harmonic`` calls.
 
-        Evaluates ``real_spherical_harmonics_all(2, theta, phi)`` at
-        theta=1.2, phi=0.7 and compares each element against the
-        corresponding ``real_spherical_harmonic(l, m, theta, phi)`` call,
-        iterating over l in [0..2] and m in [-l..l].  Asserts element-wise
-        agreement to within 1e-12, confirming the batch ordering convention
-        (l-major, m-minor from -l to +l).
+        The test evaluates both interfaces at ``theta=1.2`` and ``phi=0.7``.
+        It compares each batch element with the corresponding scalar call.
+        It iterates through ``l`` and ``m`` in the documented order.
+        The values agree within ``1e-12`` and confirm the batch ordering.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         l: int
         m: int
 

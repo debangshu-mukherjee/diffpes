@@ -1,19 +1,18 @@
 # Contributing to diffpes
 
-Thank you for your interest in contributing to diffpes! This guide describes how
-the codebase is written — type hinting, documentation, validation, testing, and
-tooling — so your contributions match the existing standards.
+Thank you for your interest in contributing to diffpes! This guide defines the
+standards for type hints, documentation, validation, testing, and tools.
 
 ## Core Principle: Invertible Modularity
 
-diffpes is a bidirectional instrument: the same differentiable pipeline that
-takes a band structure to an ARPES spectrum is run in reverse to recover band
-structures, self-energies, and matrix-element parameters from measured data.
-Every module is a differentiable operator, and the boundaries between modules
-are the boundaries at which the inverse problem is solved — you attach a loss at
-any seam and solve for what produced the data (hopping parameters, self-energy,
-experimental geometry) while freezing the rest. This invertibility is the
-codebase's core asset.
+diffpes uses one differentiable pipeline in two directions. The forward
+direction converts a band structure into an ARPES spectrum. The inverse
+direction recovers physical parameters from measured data.
+
+Every module is a differentiable operator. A module boundary also defines a
+boundary for the inverse problem. Attach a loss at any boundary. Then solve for
+the source parameters while other parameters stay fixed. This invertibility is
+the primary asset of the codebase.
 
 It rests on one invariant:
 
@@ -22,26 +21,25 @@ It rests on one invariant:
 
 Concretely:
 
-- Keep matrix elements complex; apply `|·|²` as late as possible, and **never
-  before a coherent sum** — dipole channels, orbital contributions, and spin
-  components interfere, and circular dichroism and spin-ARPES are exactly the
-  observables that die when an intermediate modulus-squared sneaks in.
+- Keep matrix elements complex. Apply `|·|²` as late as possible. **Never apply
+  it before a coherent sum.** Dipole channels, orbital contributions, and spin
+  components interfere. An early modulus square removes circular dichroism and
+  spin-ARPES observables.
 - Express experimental averaging (energy/angle resolution, kz broadening,
-  temperature) as explicit, differentiable operations over distributions, not
-  as baked-in convolutions or hidden quadratures.
+  temperature) as explicit differentiable operations over distributions. Do
+  not use hidden quadratures or fixed convolutions.
 - Use `jnp.where` / `lax.cond` and continuous fields rather than discrete swaps
-  or data-dependent Python control flow, so every parameter keeps a derivative.
-- A gradient is part of the physics: under the identifiability thesis, every
-  row of the Fisher information matrix is built from gradients, so a silently
-  zero, NaN-poisoned, or conjugation-flipped gradient is a *physics* bug even
-  when the forward values look right.
+  or data-dependent Python control flow. This structure gives each parameter a
+  derivative.
+- Treat each gradient as part of the physics. Gradients form every row of the
+  Fisher information matrix under the identifiability thesis. A zero, NaN, or
+  conjugation error is a *physics* bug. Correct forward values do not excuse an
+  incorrect gradient.
 
-The failure mode is silent: when a module performs a hard, non-differentiable,
-or premature reduction, the forward model still looks correct — only
-invertibility breaks, and only at that one seam. Treat any such reduction as a
-design smell to be justified explicitly in review, not an implementation
-detail. The JAX-First rules below are the mechanics of upholding this
-principle.
+This failure mode is silent. A hard, non-differentiable, or early reduction can
+leave the forward model correct. However, the reduction breaks invertibility at
+one boundary. Require an explicit review justification for each such reduction.
+The JAX-First rules below implement this principle.
 
 ## Development Setup
 
@@ -69,9 +67,9 @@ principle.
    uv sync --extra dev_cuda
    ```
 
-   The dependency groups are defined in `pyproject.toml`: `docs`, `test`,
-   `notebooks`, `cuda`, `dev` (= docs + test + notebooks + tooling),
-   `dev_cuda` (= dev + cuda), and `all`.
+   The `pyproject.toml` file defines these groups: `docs`, `test`, `notebooks`,
+   `cuda`, `dev`, `dev_cuda`, and `all`. The `dev` group includes documentation,
+   tests, notebooks, and tools. The `dev_cuda` group adds CUDA support.
 
 3. **Install pre-commit hooks:**
    ```bash
@@ -102,19 +100,18 @@ diffpes/
 Each subpackage exposes its public API through `__init__.py` with an explicit
 `__all__`. The top-level `src/diffpes/__init__.py` enables 64-bit precision
 (`jax.config.update("jax_enable_x64", True)`) and sets CPU threading XLA flags
-**before** JAX is imported. Keep import-time side effects confined to that
+**before** any module imports JAX. Keep import-time side effects confined to that
 module.
 
-Most supporting infrastructure (`CHANGELOG.md`, `docs/`,
-`.pre-commit-config.yaml`, CI workflows) is in place; `tutorials/` (paired
-notebooks at the repo root) is still landing as part of the tooling-floor
-work tracked in the planning repo.
+The repository contains the changelog, documentation, pre-commit configuration,
+and CI workflows. The planning repository tracks the remaining work for paired
+tutorial notebooks.
 
 ## Coding Standards
 
 ### JAX-First Development
 
-diffpes is built on JAX for differentiable, high-performance computation. All
+diffpes uses JAX for differentiable, high-performance computation. All
 new code must follow JAX best practices:
 
 **Required JAX Patterns:**
@@ -124,29 +121,29 @@ new code must follow JAX best practices:
 - Keep functions purely functional — no side effects, no global mutable state
 - Code must remain traceable for `jit`, `grad`, `vmap`, and sharding
 
-**Solver stack:** optimization and nonlinear solves go through
-[Optimistix](https://docs.kidger.site/optimistix/) (`least_squares`,
-`root_find`, `fixed_point`, `minimise`; optax optimizers via
-`optimistix.OptaxMinimiser`) and linear solves through
-[Lineax](https://docs.kidger.site/lineax/). Implicit differentiation uses the
-built-in machinery of those libraries; hand-rolled `custom_vjp` is reserved for
-primitives they cannot express (e.g. regularized `eigh` gradients).
+**Solver stack:** Use [Optimistix](https://docs.kidger.site/optimistix/) for
+optimization and nonlinear solves. Its methods include `least_squares`,
+`root_find`, `fixed_point`, and `minimise`. Use
+`optimistix.OptaxMinimiser` for optax optimizers. Use
+[Lineax](https://docs.kidger.site/lineax/) for linear solves. Use the implicit
+differentiation tools from these libraries. Reserve a custom `custom_vjp` for
+unsupported primitives, such as regularized `eigh` gradients.
 
 **Differentiability rules of the house:**
-- A gradient gate passes only when `jax.grad` agrees with central finite
-  differences — *finite* is not *correct*, and a finite-but-zero gradient where
-  the physics has real sensitivity is a failure.
-- Guard the double-`jnp.where` NaN trap: when a branch can produce `nan`/`inf`,
-  sanitize the *input* of the unsafe branch with an inner `where`, not just the
-  output.
-- Complex *parameters* are carried as stacked reals and re-complexified inside
-  the forward (the real-ification doctrine); complex *state* (matrix elements,
-  eigenvectors) stays complex, with `|·|²` applied late.
+- Require `jax.grad` to agree with central finite differences. A finite gradient
+  is not necessarily correct. Reject a zero gradient when the physics has real
+  sensitivity.
+- Guard against the double-`jnp.where` NaN trap.
+- Sanitize the unsafe branch input with an inner `where` when a branch can
+  produce `nan` or `inf`. Do not only sanitize the output.
+- Carry complex *parameters* as stacked real values. Convert them to complex
+  values inside the forward model. Keep complex *state*, such as matrix
+  elements and eigenvectors, complex. Apply `|·|²` late.
 - `jnp.linalg.eigh` gradients blow up at degeneracies (symmetry points, Kramers
-  pairs under SOC). Differentiate only gauge-invariant combinations
-  (projectors, spectral functions), use the degeneracy-aware machinery in
-  `diffpes.tightb`, or route through a Green's-function formulation — never
-  raw eigenvector gradients at a possible degeneracy.
+  pairs under SOC). Differentiate only gauge-invariant combinations, such as
+  projectors and spectral functions. Use the degeneracy-aware tools in
+  `diffpes.tightb`. Alternatively, use a Green's-function formulation. Never
+  differentiate raw eigenvectors at a possible degeneracy.
 
 **Example:**
 ```python
@@ -191,62 +188,53 @@ def simulate_spectrum(
 ```
 
 #### Type Hinting Rules:
-- All parameters and return values are annotated; multiple returns use
-  `beartype.typing.Tuple[...]`.
+- Annotate all parameters and return values.
+- Use `beartype.typing.Tuple[...]` for multiple returns.
 - Annotate intermediate variables inside function bodies too — e.g.
   `theta_rad: Float[Array, ""] = jnp.deg2rad(theta_deg)`.
 - **Assign before returning.** Bind a function's result to a type-annotated
-  variable and return that name, rather than returning a bare expression — so
-  the returned value carries an explicit type at its definition site.
+  variable. Return that name instead of a bare expression. This rule gives the
+  result an explicit type at its definition.
 - Use descriptive dimension names in shape specs:
   `Float[Array, "nkpt nband"]`, `Complex[Array, "nkpt nband natom norb"]`,
   scalars as `Float[Array, ""]`.
 - Prefer the scalar aliases from `diffpes.types` (`types/aliases.py`) for
-  scalar arguments; these are unions accepting both Python scalars and 0-d JAX
+  scalar arguments. These unions accept Python scalars and zero-dimensional JAX
   arrays.
 - Import shared types from `diffpes.types`, not by re-defining them.
 - **Cross-subpackage imports are public and go through the subpackage.**
-  Whenever a file imports something from a *different* subpackage, two
-  things must hold: (1) the source subpackage **exports the name
-  publicly** (module `Routine Listings` + `__all__` + `__init__.py`
-  re-export — the three-places rule), and (2) the importer takes it
-  **from the subpackage itself, never from an individual file inside
-  it** (`from diffpes.types import KB_EV_PER_K`, not
-  `from diffpes.types.constants import KB_EV_PER_K`; `from
-  diffpes.inout import read_procar`, not `from diffpes.inout.procar
-  import read_procar`). There is no private-name exception: if another
-  subpackage needs it, it is public by definition — promote it. Deep
-  file-level imports are legal only *within* a subpackage (relative
-  imports like `from .constants import ...`, which is how each
-  `__init__.py` is built).
-- **Never rename on import** (`import ... as`) for diffpes names — no
-  `KB_EV_PER_K as _KB`, no `_N_ORBITALS as _NORBS`. An alias creates a
-  second name for the same constant that grep, listings, and reviewers
-  must chase. (Community-canonical module aliases like `jnp`/`np`/`plt`
-  and the `ndarray as NDArray` casing shim for jaxtyping are the only
-  exceptions.)
+  Apply two requirements to each cross-subpackage import. First, the source
+  subpackage must export the name publicly. The module `Routine Listings`,
+  module `__all__`, and package `__init__.py` must contain the name. Second,
+  import the name from the subpackage, not from one of its files. For example,
+  use `from diffpes.types import KB_EV_PER_K`. Do not import it from
+  `diffpes.types.constants`. A name that another subpackage needs is public.
+  Promote such a name. Use deep relative imports only within one subpackage.
+- **Never rename diffpes names on import** (`import ... as`). Do not use
+  `KB_EV_PER_K as _KB` or `_N_ORBITALS as _NORBS`. An alias creates a
+  second name for one constant. This extra name complicates searches and
+  reviews. Community-standard aliases such as `jnp`, `np`, and `plt` are
+  exceptions. The `ndarray as NDArray` jaxtyping shim is also an exception.
 - Import typing constructs (`Optional`, `Union`, `Tuple`, `List`, `Dict`,
   `TypeAlias`) from `beartype.typing`, not the stdlib `typing` module.
 
 ### Custom Types and PyTrees
 
-**All types live in `diffpes.types` — no exceptions.** Every structured data
-type — every PyTree, every carrier, every type alias, **and every `make_*`
-factory that builds one** — is defined under `src/diffpes/types/` and **nowhere
-else**. Every other subpackage (`simul`, `tightb`, `radial`, `maths`, `inout`,
-`utils`) **imports** its types from `diffpes.types`; it must **not** define its
-own PyTree, container, or factory. Why: a single import surface, one
-registration per type, one home for the validation contract, and no duplicate
-carriers drifting across modules — which is exactly what the inverse problem
-needs: the fitting layer compares `ArpesSpectrum` objects, so there must be
-*one* `ArpesSpectrum`. A result/parameter container that "feels local" to a
-solver or producer is **still a type**: it goes in `diffpes.types`, not beside
-the function that returns it.
+**All types live in `diffpes.types`. There are no exceptions.** Define every
+PyTree, carrier, type alias, and `make_*` factory under `src/diffpes/types/`.
+Other subpackages import these types from `diffpes.types`. They do not define
+local PyTrees, containers, or factories.
 
-Structured data types are **Equinox modules** (`eqx.Module`): immutable JAX
-PyTrees that flow through `jit`/`grad`/`vmap`. Static, non-array metadata
-fields are declared with `eqx.field(static=True)` so they are excluded from the
-differentiable leaves.
+This rule gives each type one import surface, one registration, and one
+validation contract. It also prevents duplicate carriers. The fitting layer
+compares `ArpesSpectrum` objects, so the project must define one
+`ArpesSpectrum` type. A result container or parameter container is also a type.
+Define it in `diffpes.types`, not beside its producer.
+
+Use **Equinox modules** (`eqx.Module`) for structured data types. These
+immutable JAX PyTrees flow through `jit`, `grad`, and `vmap`. Declare static,
+non-array metadata fields with `eqx.field(static=True)`. JAX then excludes
+these fields from the differentiable leaves.
 
 ```python
 import equinox as eqx
@@ -267,12 +255,13 @@ class BandStructure(eqx.Module):
 
 ### Validation Pattern for Factory Functions
 
-Custom types are constructed through `make_*` factory functions that validate
-inputs. These factories live in `diffpes.types` **next to the type they
-build** (never in the consuming subpackage). Use a two-tier approach:
+Construct custom types through `make_*` factory functions that validate
+inputs. Put these factories in `diffpes.types` **next to the type that they
+build**. Never put a factory in the consuming subpackage. Use a two-tier
+approach:
 
-- **Static shape/structure checks** that can be resolved at trace time use
-  plain Python `raise ValueError`.
+- Use plain Python `raise ValueError` for **static shape and structure checks**
+  that JAX can resolve at trace time.
 - **Data-dependent (traced) checks** use `equinox.error_if`, which raises at
   runtime without breaking `jit`.
 
@@ -309,74 +298,70 @@ def make_band_structure(
 
 ### Units, Conventions, and Indexing
 
-- Energies in **eV**, lengths in **Angstrom**, k-vectors in **1/Angstrom**;
-  angles are **degrees at user-facing API boundaries** and radians internally
-  (convert once, at the boundary, into an annotated variable).
+- Use **eV** for energies, **Angstrom** for lengths, and **1/Angstrom** for
+  k-vectors. Use degrees for angles at public API boundaries. Convert each
+  angle once to an annotated radian value inside the boundary.
 - Use standard Python/NumPy indexing everywhere (zero-based, end-exclusive):
   non-s orbitals are `slice(1, 9)`, p orbitals `slice(1, 4)`, d orbitals
   `slice(4, 9)`. Do not use MATLAB-style indexing notation, even in comments.
-- Sign and phase conventions (spherical-harmonic phases, Gaunt coefficients,
-  polarization vectors, rotation frames) are pinned centrally in the physics
-  canon of the planning repo; when code and canon disagree, that is a bug —
-  do not silently re-pin a convention locally.
+- Use the sign and phase conventions from the physics canon. These conventions
+  include spherical-harmonic phases, Gaunt coefficients, polarization vectors,
+  and rotation frames. Treat a difference between code and canon as a bug. Do
+  not define a different local convention.
 
 ### Documentation Standards
 
-Docstrings follow the **NumPy / numpydoc convention** (enforced by Ruff's
-`pydocstyle` rules and `pydoclint`, configured in `pyproject.toml`). Coverage
-is checked by `interrogate` (`fail-under = 90`). Do **not** invent section
-headers — the allowed set is the numpydoc sections plus exactly three house
-extensions: `Extended Summary` and `Routine Listings` (modules and
-`__init__.py`, above) and `Implementation Logic` (functions, below).
+Docstrings follow the **NumPy / numpydoc convention**. Ruff and `pydoclint`
+enforce this convention through `pyproject.toml`. The `interrogate` tool checks
+coverage with `fail-under = 90`. Do **not** invent section headers. Use the
+numpydoc sections and three project extensions. Modules use `Extended Summary`
+and `Routine Listings`. Functions use `Implementation Logic`.
 
-`pydoclint` sets `check-return-types = false` because jaxtyping shape strings
+The project sets the pydoclint option `check-return-types = false`. Jaxtyping
+shape strings
 (e.g. `Float[Array, "nkpt nband"]`) are core signature syntax that pydoclint
 cannot reliably parse for return-type comparison. Do not degrade a correct
 jaxtyping annotation to satisfy that comparison. Argument types and order,
-plus required `Returns`/`Yields` sections, remain enforced.
+plus required `Returns` and `Yields` sections, remain mandatory.
 
 #### Prose Style: Simplified Technical English (ASD-STE100)
 
-All prose in this repository conforms to
-[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/):
-every docstring, every markdown file (`README.md`, `docs/` guides,
-`CHANGELOG.md`), and every tutorial markdown cell. STE exists to make
-technical text impossible to misread. The rules that do the most work here:
+All repository prose conforms to
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/).
+This scope includes every docstring, Markdown file, and tutorial Markdown cell.
+STE reduces ambiguity in technical text. Apply these primary rules:
 
 - **Keep sentences short.** Maximum 20 words for an instruction, 25 for a
   description. One topic per sentence. One instruction per sentence.
-- **Use the active voice and name the agent.** "The function computes the
-  spectrum", not "the spectrum is computed".
+- **Use the active voice and name the agent.** Write "The function computes
+  the spectrum." Do not use a passive form.
 - **Use the present tense for descriptions** and the imperative for
-  instructions ("Compute the weights", "Do not tape the recursion").
-- **One term, one meaning.** Use the same word for the same concept
-  everywhere; do not rotate synonyms (pick "compute" and stay with it —
-  do not alternate "calculate" and "evaluate" for the same operation).
-  The verbatim summary-line rule already enforces this for API
+  instructions ("Compute the weights", "Do not use the recursion").
+- **One term, one meaning.** Use the same word for one concept everywhere.
+  Do not alternate between "compute", "calculate", and "evaluate" for one
+  operation. The verbatim summary rule enforces this practice for API
   descriptions.
 - **Keep the articles.** Write "the eigenvalues of the Hamiltonian", not
   telegraph-style "eigenvalues of Hamiltonian".
-- **No noun clusters longer than three nouns** — break them up with
-  prepositions ("the width of the Voigt profile", not "Voigt profile
-  width parameter value").
-- **No idioms or figures of speech.** They do not survive translation, and
-  they do not survive a tired reader at a beamline at 3 a.m.
+- **Do not use noun clusters longer than three nouns.** Add prepositions to
+  separate the nouns. Write "the width of the Voigt profile."
+- **Do not use idioms or figures of speech.** These forms can cause ambiguous
+  translations and instructions.
 - **Technical names are exempt.** Domain terms (ARPES, PyTree, Kramers
-  doublet, Gaunt coefficient, `jnp.where`) are STE technical names and
-  are always permitted — used consistently, with one spelling.
+  doublet, Gaunt coefficient, `jnp.where`) are STE technical names. Use one
+  spelling consistently for each technical name.
 
-Full STE dictionary compliance is a review-time discipline, not a tooling
-gate; the specification is free on registration from asd-ste100.org. When
-a reviewer flags a sentence as non-STE, simplify it — do not defend it.
+Reviewers check full STE dictionary compliance because tools cannot check it.
+ASD provides the specification after free registration at asd-ste100.org.
+Simplify each sentence that a reviewer identifies as non-STE.
 
 #### Module Docstrings
 
-Each module starts with a one-line summary, an `Extended Summary`, a
-`Routine Listings` section cross-referencing every public object, and a
-`Notes` section where relevant. For a package `__init__.py`, the
-`Extended Summary` must list **every submodule `.py` file** (as
-`- :mod:`name`` entries with a one-line description) — when you add a new
-submodule, add it to that listing in the same change.
+Start each module with a one-line summary and an `Extended Summary`. Add a
+`Routine Listings` section that references every public object. Add a `Notes`
+section when it is relevant. In each package `__init__.py`, list every
+submodule in the `Extended Summary`. Use a `- :mod:`name`` entry and one
+description for each submodule. Update this list when you add a submodule.
 
 ```python
 # src/diffpes/radial/__init__.py
@@ -407,45 +392,36 @@ Routine Listings
 """
 ```
 
-The one-line description under each `Routine Listings` entry is the
-**verbatim** summary line of that symbol's own docstring; the `- :mod:`
-description is the verbatim summary line of that submodule's docstring.
+Copy each symbol summary verbatim into its `Routine Listings` entry. Copy each
+submodule summary verbatim into its `- :mod:` entry.
 
-Use the correct Sphinx role in `Routine Listings`: `:func:` for functions,
-`:class:` for classes/PyTrees, `:obj:` for type aliases and constants, and
-`:mod:` for submodules.
+Use the correct Sphinx role in `Routine Listings`. Use `:func:` for functions
+and `:class:` for classes or PyTrees. Use `:obj:` for aliases or constants.
+Use `:mod:` for submodules.
 
-**Every public object is listed in three places, and all three must agree:**
+**List every public object in three places, and keep all three synchronized:**
 
-1. In its own **module**, at the **top** in the docstring's `Routine Listings`
-   (the human- and Sphinx-facing API index), **and**
-2. at the **bottom** in that module's `__all__` (the import-facing public
-   surface), **and**
-3. in the **subpackage `__init__.py`** — repeated in `__init__.py`'s **own**
-   `Routine Listings` *and* `__all__`.
+1. List the object in its module-level `Routine Listings` section.
+2. List the object in that module's `__all__` value.
+3. Repeat the object in the subpackage `Routine Listings` and `__all__`.
 
-A symbol missing from any of the three is a defect. When you add, rename, or
-remove a public function, update **all three** in the same change, and keep
-the one-line summary sentence **verbatim identical** across the function
-docstring and both `Routine Listings`.
+A symbol that is absent from one location is a defect. Update all three
+locations when you add, rename, or remove a public function. Keep the summary
+identical in the function docstring and both `Routine Listings` sections.
 
-**Export once, from the module that owns it — no compatibility re-exports.**
-Each public symbol has exactly one canonical export path: the module that
-defines it, surfaced through its own subpackage's `__init__.py`. Never add a
-second export of the same symbol elsewhere — not for convenience, not to
-preserve an old import location. When a symbol moves or is renamed, update
-every import site and **delete** the old path in the *same* change — no shim,
-no alias, no `DeprecationWarning`. The only migration record is a
-`CHANGELOG.md` note. This is the project's zero-legacy policy.
+**Export each symbol once from its owning module.** Expose that module through
+its subpackage `__init__.py`. Never add a second export for convenience or
+compatibility. When a symbol moves, update every import and delete the old path
+in one change. Do not add a shim, alias, or `DeprecationWarning`. Record the
+migration only in `CHANGELOG.md`. This rule is the zero-legacy policy.
 
 #### Function and Class Docstrings
 
-Every function docstring answers three questions, in Simplified Technical
-English: what the function **ingests** (`Parameters`), what it **outputs**
-(`Returns`), and **how the process happens inside** (`Implementation
-Logic`, or `Notes` for one-formula functions). A docstring that leaves any
-of the three unanswered is incomplete, independent of what pydoclint
-accepts.
+Every function docstring answers three questions in Simplified Technical
+English. The `Parameters` section states what the function accepts. The
+`Returns` section states what the function produces. The `Implementation
+Logic` section states how the function works. A one-formula function can use
+`Notes` for this information. A docstring is incomplete if it omits one answer.
 
 ```python
 @jaxtyped(typechecker=beartype)
@@ -490,9 +466,8 @@ def free_electron_kz(
     """
 ```
 
-Note how the `Returns` entry is named `kz_values` — the type-annotated
-variable the body actually returns (assign-before-returning), so the
-docstring, the body, and the signature agree.
+The `Returns` entry uses the name `kz_values`. The function body returns this
+type-annotated variable. Thus, the docstring, body, and signature agree.
 
 ##### Section order
 
@@ -513,37 +488,33 @@ do not apply:
 
 ##### Summary line
 
-- A **single imperative sentence** ending in a period, fitting on one line:
-  "Compute normalized Gaussian broadening profile." — never "This function
-  computes…", never a restatement of the parameter list.
-- This exact sentence is copied **verbatim** into the module's
-  `Routine Listings` and the subpackage `__init__.py`'s `Routine Listings`
-  (the three-places rule). Changing it means changing all three.
+- Write one imperative sentence that ends in a period and fits on one line.
+  Write "Compute normalized Gaussian broadening profile." Do not write "This
+  function computes." Do not repeat the parameter list.
+- Copy this exact sentence **verbatim** into both `Routine Listings` sections.
+  One section belongs to the module. The other belongs to the subpackage
+  `__init__.py`. This requirement is the three-places rule. Update all three
+  locations when the sentence changes.
 
 ##### Extended summary
 
-- One or two short paragraphs of *what and in which regime*: the physics
-  quantity computed, the approximation used, and its domain of validity
-  (e.g. "using the pseudo-Voigt method of Thompson, Cox & Hastings (1987),
-  accurate to better than 1% relative error"). Equations inline via
-  `:math:`. The *how* does not belong here — it goes in
-  `Implementation Logic`.
+- Use one or two short paragraphs to describe the quantity and its regime.
+  State the approximation and its domain of validity. For example, state the
+  accuracy of the pseudo-Voigt method. Use `:math:` for inline equations.
+  Put process information in `Implementation Logic`, not in this summary.
 
 ##### `:see:` cross-reference
 
-- Every public object carries `:see: :class:`~.test_<module>.Test<Symbol>``
-  pointing to its test class; the test class carries the matching
-  back-reference. The pair is maintained together — renaming either side
-  updates both.
+- Give every public object a `:see:` link to its test class. Give that test
+  class a link back to the object. Update both links when either name changes.
 
 ##### `Implementation Logic` (house section)
 
-- Required for any function whose body is more than a one-formula
-  transcription; short functions may fold the algorithm into `Notes`
-  instead.
-- Format: **numbered bold steps**, each opening with a `::` literal block
-  quoting the actual expressions, followed by indented prose explaining
-  *why* that step exists:
+- Add this section when a function does more than transcribe one formula.
+  A short function can put its process in `Notes`.
+- Use numbered bold steps. Start each step with a `::` literal block that
+  quotes the actual expressions. After the block, explain the reason for the
+  step with indented prose.
 
   ```
   1. **Compute normalization factor**::
@@ -552,67 +523,58 @@ do not apply:
 
      This prefactor ensures the profile integrates to unity.
   ```
-- The steps must stay in sync with the body — a reviewer reads them
-  side-by-side with the code. Stale Implementation Logic is a defect on the
-  same footing as a stale listing.
+- Keep the steps synchronized with the function body. Reviewers compare the
+  steps with the code. Stale `Implementation Logic` is a defect.
 
 ##### `Parameters`
 
-- One entry per signature parameter, **in signature order**, numpydoc
-  `name : type` form where the type is spelled exactly as annotated
-  (`Float[Array, "nkpt nband"]`, `ScalarFloat`).
-- **Units on every physical quantity** ("Photon energy in eV", "In-plane
-  momentum in 1/Angstrom"), and degrees vs radians stated explicitly for
-  every angle.
+- Add one entry for each signature parameter. Keep signature order. Use the
+  numpydoc `name : type` form. Copy the annotated type exactly.
+- **Give units for every physical quantity.** State eV for photon energy and
+  1/Angstrom for momentum. State degrees or radians for every angle.
 - State defaults in prose: "Default 15.0."
-- **Mark static (non-traced) parameters** — anything passed via
-  `static_argnames`, Python `int`/`str`/`bool` values that drive shapes or
-  control flow, and values landing in `eqx.field(static=True)`:
-  *"(**static** — a compile-time constant; changing it triggers
-  retracing)"*.
-- PyTree arguments name their type with a `:class:` reference; do **not**
-  re-document the PyTree's fields — that documentation lives once, on the
-  type.
+- **Mark static, non-traced parameters.** This group includes
+  `static_argnames` and Python values that control shapes or flow. It also
+  includes values in `eqx.field(static=True)`. State that changing the value
+  causes retracing.
+- Name each PyTree type with a `:class:` reference. Do **not** repeat its field
+  documentation. Document the fields only on the type.
 
 ##### `Returns` / `Yields`
 
-- Name each return value after the **type-annotated variable actually
-  returned** (assign-before-returning), so the docstring, the body, and the
-  signature agree; `name : type` with units. A `Tuple[...]` return gets one
-  named entry per element, in order.
+- Name each return value after the **type-annotated variable that the body
+  returns**. Use `name : type` and state the units. Give each tuple element a
+  named entry in order.
 
 ##### `Raises`
 
-- Document **every explicit raise**: `ValueError` for static validation
-  (with the violated condition), and `EquinoxRuntimeError` for traced
-  `eqx.error_if` checks (with the runtime condition, e.g. "If ``sigma`` and
-  ``gamma`` are simultaneously zero"). Do not document beartype/jaxtyping
-  rejections — the typing machinery is implicit.
+- Document **every explicit raise**. Use `ValueError` for static validation and
+  state the failed condition. Use `EquinoxRuntimeError` for traced
+  `eqx.error_if` checks and state the runtime condition. Do not document
+  beartype or jaxtyping rejections.
 
 ##### `Notes`
 
-- Physics caveats and approximation limits that a *user* needs (validity
-  ranges, convention pins by reference to the physics canon — never re-pin
-  a convention locally).
-- **Differentiability notes are mandatory where relevant**: which
-  parameters carry gradients, how `safe_*` guards behave at boundary rays,
-  and any known zero-gradient plateau (e.g. constant extrapolation outside
-  a tabulation grid). A *documented* zero gradient is a stated limitation;
-  an undocumented one is a bug.
+- State the physics limitations and approximation limits that a user needs.
+  Reference the physics canon for conventions. Do not define a local
+  convention.
+- **Add differentiability notes when they are relevant.** Identify parameters
+  that carry gradients. Describe `safe_*` guards at boundary rays. State each
+  known zero-gradient plateau. A documented zero gradient is a limitation. An
+  undocumented zero gradient is a bug.
 
 ##### `References`
 
 - Numpydoc footnotes (`.. [1] Author, "Title", Journal Vol, pages
   (year).`), cited in the text as `[1]_`.
-- **Footnote labels must be unique across the whole module**, not just the
-  docstring: `automodule` renders every docstring of a module on one page,
-  and two functions both using `.. [1]` collide. Continue numbering across
-  the module (`voigt` uses `[1]`, `yeh_lindau_weights` uses `[2]`).
+- **Use unique footnote labels across the module.** The `automodule` directive
+  renders all module docstrings on one page. Duplicate `.. [1]` labels collide.
+  Continue the numbering across functions.
 
 ##### `See Also`
 
-- Related public functions as `name : one-line description` — use the
-  target's verbatim summary line where it fits.
+- List related public functions as `name : one-line description`. Use the
+  target's summary verbatim when it fits.
 
 ##### `Examples`
 
@@ -646,59 +608,52 @@ class SelfEnergyConfig(eqx.Module):
 
 - Summary line and extended summary follow the same rules as functions;
   `:see:` points at the type's test class.
-- **`Attributes` documents every field** in declaration order —
-  `name : type` with units — and flags every `eqx.field(static=True)` field
-  as **static**.
-- No `__init__` docstring: Equinox generates the constructor, and the
-  construction contract is documented once, on the `make_*` factory.
-  `See Also` names that factory.
+- Document every field in `Attributes` and keep declaration order. Use
+  `name : type` and state units. Mark each `eqx.field(static=True)` field as
+  **static**.
+- Do not add an `__init__` docstring. Equinox generates the constructor.
+  Document the construction contract on the `make_*` factory. Name that
+  factory in `See Also`.
 - `Methods` section only if the class exposes public methods.
 
 ##### Factory (`make_*`) docstrings
 
-- The factory's docstring **is the validation contract**: state which
-  checks are static (`raise ValueError`, resolved at trace time) and which
-  are traced (`eqx.error_if`, raised at runtime under `jit`), and mirror
-  both in `Raises`. `Returns` names the constructed instance variable.
+- Use the factory docstring as the validation contract. Identify static
+  `ValueError` checks and traced `eqx.error_if` checks. Repeat both categories
+  in `Raises`. Name the constructed variable in `Returns`.
 
 ##### Private objects and raw strings
 
-- `_`-prefixed helpers need at least a summary line; helpers doing real
-  numerics (recurrences, quadratures, Taylor seeds) carry full `Parameters`
-  / `Returns` / `Notes` — private code is exempt from the three-places
-  rule, not from being understandable.
-- Use a raw string (`r"""`) the moment a docstring contains a backslash —
-  matrix-element and self-energy docstrings usually do.
+- Give each `_`-prefixed helper at least a summary. Give numerical helpers full
+  `Parameters`, `Returns`, and `Notes` sections. Private code is exempt only
+  from the three-places rule.
+- Use a raw string (`r"""`) when a docstring contains a backslash.
 
 ### Code Style
 
-Style is enforced by Ruff (`line-length = 79`, `target-version = "py312"`,
+Ruff enforces the style (`line-length = 79`, `target-version = "py312"`,
 double quotes). The active lint rule set includes `D, E, F, B, I, N, UP, ANN,
 S, A, C4, PIE, PT, RET, SIM, ARG, ERA, PL`. Key conventions:
 
 - **Variable Names**: descriptive `snake_case`; long names over abbreviations
   (`photoemission_intensity`, not `pi`). Scientific single-letter symbols
-  (`G`, `L`, `S`) are permitted where they mirror the physics.
-- **No inline comments in `src/` unless absolutely necessary.** All
-  explanation lives in the docstring, which states — in Simplified
-  Technical English — what the function ingests (`Parameters`), what it
-  outputs (`Returns`), and how the process happens inside
-  (`Implementation Logic`). The only sanctioned comments are tooling
-  directives (`# noqa: <rule>`, `# type: ignore[<rule>]`) and a one-line
-  *why* that cannot live in the docstring (e.g. a workaround pinned to an
-  upstream issue). A comment that narrates *what* the next line does is a
-  defect — delete it or move the content into the docstring.
+  (`G`, `L`, `S`) can mirror the physics.
+- **Do not use inline comments in `src/` unless they are necessary.** Put the
+  explanation in the docstring. Use `Parameters`, `Returns`, and
+  `Implementation Logic` to explain the function. Tool directives are valid
+  comments. A one-line reason is also valid when a docstring cannot contain
+  it. Delete a comment that only describes the next line.
 - **Pure functions**: no side effects; return new data.
 - **Imports**: sorted by isort (`I`); imports inside functions only to guard
   optional dependencies or platform branches.
 
 ## Testing
 
-The test suite uses `pytest` with `chex`, `pytest-cov`, and `pytest-xdist`;
-property-based tests use `hypothesis`. Tests are first-class source: the same
-typing and docstring discipline as `src/` applies (every test method is
-`def test_*(self) -> None:` with annotated intermediates; test docstrings
-state *what* is verified — property, tolerance, units — and *how*).
+The test suite uses `pytest` with `chex`, `pytest-cov`, and `pytest-xdist`.
+Property-based tests use `hypothesis`. Tests follow the same type and docstring
+rules as `src/`. Every test method returns `None` and uses annotated
+intermediates. Its docstring states what the test verifies and how it verifies
+that property.
 
 ### Test Layout
 
@@ -720,65 +675,65 @@ tests/
     └── test_types/...                 # one test_<module>.py per source module
 ```
 
-- Test files are named `test_<module>.py`; test classes `Test*` (typically
-  `chex.TestCase`); test functions `test_*`.
+- Name test files `test_<module>.py`.
+- Name test classes `Test*` and usually inherit from `chex.TestCase`.
+- Name test functions `test_*`.
 - One `Test<Symbol>` class per public symbol, carrying the `:see:`
   back-reference to the symbol under test.
 
 ### What a Test Must Validate Against
 
-**External truths, never diffpes's own outputs.** A verification test compares
-against a closed-form result (hydrogenic radial integrals, Rashba spinors,
-free-electron kinematics), a `scipy`/`sympy` reference value, or a published
-number (e.g. a pinned chinook cross-check) — not against a stored output of
-this package, and not against a magic number whose only provenance is the
-function under test.
+**Use external truths, never diffpes outputs.** Compare verification results
+against a closed-form result, a `scipy` or `sympy` reference value, or a
+published number. Closed-form examples include hydrogenic radial integrals,
+Rashba spinors, and free-electron kinematics. A pinned chinook cross-check is
+an example of a published number. Do not use a stored diffpes output or an
+unverified magic number.
 
-**Gradients are gated, not assumed.** Every differentiable primitive gets a
-grad-vs-finite-difference test (central differences, stated tolerance), plus a
-zero-gradient tripwire for parameters that must carry sensitivity. A test
-suite that only checks forward values cannot catch a corrupted Fisher row.
+**Test gradients explicitly.** Give every differentiable primitive a central
+finite-difference test with a stated tolerance. Add a zero-gradient tripwire
+for every parameter that must carry sensitivity. Forward-value tests cannot
+detect a corrupted Fisher row.
 
 **Writing tests:**
 - Prefer `chex` assertions over bare `assert` for arrays:
   `chex.assert_shape`, `chex.assert_trees_all_close`,
   `chex.assert_tree_all_finite`.
-- Use parameterized/table-driven cases for convention-sensitive code (signs,
-  phases, orbital orderings), and `hypothesis` for invariants (unitarity,
-  sum rules, gauge invariance under random eigenvector phases).
-- Test JAX compatibility explicitly: `jit`, `grad`, and `vmap` paths where
-  relevant.
+- Use parameterized cases for convention-sensitive code, including signs,
+  phases, and orbital orderings.
+- Use `hypothesis` for invariants, including unitarity, sum rules, and gauge
+  invariance under random eigenvector phases.
+- Test the relevant `jit`, `grad`, and `vmap` paths explicitly.
 
 ### Test Code Conventions
 
-Tests are first-class source: the same style discipline as `src/` applies —
-with a few test-specific adaptations:
+Tests are first-class source. Apply the `src/` style rules with the following
+test-specific adaptations:
 
 - **Type-hint test bodies and helpers exactly as in `src/`.** Every test
-  method is `def test_*(self) -> None:`; annotate intermediate variables; the
-  assign-before-returning rule applies to any helper that returns data.
-  Shared helpers carry full `jaxtyping` annotations (and
-  `@jaxtyped(typechecker=beartype)` where arrays flow).
+  method uses `def test_*(self) -> None:`. Annotate intermediate variables.
+  Apply the assign-before-returning rule to every helper that returns data.
+  Give shared helpers complete `jaxtyping` annotations. Apply
+  `@jaxtyped(typechecker=beartype)` when arrays flow through a helper.
 - **Document *what* and *how* on every test, class, and module (numpydoc).**
-  A test's docstring is its specification, not a label. Open with the
-  imperative summary line, then an `Extended Summary` stating **what** is
-  verified (the property, invariant, or expected value — with units and
-  tolerances), and a `Notes` section describing **how** (inputs/fixtures, the
-  assertion strategy, and the `jit`/`grad`/`vmap` variant exercised). The
-  **module** docstring summarises that file's coverage; each **`Test<Symbol>`
-  class** docstring names the symbol under test and the scope of its cases.
-- **Test docstrings are published documentation.** The test suite is rendered
-  as a *Testing / Validation* reference in the Sphinx docs, so these
-  docstrings are user-facing documentation of *what the library guarantees
-  and how each guarantee is checked*. Write them as reader-facing prose; the
-  `:see:` cross-reference makes the source ↔ test link navigable in **both**
-  directions in the rendered docs.
+  Treat a test docstring as a specification. Start with an imperative summary
+  line. In `Extended Summary`, state the verified property, invariant, or
+  expected value. Include applicable units and tolerances. In `Notes`,
+  describe the inputs, fixtures, assertion strategy, and relevant JAX
+  transformations. Make each module docstring summarize the file's coverage.
+  Make each **`Test<Symbol>` class** docstring name the symbol and case scope.
+- **Publish test docstrings as documentation.** Sphinx renders the test suite
+  as a *Testing / Validation* reference. These
+  docstrings explain library guarantees and their verification methods. Write
+  them as reader-facing prose. Use paired `:see:` cross-references to connect
+  source and test documentation in both directions.
 - **No `__all__` or `Routine Listings` in test modules.** Tests are not a
-  public API, so the three-places rule does **not** apply; a test module needs
-  only a one-line summary + extended-summary docstring.
-- **Private helpers are `_`-prefixed and local; reused fixtures go in the
-  shared helper modules** (`tests/_factories.py`, `tests/_assertions.py`,
-  `tests/_types.py`), not copy-pasted across files.
+  public API, so the three-places rule does **not** apply. Give each test
+  module a one-line summary and an extended summary.
+- **Prefix private helpers with `_` and keep them local.** Put reused fixtures
+  in the shared helper modules. Use `tests/_factories.py`,
+  `tests/_assertions.py`, or `tests/_types.py`. Do not copy shared fixtures
+  across files.
 
 Example:
 
@@ -823,10 +778,9 @@ class TestFermiFunction(chex.TestCase):
         chex.assert_trees_all_close(occupations, 0.5 * jnp.ones(3), rtol=1e-12)
 ```
 
-The `:see:` pair is matched: the source symbol points forward to
-`Test<Symbol>`, and the test class points back to the symbol — add the
-back-reference whenever you add the forward one, and renaming either side
-means updating both.
+Match each `:see:` pair. Make the source symbol point to `Test<Symbol>` and
+the test class point to the symbol. Add both references in the same change.
+Update both references when either target changes.
 
 ### Running Tests
 
@@ -844,13 +798,13 @@ pytest tests/ --cov=src/diffpes --cov-report=term-missing
 
 ## Tutorial Notebooks
 
-Tutorials live in `tutorials/` as Jupyter notebooks paired with Jupytext
-percent scripts (`.ipynb` plus `.py`) so they can be edited while keeping
-reviewable source diffs. **Explanation lives in markdown cells, not code
-comments** — narrative, motivation, and physics belong in markdown blocks;
-keep code cells comment-free. Markdown cells follow the same ASD-STE100
-prose rules as all other prose in the repository. After editing a paired notebook, sync and strip
-outputs before committing (the pre-commit hooks do this for you).
+Tutorials use paired Jupyter notebooks and Jupytext percent scripts in
+`tutorials/`. The pair contains an `.ipynb` file and a `.py` file. This
+format keeps source differences reviewable. **Put explanations in Markdown
+cells, not code comments.** Put narrative, motivation, and physics in
+Markdown blocks. Keep code cells free of comments. Apply these ASD-STE100
+rules to all Markdown cells. After editing a pair, synchronize it and remove
+outputs before committing. The pre-commit hooks perform these actions.
 
 ## Pull Request Process
 
@@ -874,24 +828,24 @@ pre-commit run --all-files
 pytest
 ```
 
-`ty` is the project's type checker; `pre-commit` runs ruff (check + format)
-and the other hooks. If a hook modifies files, the commit aborts — re-stage
+`ty` is the project's type checker. `pre-commit` runs ruff checks, ruff
+formatting, and the other hooks. If a hook modifies files, stage the changes
 and commit again.
 
-Two files are **generated by pre-commit hooks — do not edit them by hand**:
-`.github/badges/loc.json` (the lines-of-code badge) and `requirements.txt`
-(exported from `uv.lock` so the GitHub dependency graph, which does not
-read `uv.lock` yet, sees a supported manifest). Both regenerate locally at
-commit time; no CI job writes to the repository.
+Pre-commit hooks generate two files. **Do not edit these files manually.**
+The files are `.github/badges/loc.json` and `requirements.txt`. The first file
+contains badge data for the line count. The second file exports `uv.lock` for
+the GitHub dependency graph. GitHub does not yet read `uv.lock` directly.
+Both files regenerate locally during a commit. CI does not write them.
 
 ### PR Guidelines
 
-1. **Branch Naming:** descriptive, e.g. `feature/slab-hamiltonian` or
+1. **Branch Naming:** Use a descriptive name, such as `feature/slab-hamiltonian` or
    `fix/gaunt-phase-convention`.
-2. **Commit Messages:** a clear summary line, then bullet points for the
+2. **Commit Messages:** Write a clear summary line, then bullet points for the
    substantive changes (implementation, tests, docs).
-3. **PR Description:** what the PR does, why it's needed, how to test it, and
-   any breaking changes.
+3. **PR Description:** State the purpose, reason, test method, and breaking
+   changes.
 
 ### Review Process
 
@@ -903,33 +857,37 @@ All PRs require:
 
 ## Issue Guidelines
 
-**Bug reports** include: a minimal reproducible example, expected vs actual
-behavior, environment details (Python, JAX, GPU/CPU), and error messages.
-For a *wrong-gradient* bug, include the finite-difference comparison — it is
-as much a bug as a wrong forward value.
+**Bug reports:** Include a minimal reproducible example, expected and actual
+behavior, environment details, and error messages. Environment details include
+the Python version, JAX version, and processor type. For a *wrong-gradient*
+bug, include the finite-difference comparison. Treat a wrong gradient as a
+wrong forward value.
 
-**Feature requests** include: the use case, proposed API (if applicable),
-performance considerations, and the relationship to existing functionality.
+**Feature requests:** Include the use case, proposed API, performance
+considerations, and relationship to existing functionality. Omit the proposed
+API when it does not apply.
 
 ## Development Guidelines
 
 ### Adding New Features
 
 1. **Design Phase:**
-   - Discuss the approach in an issue first; check the planning repo for an
-     owning plan — most subsystems have one, with pinned conventions and gates.
+   - Discuss the approach in an issue first.
+   - Check the planning repository for the owning plan.
+   - Follow the plan's pinned conventions and gates.
    - Consider JAX constraints (tracing, shapes, purity, degeneracies) early.
    - Plan the type signatures, custom types, and public API.
 
 2. **Implementation:**
-   - **Any new type, PyTree, or `make_*` factory goes in `diffpes.types`** —
-     never in the consuming subpackage; import it from there.
-   - Place the code in the appropriate subpackage and export it via that
-     package's `__init__.py` (`__all__`), maintaining the three-places rule.
+   - **Put every new type, PyTree, or `make_*` factory in `diffpes.types`.**
+   - Import the new object into the consuming subpackage.
+   - Place other code in the appropriate subpackage.
+   - Export public code through the package's `__init__.py` and `__all__`.
+   - Maintain the three-places rule.
    - Decorate with `@jaxtyped(typechecker=beartype)` and annotate fully.
    - Add numpydoc docstrings with a `:see:` cross-reference to the tests.
-   - Add tests mirroring the source path under `tests/test_diffpes/`,
-     including external-truth and grad-vs-finite-difference gates.
+   - Mirror the source path under `tests/test_diffpes/`.
+   - Add external-truth and gradient finite-difference gates.
 
 3. **Documentation:**
    - Update API documentation and `Routine Listings`.
@@ -938,27 +896,27 @@ performance considerations, and the relationship to existing functionality.
 
 ### API Evolution (zero-legacy)
 
-The codebase carries **no compatibility layer**. When an API changes:
+The codebase has **no compatibility layer**. When an API changes:
 
-- **No shims, aliases, re-exports, or `DeprecationWarning`s** for old import
-  paths or signatures.
-- Update every call site and **delete** the old path in the *same* change;
-  two implementations or import paths never ship together.
+- Add **no shims, aliases, re-exports, or `DeprecationWarning`s** for old
+  import paths or signatures.
+- Update every call site and **delete** the old path in the same change.
+- Never ship two implementations or import paths together.
 - The **only** migration record is a `CHANGELOG.md` note.
-- Prefer getting the API right over preserving a wrong one — pre-1.0,
-  breaking changes are allowed and expected.
+- Prefer a correct API over preserving an incorrect one. Pre-1.0 releases can
+  contain breaking changes.
 
 ### Versioning
 
 `[project].version` in `pyproject.toml` is the **single source of truth** for
-the package version (CalVer, e.g. `2026.06.01`; note PEP 440 normalizes it to
-`2026.6.1` in built artifacts).
+the package version. Use CalVer, such as `2026.06.01`. PEP 440 normalizes this
+example to `2026.6.1` in built artifacts.
 
 ### Building and Releasing
 
-Packaging is **uv end-to-end**: the build backend is `uv_build` (see
-`[build-system]` in `pyproject.toml`) and releases go out with `uv publish` —
-no `setuptools`, `build`, or `twine` anywhere.
+Use **uv for the complete packaging process**. The build backend is `uv_build`
+in the `pyproject.toml` `[build-system]` table. Publish releases with
+`uv publish`. Do not use `setuptools`, `build`, or `twine`.
 
 ```bash
 # Build the sdist and wheel into dist/
@@ -973,13 +931,15 @@ UV_PUBLISH_TOKEN=<pypi-token> uv publish
 
 Release checklist:
 
-1. Bump `[project].version` (CalVer) and update `CHANGELOG.md` in the same
+1. Update `[project].version` with CalVer and update `CHANGELOG.md` in the same
    commit.
-2. Run the full wall (`ruff check src/ tests/`, `pydoclint src/`, `ty check`,
-   `pytest`) at the release commit.
-3. `uv build` from a clean tree; verify the wheel contains the full
-   `diffpes/` package and the metadata carries `License-Expression: MIT`.
-4. Tag the release commit (`v<version>`), then `uv publish`.
+2. Run `ruff check src/ tests/`, `pydoclint src/`, `ty check`, and `pytest` on
+   the release commit.
+3. Run `uv build` from a clean tree.
+4. Verify that the wheel contains the complete `diffpes/` package.
+5. Verify that its metadata contains `License-Expression: MIT`.
+6. Tag the release commit with `v<version>`.
+7. Run `uv publish`.
 
 ## Getting Help
 

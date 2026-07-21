@@ -549,7 +549,7 @@ class TestForwardcertificate:
 
         Notes
         -----
-        Constructs the shared complete fixture and inspects its flattened JAX
+        The test constructs the shared complete fixture and inspects its flattened JAX
         leaves while static vocabulary remains outside the numerical tree.
         """
         certificate: ForwardCertificate = _certificate()

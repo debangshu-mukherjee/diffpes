@@ -35,7 +35,7 @@ class TestOrbitalBasis:
 
         Notes
         -----
-        Constructs the basis with explicit tuples, flattens and unflattens it,
+        The test constructs the basis with explicit tuples, flattens and unflattens it,
         and compares every static field exactly.
         """
         basis: OrbitalBasis = make_orbital_basis(
@@ -72,7 +72,7 @@ class TestSlaterParams:
 
         Notes
         -----
-        Constructs one radial parameter carrier, differentiates an independent
+        The test constructs one radial parameter carrier, differentiates an independent
         quadratic loss with JAX, and compares its ``zeta`` gradient with 4.
         """
         basis: OrbitalBasis = make_orbital_basis((1,), (0,), (0,))
@@ -107,7 +107,7 @@ class TestMakeOrbitalBasis:
 
         Notes
         -----
-        Constructs a valid two-orbital basis without labels and compares the
+        The test constructs a valid two-orbital basis without labels and compares the
         immutable generated tuple exactly.
         """
         basis: OrbitalBasis = make_orbital_basis(
@@ -126,7 +126,7 @@ class TestMakeOrbitalBasis:
 
         Notes
         -----
-        Calls the factory once with mismatched quantum numbers and once with an
+        The test calls the factory once with mismatched quantum numbers and once with an
         extra label, matching the shared static diagnostic.
         """
         with pytest.raises(ValueError, match="same length"):
@@ -171,7 +171,7 @@ class TestMakeSlaterParams:
 
         Notes
         -----
-        Constructs a two-orbital basis and radial carrier without coefficients,
+        The test constructs a two-orbital basis and radial carrier without coefficients,
         then compares shape, dtype, and values with Chex.
         """
         basis: OrbitalBasis = make_orbital_basis((1, 2), (0, 1), (0, 0))
@@ -215,7 +215,7 @@ class TestMakeSlaterParams:
 
         Notes
         -----
-        Uses the eager-and-JIT rejection helper with zero exponent and then a
+        The test uses the eager-and-JIT rejection helper with zero exponent and then a
         two-row coefficient matrix for a one-orbital basis.
         """
         basis: OrbitalBasis = make_orbital_basis((1,), (0,), (0,))

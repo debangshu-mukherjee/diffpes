@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-Connects stable predicate identities to pure functions evaluated inside the
-compiled certification kernel. Registration selects programs statically;
-every check returns a :class:`~diffpes.types.DomainResult` with a continuous
-margin and a derived Boolean outcome.
+This module connects stable predicate identities to pure functions. The
+compiled certification kernel evaluates these functions. Registration selects
+programs statically. Every check returns a ``DomainResult`` with a continuous
+margin and a Boolean outcome.
 
 Routine Listings
 ----------------
@@ -85,8 +85,8 @@ def get_check(check_id: str) -> CheckFunction:
 
            check: CheckFunction = _check_registry()[check_id]
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -127,8 +127,8 @@ def list_checks() -> tuple[str, ...]:
 
            checks: tuple[str, ...] = tuple(sorted(_check_registry()))
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------

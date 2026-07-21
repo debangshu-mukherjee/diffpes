@@ -1,13 +1,11 @@
-"""Tests for radial integrals.
+"""Validate radial integrals.
 
 Extended Summary
 ----------------
-Validates the ``radial_integral`` function that computes the overlap
-integral of a Slater radial wavefunction with a spherical Bessel
-function j_{l'}(kr).  Tests compare the l'=0 numerical integral against
-a known analytical Fourier-transform result for Slater 1s orbitals, and
-verify the autodiff gradient with respect to the Slater exponent zeta
-against a central finite-difference estimate.
+The tests validate ``radial_integral`` for a Slater radial wavefunction
+and a spherical Bessel function. They compare the ``l'=0`` numerical
+integral with an analytical result for Slater 1s orbitals. They also compare
+the ``zeta`` autodiff gradient with a central finite difference.
 
 """
 
@@ -23,11 +21,9 @@ from diffpes.radial import radial_integral, slater_radial
 class TestRadialIntegral(chex.TestCase):
     """Validate radial-integral values and derivatives.
 
-    Tests the numerical radial overlap integral
-    I(k) = integral_0^inf R(r) * j_{l'}(kr) * r^2 dr
-    against analytical results for Slater-type orbitals and verifies
-    that JAX autodiff gradients with respect to the Slater exponent
-    zeta agree with finite-difference estimates.
+    The tests compare the numerical radial overlap integral with analytical
+    results for Slater-type orbitals. They also compare
+    JAX autodiff gradients for ``zeta`` with finite differences.
 
     :see: :func:`~diffpes.radial.radial_integral`
     """
@@ -36,10 +32,9 @@ class TestRadialIntegral(chex.TestCase):
     def test_l0_slater_matches_analytic_integral(self) -> None:
         """Verify the l'=0 radial integral matches the analytical Fourier transform.
 
-        For a Slater 1s orbital R(r) = N * r^0 * exp(-zeta*r) with
-        zeta=1.2, the j_0(kr) = sin(kr)/(kr) overlap integral has the
-        closed-form result 2*N*(3*zeta^2 - k^2)/(zeta^2 + k^2)^3.
-        Uses a dense 25000-point grid up to r=50 Bohr and test k-values
+        The test uses a Slater 1s orbital with ``zeta=1.2``. Its
+        ``j_0(kr)`` overlap integral has a closed-form result.
+        The test uses a dense 25000-point grid up to r=50 Bohr and test k-values
         [0.2, 0.8, 1.4].  Asserts the real part of the numerical integral
         agrees with the analytical expression to within 5e-3 in both
         absolute and relative tolerance.  Run under both JIT and eager
@@ -47,7 +42,7 @@ class TestRadialIntegral(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         zeta: float
         r: Array
         radial: Array
@@ -77,18 +72,18 @@ class TestRadialIntegral(chex.TestCase):
     def test_gradient_wrt_zeta_matches_finite_difference(self) -> None:
         """Verify autodiff gradient w.r.t. zeta matches finite differences.
 
-        Defines a scalar objective that computes the real part of the
-        l'=0 radial integral for a Slater 1s orbital at k=0.9,
-        zeta=1.1.  Differentiates with ``jax.grad`` and compares against
+        The test defines the real part of the ``l'=0`` radial integral as
+        a scalar objective. It uses a Slater 1s orbital at ``k=0.9`` and
+        ``zeta=1.1``. The test differentiates with ``jax.grad`` and compares with
         a central finite-difference estimate with step eps=5e-4.  Uses
         an 18000-point grid up to r=45 Bohr.  Asserts agreement to
-        within 5e-3 (atol and rtol), confirming that the numerical
-        integration (trapezoid rule), Slater radial construction, and
-        Bessel evaluation are all smoothly differentiable end-to-end.
+        within ``5e-3`` for both tolerances. This result confirms smooth
+        derivatives through the integration, radial construction, and Bessel
+        evaluation.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
         k: Array
         zeta0: Array
@@ -115,7 +110,7 @@ class TestRadialIntegral(chex.TestCase):
 
 
 class TestRadialIntegrateErrors:
-    """Tests for invalid input handling in radial_integral.
+    """Validate invalid input handling in radial_integral.
 
     Validates that ``radial_integral`` raises ``ValueError`` for
     negative ``l_prime`` values.
@@ -126,13 +121,13 @@ class TestRadialIntegrateErrors:
     def test_negative_l_prime_raises(self) -> None:
         """Verify that l_prime < 0 raises ValueError.
 
-        Calls ``radial_integral`` with ``l_prime=-1`` and asserts a
-        ``ValueError`` matching "non-negative" is raised, covering the
+        The test calls ``radial_integral`` with ``l_prime=-1`` and expects a
+        ``ValueError`` that matches "non-negative". This input covers the
         guard at the top of the function.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
         radial: Array
         k: Array

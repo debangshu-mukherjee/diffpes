@@ -1,4 +1,4 @@
-"""Types-owned records produced by certificate inspection.
+"""Store types-owned records from certificate inspection.
 
 Extended Summary
 ----------------
@@ -21,8 +21,9 @@ from jaxtyping import jaxtyped
 class CertificateDiff(eqx.Module):
     """Store categorized differences between two forward certificates.
 
-    Differences are grouped by scientific meaning, numerical evidence,
-    execution environment, and audit metadata without re-running the model.
+    The record groups differences by scientific meaning, numerical evidence,
+    execution environment, and audit metadata. It does not run the model
+    again.
 
     :see: :class:`~.test_inspection.TestCertificateDiff`
 
@@ -60,7 +61,7 @@ class CertificateDiff(eqx.Module):
     @property
     @jaxtyped(typechecker=beartype)
     def identical(self) -> bool:
-        """Return whether no categorized difference was found.
+        """Return whether the record contains no categorized difference.
 
         :see: :class:`~.test_inspection.TestCertificateDiff`
 

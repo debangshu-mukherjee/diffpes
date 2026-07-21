@@ -1,17 +1,11 @@
-"""Tests for expanded-input simulation wrappers.
+"""Validate expanded-input simulation wrappers.
 
 Extended Summary
 ----------------
-Validates the convenience wrappers in :mod:`diffpes.simul.expanded` that
-accept plain arrays and scalars instead of PyTree structures. Tests
-verify that make_expanded_simulation_params derives energy_min and
-energy_max correctly from eigenband extrema; that each expanded wrapper
-(novice, basic, basicplus, advanced, expert, soc) produces results
-identical to the corresponding core simulation when given equivalent
-inputs; and that simulate_expanded(level=...) dispatches to the correct
-wrapper and that level='soc' requires surface_spin. All test logic and
-assertions are documented in the docstrings of each test class and
-method.
+The tests validate expanded wrappers that accept arrays and scalars.
+They compare each wrapper with its corresponding core simulation.
+They verify energy-window construction and dispatch for every level.
+They also verify that the SOC level requires spin data.
 
 """
 
@@ -52,10 +46,9 @@ def _make_synthetic_data(
 ) -> tuple[Float[Array, "nk nb"], Float[Array, "nk nb na 9"]]:
     """Generate synthetic eigenband and orbital projection arrays for testing.
 
-    Creates raw arrays (not wrapped in PyTrees) suitable for the
-    expanded-input API. Eigenvalues are linearly spaced from -2.5 to
-    0.75 eV in float64 precision, and all orbital projections are set
-    to a uniform value of 0.1.
+    The helper creates raw arrays for the expanded-input API.
+    It spaces eigenvalues from -2.5 to 0.75 eV with float64 precision.
+    It sets all orbital projections to 0.1.
 
     Parameters
     ----------
@@ -89,19 +82,18 @@ def _make_synthetic_data(
 
 
 class TestExpandedParams(chex.TestCase):
-    """Tests for :func:`diffpes.simul.expanded.make_expanded_simulation_params`.
+    """Validate :func:`diffpes.simul.expanded.make_expanded_simulation_params`.
 
-    Verifies that the auto-derived energy window is correctly computed from
-    the eigenband extrema with default padding, and that scalar parameters
-    are forwarded accurately.
+    The tests verify the energy window from eigenband extrema and default
+    padding. They also verify all forwarded scalar parameters.
 
     :see: :func:`~diffpes.types.make_expanded_simulation_params`
     """
 
     def test_energy_window_matches_expanded_default(self) -> None:
-        """Verify that energy_min and energy_max are derived from eigenbands.
+        """Verify derivation of the energy bounds from eigenbands.
 
-        This case establishes the energy window matches expanded default contract for
+        The test establishes the energy window matches expanded default contract for
         expanded params with the concrete values and array shapes described below.
 
         Notes
@@ -119,12 +111,12 @@ class TestExpandedParams(chex.TestCase):
            each within a tolerance of 1e-12.
 
         4. **Check fidelity**:
-           Assert that the fidelity parameter is forwarded correctly as 100.
+           Check that the fidelity parameter equals 100.
 
         **Expected assertions**
 
-        The auto-derived energy window matches ``[min - padding, max + padding]``
-        and the fidelity value is preserved exactly.
+        The derived energy window matches ``[min - padding, max + padding]``.
+        The fidelity value remains exactly 100.
         """
         eigenbands: Array
         params: diffpes.types.SimulationParams
@@ -160,7 +152,7 @@ class TestSimulateNoviceExpanded(chex.TestCase):
 
         Notes
         -----
-        Passes the raw synthetic arrays and explicit novice parameters to the
+        The test passes the raw synthetic arrays and explicit novice parameters to the
         wrapper, then checks its shape and finite values with Chex.
         """
         eigenbands: Array
@@ -183,7 +175,7 @@ class TestSimulateNoviceExpanded(chex.TestCase):
 
 
 class TestSimulateBasicExpanded(chex.TestCase):
-    """Tests for :func:`diffpes.simul.expanded.simulate_basic_expanded`.
+    """Validate :func:`diffpes.simul.expanded.simulate_basic_expanded`.
 
     Verifies that the expanded basic wrapper produces results identical to
     manually constructing PyTree inputs and calling the core
@@ -195,24 +187,20 @@ class TestSimulateBasicExpanded(chex.TestCase):
     def test_matches_core_basic_simulation(self) -> None:
         """Verify that the expanded wrapper matches the core basic simulation.
 
-        This case establishes the matches core basic simulation contract for expanded
+        The test establishes the matches core basic simulation contract for expanded
         basic wrapper with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Build reference manually**:
-           Construct ``BandStructure``, ``OrbitalProjection``, and
-           ``SimulationParams`` PyTrees by hand from raw arrays, using
-           zero-filled k-points and the same scalar parameters
-           (sigma=0.06, fidelity=240, temperature=20, photon_energy=35).
+           Construct equivalent PyTrees from the raw inputs.
 
         2. **Run core simulation**:
            Call ``simulate_basic`` directly with the PyTree inputs to
            obtain the expected spectrum.
 
         3. **Run expanded wrapper**:
-           Call ``simulate_basic_expanded`` with the same raw arrays and
-           scalar parameters.
+           Call the expanded wrapper with equivalent inputs.
 
         4. **Compare**:
            Assert that both intensity arrays and energy axes match to
@@ -220,9 +208,8 @@ class TestSimulateBasicExpanded(chex.TestCase):
 
         **Expected assertions**
 
-        The intensity and energy axis from the expanded wrapper are
-        numerically identical to those from the core function, confirming
-        that the wrapper correctly constructs all intermediate PyTrees.
+        The expanded and core results have identical intensity and energy axes.
+        This agreement verifies construction of all intermediate PyTrees.
         """
         eigenbands: Array
         surface_orb: Array
@@ -283,7 +270,7 @@ class TestSimulateBasicplusExpanded(chex.TestCase):
 
         Notes
         -----
-        Evaluates the raw synthetic arrays at 21.2 eV and checks the output
+        The test evaluates the raw synthetic arrays at 21.2 eV and checks the output
         intensity shape and finiteness with Chex.
         """
         eigenbands: Array
@@ -305,12 +292,10 @@ class TestSimulateBasicplusExpanded(chex.TestCase):
 
 
 class TestSimulateAdvancedExpanded(chex.TestCase):
-    """Tests for :func:`diffpes.simul.expanded.simulate_advanced_expanded`.
+    """Validate :func:`diffpes.simul.expanded.simulate_advanced_expanded`.
 
-    Verifies that the expanded advanced wrapper correctly converts incident
-    angles from degrees to radians and produces results identical to manually
-    calling the core :func:`~diffpes.simul.spectrum.simulate_advanced` with
-    pre-converted radian angles.
+    The tests verify conversion of incident angles from degrees to radians.
+    They compare the wrapper result with a core call that uses radians.
 
     :see: :func:`~diffpes.simul.simulate_advanced_expanded`
     """
@@ -318,27 +303,21 @@ class TestSimulateAdvancedExpanded(chex.TestCase):
     def test_degree_conversion_matches_core_advanced(self) -> None:
         """Verify that degree-input angles produce the same result as radian-input.
 
-        This case establishes the degree conversion matches core advanced contract for
+        The test establishes the degree conversion matches core advanced contract for
         expanded advanced wrapper with the concrete values and array shapes described
         below.
 
         Notes
         -----
         1. **Build reference manually**:
-           Construct PyTree inputs by hand, explicitly converting
-           incident_theta=45 and incident_phi=30 from degrees to radians
-           via ``jnp.deg2rad``, and set polarization_angle=0.25 (already
-           in radians). Use LHP polarization, sigma=0.05, fidelity=220,
-           temperature=25, and photon_energy=21.2.
+           Construct equivalent PyTrees from the raw inputs.
 
         2. **Run core simulation**:
            Call ``simulate_advanced`` directly with the manually built
            PyTrees and polarization config to obtain the expected spectrum.
 
         3. **Run expanded wrapper**:
-           Call ``simulate_advanced_expanded`` with the same angles in
-           degrees (45.0 and 30.0), relying on the wrapper to convert
-           them to radians internally.
+           Call the expanded wrapper with equivalent inputs.
 
         4. **Compare**:
            Assert that both intensity arrays match to within 1e-12
@@ -346,10 +325,8 @@ class TestSimulateAdvancedExpanded(chex.TestCase):
 
         **Expected assertions**
 
-        The intensity from the expanded wrapper (degree input) is
-        numerically identical to the core function (radian input),
-        confirming that the degree-to-radian conversion is applied
-        correctly to both theta and phi.
+        The expanded and core intensities are identical. This agreement
+        verifies conversion of both incident angles.
         """
         eigenbands: Array
         surface_orb: Array
@@ -418,7 +395,7 @@ class TestSimulateExpertExpanded(chex.TestCase):
 
         Notes
         -----
-        Evaluates the synthetic raw arrays with explicit Voigt and incidence
+        The test evaluates the synthetic raw arrays with explicit Voigt and incidence
         parameters, then checks the output shape and finite values with Chex.
         """
         eigenbands: Array
@@ -445,7 +422,7 @@ class TestSimulateExpertExpanded(chex.TestCase):
 
 
 class TestSimulateExpanded(chex.TestCase):
-    """Tests for :func:`diffpes.simul.expanded.simulate_expanded`.
+    """Validate :func:`diffpes.simul.expanded.simulate_expanded`.
 
     Verifies that the level-based dispatch function correctly routes to
     the appropriate expanded wrapper and produces identical results.
@@ -456,16 +433,13 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_expert_matches_direct_wrapper(self) -> None:
         """Verify that dispatching with level="Expert" matches the direct wrapper.
 
-        This case establishes the dispatch expert matches direct wrapper contract for
+        The test establishes the dispatch expert matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Run direct wrapper**:
-           Call ``simulate_expert_expanded`` with explicit parameters
-           (sigma=0.04, gamma=0.1, fidelity=200, temperature=15,
-           photon_energy=11, unpolarized, theta=45, phi=0) to produce
-           the expected spectrum.
+           Call the direct wrapper with explicit parameters.
 
         2. **Run dispatcher**:
            Call ``simulate_expanded`` with ``level="Expert"`` and the
@@ -525,15 +499,13 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_novice_matches_direct_wrapper(self) -> None:
         """Verify that dispatching with level='novice' matches the direct wrapper.
 
-        This case establishes the dispatch novice matches direct wrapper contract for
+        The test establishes the dispatch novice matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Run direct wrapper**:
-           Call ``simulate_novice_expanded`` with explicit parameters
-           (sigma=0.04, gamma=0.1, fidelity=200, temperature=15,
-           photon_energy=11) to produce the expected spectrum.
+           Call the direct wrapper with explicit parameters.
 
         2. **Run dispatcher**:
            Call ``simulate_expanded`` with ``level="novice"`` and the
@@ -583,15 +555,13 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_basic_matches_direct_wrapper(self) -> None:
         """Verify that dispatching with level='basic' matches the direct wrapper.
 
-        This case establishes the dispatch basic matches direct wrapper contract for
+        The test establishes the dispatch basic matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Run direct wrapper**:
-           Call ``simulate_basic_expanded`` with explicit parameters
-           (sigma=0.04, fidelity=200, temperature=15,
-           photon_energy=11) to produce the expected spectrum.
+           Call the direct wrapper with explicit parameters.
 
         2. **Run dispatcher**:
            Call ``simulate_expanded`` with ``level="basic"`` and the
@@ -639,15 +609,13 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_basicplus_matches_direct_wrapper(self) -> None:
         """Verify that dispatching with level='basicplus' matches the direct wrapper.
 
-        This case establishes the dispatch basicplus matches direct wrapper contract for
+        The test establishes the dispatch basicplus matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Run direct wrapper**:
-           Call ``simulate_basicplus_expanded`` with explicit parameters
-           (sigma=0.04, fidelity=200, temperature=15,
-           photon_energy=11) to produce the expected spectrum.
+           Call the direct wrapper with explicit parameters.
 
         2. **Run dispatcher**:
            Call ``simulate_expanded`` with ``level="basicplus"`` and the
@@ -695,17 +663,13 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_advanced_matches_direct_wrapper(self) -> None:
         """Verify that dispatching with level='advanced' matches the direct wrapper.
 
-        This case establishes the dispatch advanced matches direct wrapper contract for
+        The test establishes the dispatch advanced matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Run direct wrapper**:
-           Call ``simulate_advanced_expanded`` with explicit parameters
-           (sigma=0.04, fidelity=200, temperature=15, photon_energy=11,
-           polarization="unpolarized", incident_theta=45,
-           incident_phi=0, polarization_angle=0) to produce the
-           expected spectrum.
+           Call the direct wrapper with explicit parameters.
 
         2. **Run dispatcher**:
            Call ``simulate_expanded`` with ``level="advanced"`` and the
@@ -761,7 +725,7 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_unknown_level_raises(self) -> None:
         """Verify that an unknown level raises ValueError with expected message.
 
-        This case establishes the dispatch unknown level raises contract for expanded
+        The test establishes the dispatch unknown level raises contract for expanded
         dispatch with the concrete values and array shapes described below.
 
         Notes
@@ -771,17 +735,15 @@ class TestSimulateExpanded(chex.TestCase):
            required arguments (eigenbands, surface_orb, ef).
 
         2. **Check exception type**:
-           Assert that a ``ValueError`` is raised.
+           Expect a ``ValueError``.
 
         3. **Check error message**:
-           Verify the exception message contains ``"Unknown simulation level"``
-           and lists the available levels (at minimum ``"novice"``), so that
-           users receive actionable feedback on which levels are supported.
+           Verify the error description and one supported level in the message.
 
         **Expected assertions**
 
-        A ``ValueError`` is raised whose message includes both an error
-        description and a hint about valid level names.
+        The function raises ``ValueError`` with an error description and valid
+        level names.
         """
         ctx: Any
 
@@ -802,7 +764,7 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_soc_requires_surface_spin(self) -> None:
         """Verify that level='soc' without surface_spin raises ValueError.
 
-        This case establishes the dispatch soc requires surface spin contract for
+        The test establishes the dispatch soc requires surface spin contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
@@ -811,8 +773,7 @@ class TestSimulateExpanded(chex.TestCase):
            surface_spin passed).
         2. **Call**: Invoke ``simulate_expanded(level="soc", ...)``
            with only the required array args and ef.
-        3. **Check**: Assert that a ``ValueError`` is raised and
-           that the message contains ``"surface_spin"``.
+        3. **Check**: Expect ``ValueError`` and ``"surface_spin"`` in its message.
 
         **Expected assertions**
 
@@ -838,7 +799,7 @@ class TestSimulateExpanded(chex.TestCase):
     def test_dispatch_soc_matches_direct_wrapper(self) -> None:
         """Verify that level='soc' with surface_spin matches simulate_soc_expanded.
 
-        This case establishes the dispatch soc matches direct wrapper contract for
+        The test establishes the dispatch soc matches direct wrapper contract for
         expanded dispatch with the concrete values and array shapes described below.
 
         Notes
@@ -846,9 +807,8 @@ class TestSimulateExpanded(chex.TestCase):
         1. **Setup**: Synthetic eigenbands and surface_orb; build a
            surface_spin array of shape (K, B, A, 6) with non-zero
            z components.
-        2. **Run direct**: Call ``simulate_soc_expanded`` with the
-           same parameters (sigma=0.04, gamma=0.1, fidelity=200,
-           ls_scale=0.01, etc.) to get the expected spectrum.
+        2. **Run direct**: Call ``simulate_soc_expanded`` with the same
+           scalar parameters to get the expected spectrum.
         3. **Run dispatcher**: Call ``simulate_expanded(level="soc",
            ..., surface_spin=surface_spin, ls_scale=0.01)``.
         4. **Compare**: Assert dispatched and expected intensities
@@ -917,12 +877,10 @@ class TestSimulateExpanded(chex.TestCase):
 
 
 class TestSimulateSocExpanded(chex.TestCase):
-    """Tests for :func:`diffpes.simul.expanded.simulate_soc_expanded`.
+    """Validate :func:`diffpes.simul.expanded.simulate_soc_expanded`.
 
-    Verifies that the expanded-input SOC wrapper constructs the same
-    PyTrees (bands, orb_proj with spin, params, pol) as would be
-    built by hand and produces results identical to the core
-    :func:`~diffpes.simul.simulate_soc` function.
+    The tests compare manually built PyTrees with the wrapper PyTrees.
+    They also compare the wrapper result with :func:`~diffpes.simul.simulate_soc`.
 
     :see: :func:`~diffpes.simul.simulate_soc_expanded`
     """
@@ -930,7 +888,7 @@ class TestSimulateSocExpanded(chex.TestCase):
     def test_matches_core_soc_simulation(self) -> None:
         """Verify that the expanded SOC wrapper matches the core simulate_soc.
 
-        This case establishes the matches core soc simulation contract for expanded soc
+        The test establishes the matches core soc simulation contract for expanded soc
         wrapper with the concrete values and array shapes described below.
 
         Notes

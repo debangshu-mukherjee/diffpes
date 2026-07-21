@@ -1,1 +1,1 @@
-"""Tests for radial primitives."""
+"""Validate radial primitives."""

@@ -1,8 +1,8 @@
-"""Differentiable band diagonalization and VASP adapter.
+"""Diagonalize bands and adapt VASP outputs.
 
 Extended Summary
 ----------------
-Wraps ``jnp.linalg.eigh`` with vmap over k-points to produce
+The module wraps ``jnp.linalg.eigh`` with vmap over k-points to produce
 a ``DiagonalizedBands`` PyTree from a ``TBModel``. Also provides
 an adapter to convert VASP ``BandStructure`` + ``OrbitalProjection``
 to the same interface.
@@ -45,10 +45,10 @@ def diagonalize_single_k(
 ) -> tuple[Float[Array, " O"], Complex[Array, "O O"]]:
     """Diagonalize H(k) at a single k-point.
 
-    Delegates to ``jnp.linalg.eigh``, which is the standard LAPACK-style
-    Hermitian eigensolver.  ``eigh`` is used (not ``eig``) because the
-    Hamiltonian is guaranteed Hermitian by construction, which ensures
-    real eigenvalues and an orthonormal eigenvector basis.
+    The function calls the standard LAPACK-style Hermitian eigensolver
+    ``jnp.linalg.eigh``. The Hamiltonian construction guarantees Hermitian
+    symmetry. Therefore, ``eigh`` produces real eigenvalues and an orthonormal
+    eigenvector basis.
 
     ``jnp.linalg.eigh`` returns eigenvalues in **ascending** order and
     eigenvectors as **columns** of the returned matrix: that is,
@@ -58,9 +58,8 @@ def diagonalize_single_k(
     that store eigenvectors as rows.  The caller (``diagonalize_tb``)
     transposes to a band-major layout after vmapping.
 
-    This function is intentionally thin -- a one-liner around ``eigh``
-    -- so that it can be individually tested, mocked, or replaced with
-    a custom differentiable eigensolver if needed.
+    This function contains one call to ``eigh``. Tests can isolate or replace
+    this function with a custom differentiable eigensolver.
 
     :see: :class:`~.test_diagonalize.TestDiagonalizeSingleK`
 
@@ -80,7 +79,8 @@ def diagonalize_single_k(
     -----
     JAX provides analytical gradients through ``eigh`` via implicit
     differentiation of the eigenvalue equation, so
-    ``jax.grad(lambda p: eigenvalues(p).sum())`` works out of the box.
+    ``jax.grad(lambda p: eigenvalues(p).sum())`` works without additional
+    configuration.
     Degenerate eigenvalues can cause numerical instability in the
     backward pass; this is a known JAX limitation.
     """
@@ -101,19 +101,17 @@ def diagonalize_tb(
 ) -> DiagonalizedBands:
     """Diagonalize a TB model at all k-points.
 
-    Builds H(k) for each k-point and diagonalizes via
-    ``jnp.linalg.eigh``. Both operations are vmapped and
-    fully differentiable with respect to ``tb_model.hopping_params``.
+    The function builds H(k) for each k-point and calls ``jnp.linalg.eigh``.
+    ``jax.vmap`` vectorizes both operations. JAX differentiates them with
+    respect to ``tb_model.hopping_params``.
 
-    Internally a closure ``_build_and_diag`` is defined that captures
-    the model parameters (hopping amplitudes, indices, lattice vectors)
-    and maps a single k-point to its ``(eigenvalues, eigenvectors)``
-    pair.  ``jax.vmap`` is then applied over the leading k-point axis,
-    so the entire band structure is computed in one vectorized call
-    without Python loops.
+    The internal ``_build_and_diag`` closure captures the model parameters. It
+    maps one k-point to its eigenvalues and eigenvectors. ``jax.vmap`` applies
+    this closure along the leading k-point axis. One vectorized call computes
+    the complete band structure without Python loops.
 
     After vmapping, the eigenvector array has shape ``(K, O, O)`` in
-    the column-eigenvector convention of ``eigh`` (i.e.
+    the column-eigenvector convention of ``eigh``. Thus,
     ``evecs[k, :, b]`` is band ``b`` at k-point ``k``).  A transpose
     ``(0, 2, 1)`` converts this to the band-major convention
     ``(K, B, O)`` where ``evecs[k, b, :]`` gives the orbital
@@ -122,8 +120,8 @@ def diagonalize_tb(
     of the ARPYES pipeline (projections, matrix elements, spectral
     function).
 
-    The Fermi energy is set to 0.0 by default because bare
-    tight-binding models have no absolute energy reference.
+    The function sets the Fermi energy to 0.0 because bare tight-binding models
+    have no absolute energy reference.
 
     :see: :class:`~.test_diagonalize.TestDiagonalizeTB`
 
@@ -192,45 +190,41 @@ def vasp_to_diagonalized(
     coefficients. This adapter uses ``sqrt(|c|^2)`` with positive
     sign as an approximation. Phase information is lost.
 
-    The orbital projections are summed over atoms and mapped to
-    the orbital basis ordering.
+    The adapter sums the orbital projections over atoms. It then maps them to
+    the orbital basis order.
 
     VASP's PROCAR file provides site- and orbital-projected squared
-    moduli ``|c_{k,b,atom,orb}|^2`` for each eigenstate.  Because
-    the complex phase of each coefficient is discarded during the VASP
-    projection, it is **not possible** to recover the true complex
-    eigenvectors from PROCAR data alone.  This adapter applies the
-    simplest possible approximation: it takes ``sqrt(|c|^2)`` with a
-    uniformly **positive** sign, yielding purely real, non-negative
-    approximate coefficients.
+    moduli ``|c_{k,b,atom,orb}|^2`` for each eigenstate. The VASP projection
+    discards the complex phase of each coefficient. Therefore, PROCAR data
+    cannot recover the true complex eigenvectors. This adapter takes
+    ``sqrt(|c|^2)`` with a positive sign. The approximation produces real,
+    nonnegative coefficients.
 
-    The approximation is exact for any observable that depends only
-    on the modulus of the coefficients (e.g. orbital-resolved density
-    of states), but it introduces errors in any quantity sensitive to
-    relative phases between orbitals (e.g. interference terms in
-    photoemission matrix elements).
+    The approximation is exact for an observable that depends only on the
+    coefficient modulus. It introduces errors when an observable depends on
+    relative orbital phases. Photoemission interference terms have this phase
+    dependence.
 
     **Orbital mapping.** VASP stores projections in a fixed 9-orbital
     ordering for the s, p, and d channels::
 
         [s, py, pz, px, dxy, dyz, dz2, dxz, dx2 - y2]
 
-    This differs from some standard orderings (e.g. the ``(l, m)``
+    This order differs from some standard orders, such as the ``(l, m)``
     convention with m running from -l to +l).  The function maps from
     ``(l, m)`` quantum numbers in the ``OrbitalBasis`` to VASP's
     9-orbital column index via a lookup table.
 
-    **Atom summation.** Before the orbital mapping, the projections are
-    summed over the atom axis (axis 2), collapsing
+    **Sum the atoms.** Before the orbital mapping, the adapter sums the
+    projections over atom axis 2, which changes
     ``(K, B, A, 9) -> (K, B, 9)``.  This is correct when the
     ``OrbitalBasis`` describes a single composite orbital per
     ``(l, m)`` channel rather than per-atom resolution.
 
-    **Normalization.** After taking the square root, each eigenvector
-    (per k-point and band) is normalized so that
-    ``sum_orb |c_{k,b,orb}|^2 = 1``.  A safe-division guard
-    selects a zero vector with a zero gradient when all projections are
-    zero (e.g. core states with no s/p/d weight).
+    **Normalize the vectors.** After the square root, the adapter normalizes
+    each k-point and band eigenvector. Therefore,
+    ``sum_orb |c_{k,b,orb}|^2 = 1``. A safe division selects a zero vector and
+    zero gradient when all projections equal zero.
 
     :see: :class:`~.test_diagonalize.TestVaspToDiagonalized`
 
@@ -246,7 +240,7 @@ def vasp_to_diagonalized(
     phase_loss : Literal["warn", "ignore", "error"]
         Policy for handling lost phase information:
         - ``"warn"`` (default): emit a runtime warning.
-        - ``"ignore"``: proceed silently.
+        - ``"ignore"``: proceed without a warning.
         - ``"error"``: raise ``ValueError`` and abort.
 
     Returns
@@ -263,14 +257,13 @@ def vasp_to_diagonalized(
     Notes
     -----
     The VASP 9-orbital ordering used here covers s, p, and d channels
-    only.  f-orbital projections (l=3) are not supported and will raise
-    a ``ValueError``.  If VASP was run with ``LORBIT=11`` or higher,
-    the PROCAR contains all nine channels; ``LORBIT=10`` may omit
-    per-m decomposition and is not compatible with this adapter.
+    only. The adapter does not support f-orbital projections and raises
+    ``ValueError`` for them. A PROCAR file from ``LORBIT=11`` or higher
+    contains all nine channels. ``LORBIT=10`` can omit the decomposition by m
+    and does not support this adapter.
 
-    The resulting eigenvectors are cast to ``complex128`` for
-    compatibility with the ``DiagonalizedBands`` type even though they
-    are purely real (zero imaginary part).
+    The adapter converts the resulting eigenvectors to ``complex128`` for the
+    ``DiagonalizedBands`` type. Their imaginary parts remain zero.
     """
     i: int
 

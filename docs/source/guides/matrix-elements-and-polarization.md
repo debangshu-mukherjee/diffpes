@@ -1,6 +1,12 @@
 # Matrix Elements and Polarization
 
-The photoemission intensity is not simply the band structure convolved with a lineshape: each transition is weighted by a dipole matrix element that depends on the orbital character of the initial state, the direction and polarization of the light, and the momentum of the outgoing photoelectron. diffpes implements this at two fidelities — a cheap orbital-direction heuristic used by the simulation-level ladder, and a full partial-wave dipole engine ({mod}`diffpes.maths` + {mod}`diffpes.radial`) used by `simulate_tb_radial`. This guide covers both, and states their approximations explicitly.
+Photoemission intensity contains more than a band structure and a lineshape.
+A dipole matrix element weights each transition. This element depends on the
+initial orbital, the light geometry, and the outgoing photoelectron momentum.
+diffpes provides two fidelity levels. The simulation ladder uses a low-cost
+orbital-direction heuristic. `simulate_tb_radial` uses the full partial-wave
+engine from {mod}`diffpes.maths` and {mod}`diffpes.radial`. This guide describes
+both levels and states their approximations.
 
 ## Dipole Selection Rules
 
@@ -16,7 +22,10 @@ $$
 l' = l \pm 1, \qquad m' = m + q, \quad q \in \{-1, 0, +1\}
 $$
 
-where $q$ indexes the spherical components of the polarization vector ($q = 0 \sim z$, $q = \pm 1 \sim x, y$). A p initial state therefore reaches s and d final waves; a d state reaches p and f waves. These rules are baked into the structure of the Gaunt table below.
+The index $q$ identifies the spherical polarization components. The value
+$q = 0$ corresponds to $z$, and $q = \pm 1$ corresponds to $x,y$. A p initial
+state reaches s and d final waves. A d initial state reaches p and f waves.
+The Gaunt table encodes these rules.
 
 ## Real Spherical Harmonics
 
@@ -31,7 +40,10 @@ N_l^0\, P_l^0(\cos\theta) & m = 0 \\[2pt]
 \end{cases}
 $$
 
-with the Condon-Shortley phase handled so that the real-harmonic values are consistent with the real-to-complex transform used in the Gaunt table. `real_spherical_harmonics_all(l_max, theta, phi)` stacks every harmonic up to `l_max` in the standard $l^2 + l + m$ ordering.
+The implementation applies the Condon-Shortley phase. This choice makes the
+values consistent with the real-to-complex transform in the Gaunt table.
+`real_spherical_harmonics_all(l_max, theta, phi)` stacks all harmonics through
+`l_max`. It uses the standard $l^2 + l + m$ ordering.
 
 ```python
 import jax.numpy as jnp
@@ -44,13 +56,19 @@ print(float(y20))  # 0.2381...
 
 ## Gaunt Coefficients
 
-The angular part of the dipole integral is a **Gaunt coefficient** — the integral of three (real) spherical harmonics:
+The angular part of the dipole integral is a **Gaunt coefficient**. This
+coefficient is the integral of three real spherical harmonics:
 
 $$
 G(l, m; l', m'; q) = \int Y_{l'}^{m'}(\hat{r})\; Y_1^{q}(\hat{r})\; Y_l^{m}(\hat{r})\; d\Omega
 $$
 
-diffpes precomputes all dipole-allowed real Gaunt coefficients up to `L_MAX = 4` at import time (via Wigner-3j symbols and the real-to-complex basis transform) and stores them in the dense array `GAUNT_TABLE`, indexed as `GAUNT_TABLE[l, m + L_MAX, q + 1, lp, mp + L_MAX]`. For scripting there is a convenience accessor:
+At import time, diffpes computes all dipole-allowed real Gaunt coefficients
+through `L_MAX = 4`. The calculation uses Wigner-3j symbols and the
+real-to-complex basis transform. diffpes stores the results in the dense
+`GAUNT_TABLE` array. The index order is
+`GAUNT_TABLE[l, m + L_MAX, q + 1, lp, mp + L_MAX]`. Use `gaunt_lookup` for
+direct access:
 
 ```python
 from diffpes.maths import gaunt_lookup
@@ -61,7 +79,8 @@ print(gaunt_lookup(l=1, m=0, q=0, lp=2, mp=0))  # 0.2523...
 print(gaunt_lookup(l=1, m=0, q=0, lp=2, mp=1))  # 0.0
 ```
 
-Because the table is a frozen constant, lookups inside JIT-compiled code are O(1) array indexing and carry no gradient.
+The frozen table gives JIT-compiled code O(1) array indexing. Table lookups do
+not carry gradients.
 
 ## Radial Integrals
 
@@ -71,12 +90,19 @@ $$
 B^{l'}(k) = i^{\,l'} \int_0^\infty R(r)\; r^3\; j_{l'}(kr)\; dr
 $$
 
-The $r^3$ arises from the volume element $r^2\,dr$ times the dipole operator $r$; the phase $i^{l'}$ comes from the plane-wave expansion of the final state. {mod}`diffpes.radial` provides every piece:
+The volume element $r^2\,dr$ and the dipole operator $r$ produce the $r^3$
+factor. The final-state plane-wave expansion produces the $i^{l'}$ phase.
+{mod}`diffpes.radial` provides these functions:
 
-- `spherical_bessel_jl(order, x)` — $j_l(x)$ by upward recurrence with a Taylor-limit guard at small argument
-- `slater_radial(r, n, zeta)` — normalized Slater-type orbital $R(r) = N r^{n-1} e^{-\zeta r}$ (node-free; $\zeta$ is a differentiable JAX scalar)
-- `hydrogenic_radial(r, n, angular_momentum, z_eff)` — exact hydrogenic $R_{nl}(r)$ with its $n - l - 1$ radial nodes via associated Laguerre recurrence
-- `radial_integral(k, r, radial_values, l_prime)` — trapezoidal quadrature of the integral above on a fixed grid (radial coordinates in atomic units/Bohr)
+- `spherical_bessel_jl(order, x)` computes $j_l(x)$ by upward recurrence. A
+  Taylor-limit guard handles small arguments.
+- `slater_radial(r, n, zeta)` computes a normalized, node-free Slater orbital.
+  The JAX scalar $\zeta$ remains differentiable.
+- `hydrogenic_radial(r, n, angular_momentum, z_eff)` computes the exact
+  hydrogenic $R_{nl}(r)$. An associated Laguerre recurrence creates the
+  $n-l-1$ radial nodes.
+- `radial_integral(k, r, radial_values, l_prime)` applies trapezoidal
+  quadrature on a fixed grid. Radial coordinates use atomic units (Bohr).
 
 ```python
 import jax.numpy as jnp
@@ -88,11 +114,19 @@ b2 = radial_integral(jnp.asarray(1.1), r_grid, radial_2p, 2)
 print(b2)  # (-1.7201+0j): i^2 phase makes the l'=2 channel real and negative
 ```
 
-Because $\zeta$ (or $Z_{\mathrm{eff}}$) is traced by JAX, gradients of a simulated spectrum with respect to the radial-wavefunction shape are available — the basis for inverse fitting of orbital extent.
+JAX traces $\zeta$ or $Z_{\mathrm{eff}}$. Therefore, spectrum gradients can
+describe changes in the radial wavefunction. These gradients support inverse
+fitting of the orbital extent.
 
 ## Polarization Vectors and `build_efield`
 
-The light geometry is described by a {class}`~diffpes.types.PolarizationConfig` (angles in **radians** internally; the `simulate_*_expanded` wrappers accept degrees). From the incidence angles, `build_polarization_vectors` constructs the orthonormal basis $\{\hat{k}_{\mathrm{ph}}, \hat{e}_s, \hat{e}_p\}$: $\hat{e}_s \perp$ the incidence plane, $\hat{e}_p$ in-plane and $\perp \hat{k}_{\mathrm{ph}}$. `build_efield` then returns the complex field vector for the requested polarization type:
+A {class}`~diffpes.types.PolarizationConfig` describes the light geometry. The
+configuration stores angles in **radians**. The `simulate_*_expanded` wrappers
+accept degrees. `build_polarization_vectors` constructs the orthonormal basis
+$\{\hat{k}_{\mathrm{ph}}, \hat{e}_s, \hat{e}_p\}$ from the incidence angles.
+Here, $\hat{e}_s$ is perpendicular to the incidence plane. The vector
+$\hat{e}_p$ lies in that plane and remains perpendicular to
+$\hat{k}_{\mathrm{ph}}$. `build_efield` returns the requested complex field:
 
 | `polarization_type` | Electric field |
 |---------------------|----------------|
@@ -116,11 +150,18 @@ efield = build_efield(config)
 print(efield)  # [-0.707+0j, 0+0j, 0.707+0j] - in-plane x and out-of-plane z
 ```
 
-`photon_wavevector(theta, phi)` returns the unit propagation direction itself, used by the SOC level to form the $\mathbf{S}\cdot\hat{k}_{\mathrm{ph}}$ modulation.
+`photon_wavevector(theta, phi)` returns the unit propagation direction. The SOC
+level uses this vector in the $\mathbf{S}\cdot\hat{k}_{\mathrm{ph}}$
+modulation.
 
 ## The Orbital-Direction Model (`ORBITAL_DIRS_NORMALIZED`)
 
-The `advanced`/`expert`/`soc` levels of the simulation ladder use a deliberately cheap stand-in for the full matrix element: each of the 9 VASP orbitals is assigned a fixed unit direction $\hat{d}_o$ (`ORBITAL_DIRS_NORMALIZED`, shape `(9, 3)`; e.g. $p_x \to \hat{x}$, $d_{xz} \to (\hat{x}+\hat{z})/\sqrt{2}$, s $\to \mathbf{0}$), and the polarization weight is
+The `advanced`, `expert`, and `soc` levels use a low-cost approximation for the
+full matrix element. The model assigns a fixed unit direction $\hat{d}_o$ to
+each VASP orbital. `ORBITAL_DIRS_NORMALIZED` stores these nine directions with
+shape `(9, 3)`. For example, $p_x \to \hat{x}$ and
+$d_{xz} \to (\hat{x}+\hat{z})/\sqrt{2}$. The s orbital maps to $\mathbf{0}$.
+The polarization weight is
 
 $$
 M_o = \left| \hat{e} \cdot \hat{d}_o \right|^2
@@ -134,7 +175,11 @@ weights = dipole_matrix_elements(efield)   # p-pol at 45 degrees, phi = 0
 # [0., 0., 0.5, 0.5, 0.25, 0.25, 0.5, ~0., 0.25]
 ```
 
-The physics it captures: p-polarized light at $\phi = 0$ excites $p_z$ and $p_x$ equally, and the $d_{xz}$ channel vanishes because its direction $(\hat{x}+\hat{z})/\sqrt{2}$ is orthogonal to $\hat{e}_p = (-\hat{x}+\hat{z})/\sqrt{2}$. What it does *not* capture: k-dependence, radial physics, interference between orbital channels, and any s-orbital emission ($\hat{d}_s = \mathbf{0}$ gives $M_s = 0$ identically). Treat it as a heuristic selection-rule filter slated for replacement by the engine below.
+The model captures qualitative selection rules. At $\phi = 0$, p-polarized
+light excites $p_z$ and $p_x$ equally. The $d_{xz}$ channel vanishes because
+its direction is perpendicular to $\hat{e}_p$. The model omits momentum
+dependence, radial physics, orbital interference, and s-orbital emission.
+Use this model only as a heuristic selection-rule filter.
 
 ## The Full Assembly: `dipole_matrix_element_single`
 
@@ -145,7 +190,9 @@ M(\mathbf{k}) = \sum_{q \in \{-1,0,+1\}} \hat{e}_q \sum_{l' = l \pm 1}
     B^{l'}(|\mathbf{k}|)\; G(l, m; l', m + q; q)\; Y_{l'}^{m+q}(\hat{k})
 $$
 
-evaluated at the **photoelectron** wavevector $\mathbf{k}$ (magnitude from free-electron kinematics, direction $\hat{k}$ toward the detector):
+The function evaluates this expression at the **photoelectron** wavevector
+$\mathbf{k}$. Free-electron kinematics sets its magnitude, and the detector
+sets its direction:
 
 ```python
 import jax.numpy as jnp
@@ -158,7 +205,11 @@ m_pz = dipole_matrix_element_single(
 print(abs(m_pz) ** 2)  # 0.0383...
 ```
 
-`dipole_intensity_orbital` returns $|M|^2$ directly, and `dipole_intensities_all_orbitals` loops over a `SlaterParams` basis. The end-to-end forward model `simulate_tb_radial` sums $M_o$ over orbitals weighted by tight-binding eigenvector coefficients, $M_{kb} = \sum_o c_{kb,o} M_o$, before squaring — so interference between orbital channels *is* included at this tier:
+`dipole_intensity_orbital` returns $|M|^2$ directly.
+`dipole_intensities_all_orbitals` scans a `SlaterParams` basis. The
+`simulate_tb_radial` model weights $M_o$ with tight-binding eigenvector
+coefficients. It computes $M_{kb} = \sum_o c_{kb,o} M_o$ before squaring.
+Therefore, this level includes interference between orbital channels:
 
 ```python
 import jax.numpy as jnp
@@ -192,11 +243,21 @@ spec = diffpes.simul.simulate_tb_radial(
 print(spec.intensity.shape)  # (61, 800)
 ```
 
-**Stated approximations of this engine:** the final state is a plane wave (no scattering off the crystal potential, no surface transmission factor), the radial functions are single-zeta Slater orbitals unless you supply better ones, and the crystal k-direction is rescaled to the photoelectron momentum rather than refracted through the surface.
+**The engine uses these approximations:**
+
+- The final state is a plane wave.
+- The model omits scattering from the crystal potential and the surface
+  transmission factor.
+- The default radial functions are single-zeta Slater orbitals.
+- The model rescales the crystal momentum direction to the photoelectron
+  momentum. It does not model surface refraction.
 
 ## Orbital Angular Momentum Output
 
-For dichroism-style analysis, `compute_oam` converts orbital projections into the expectation value of $L_z$ per (k-point, band, atom), $\mathrm{OAM}_z = \sum_m m\, |c_m|^2$, returning p-, d-, and total contributions stacked in the last axis:
+For dichroism analysis, `compute_oam` computes the expected $L_z$ value for
+each k-point, band, and atom. It uses
+$\mathrm{OAM}_z = \sum_m m\, |c_m|^2$. The final axis contains the p, d, and
+total contributions:
 
 ```python
 import jax.numpy as jnp
@@ -210,7 +271,10 @@ The s channel carries $m = 0$ and never contributes.
 
 ## Further Reading
 
-- [Simulation Levels](simulation-levels.md) — where the heuristic vs. full engine sit in the level ladder
-- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) — how $|\mathbf{k}|$ is derived from photon energy and work function
-- [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md) — the lineshape applied after the matrix-element weighting
+- [Simulation Levels](simulation-levels.md) locates both matrix-element models
+  in the simulation levels.
+- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) derives
+  $|\mathbf{k}|$ from photon energy and the work function.
+- [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md)
+  describes the lineshape after matrix-element weighting.
 - API reference: {doc}`../api/maths`, {doc}`../api/radial`, {doc}`../api/simul`

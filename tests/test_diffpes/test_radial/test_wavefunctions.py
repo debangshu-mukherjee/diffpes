@@ -1,13 +1,12 @@
-"""Tests for radial wavefunction models.
+"""Validate radial wavefunction models.
 
 Extended Summary
 ----------------
-Validates the ``slater_radial`` and ``hydrogenic_radial`` wavefunction
-constructors.  Slater tests verify normalization
-(``integral |R|^2 r^2 dr = 1``)
-and autodiff gradient accuracy against finite differences.  Hydrogenic
-tests compare the R_{10} (1s) and R_{21} (2p) radial functions against
-known analytical expressions and verify the boundary condition R_{2p}(0) = 0.
+The tests validate the ``slater_radial`` and ``hydrogenic_radial``
+constructors. The Slater tests verify normalization and compare autodiff
+gradients with finite differences. The hydrogenic tests compare the 1s and
+2p radial functions with analytical expressions. They also verify the
+boundary condition ``R_{2p}(0) = 0``.
 
 """
 
@@ -24,27 +23,26 @@ from diffpes.radial import hydrogenic_radial, slater_radial
 class TestSlaterRadial(chex.TestCase):
     """Validate Slater radial normalization and autodiff gradients.
 
-    Tests the Slater-type orbital R(r) = N * r^{n-1} * exp(-zeta*r)
-    for correct normalization (``integral |R|^2 r^2 dr = 1``) and verify
-    that ``jax.grad`` of a sum-of-values objective with respect to the
-    Slater exponent zeta agrees with central finite differences.
+    The tests verify the normalization of the Slater-type orbital.
+    They also compare the ``jax.grad`` result for ``zeta`` with central
+    finite differences.
 
     :see: :func:`~diffpes.radial.slater_radial`
     """
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_normalization(self) -> None:
-        """Verify the Slater 2s orbital is normalized to unity.
+        """Verify normalization of the Slater 2s orbital to unity.
 
-        Constructs R(r) for n=2, zeta=1.3 on a 20000-point grid up to
-        r=30 Bohr and numerically integrates ``|R(r)|^2 * r^2`` using the
+        The test constructs ``R(r)`` for ``n=2`` and ``zeta=1.3`` on a
+        20000-point grid through 30 Bohr. It integrates ``|R(r)|^2 * r^2`` with
         trapezoidal rule.  Asserts the integral is within 2e-3 of 1.0.
         The dense grid and large cutoff ensure the exponential tail
         contributes negligibly.  Run under both JIT and eager modes.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
         fn: Callable[..., Any]
         radial: Array
@@ -59,7 +57,7 @@ class TestSlaterRadial(chex.TestCase):
     def test_gradient_wrt_zeta_matches_finite_difference(self) -> None:
         """Verify autodiff gradient of Slater sum w.r.t. zeta matches FD.
 
-        Defines a scalar objective = sum(R(r; zeta)) for n=2, zeta=1.15
+        The test defines a scalar objective = sum(R(r; zeta)) for n=2, zeta=1.15
         on a 500-point grid up to r=8 Bohr.  Differentiates with
         ``jax.grad`` and compares against a central finite-difference
         estimate with step eps=1e-4.  Asserts agreement to within 2e-4
@@ -68,7 +66,7 @@ class TestSlaterRadial(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
         zeta0: Array
         eps: Array
@@ -90,10 +88,9 @@ class TestSlaterRadial(chex.TestCase):
 class TestHydrogenicRadial(chex.TestCase):
     """Validate hydrogenic radial wavefunctions against analytical expressions.
 
-    Tests the ``hydrogenic_radial`` function for the hydrogen atom
-    (Z_eff=1) against closed-form R_{nl}(r) expressions.  Covers the
-    1s ground state (R_{10} = 2*exp(-r)) and the 2p boundary condition
-    (R_{21}(0) = 0, since all l > 0 radial functions vanish at the origin).
+    The tests compare ``hydrogenic_radial`` for hydrogen with closed-form
+    expressions. They verify the 1s ground state and the 2p boundary condition.
+    All radial functions with ``l > 0`` vanish at the origin.
 
     :see: :func:`~diffpes.radial.hydrogenic_radial`
     """
@@ -102,16 +99,16 @@ class TestHydrogenicRadial(chex.TestCase):
     def test_1s_matches_analytic_expression(self) -> None:
         """Verify R_{10}(r) = 2*exp(-r) for the hydrogen 1s orbital.
 
-        Evaluates the hydrogenic radial function for n=1, l=0, Z_eff=1
-        at r = [0.0, 0.3, 1.0, 2.5] Bohr and compares against the
-        analytical expression R_{10}(r) = 2*exp(-r) in atomic units.
-        Asserts element-wise agreement to within 1e-10.  The r=0 point
+        The test evaluates the hydrogenic radial function for ``n=1``,
+        ``l=0``, and ``Z_eff=1``. It uses four radii from 0.0 to 2.5 Bohr.
+        It compares the result with the analytical 1s expression.
+        The test asserts element-wise agreement to within 1e-10.  The r=0 point
         tests the boundary condition R_{10}(0) = 2, and the larger r
         values test the exponential decay.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
         fn: Callable[..., Any]
         expected: Array
@@ -132,14 +129,14 @@ class TestHydrogenicRadial(chex.TestCase):
     def test_2p_is_zero_at_origin(self) -> None:
         """Verify the 2p (n=2, l=1) radial function vanishes at r=0.
 
-        Evaluates R_{21}(r=0) for Z_eff=1.  All hydrogenic radial
+        The test evaluates R_{21}(r=0) for Z_eff=1.  All hydrogenic radial
         functions with l > 0 contain a factor r^l and therefore must
         vanish at the origin.  Asserts the output is zero to within
         1e-12, testing this critical boundary condition / edge case.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fn: Callable[..., Any]
         value_at_origin: Array
 
@@ -160,7 +157,7 @@ class TestHydrogenicRadial(chex.TestCase):
 
 
 class TestSlaterRadialErrors:
-    """Tests for invalid input handling in slater_radial.
+    """Validate invalid input handling in slater_radial.
 
     Validates that ``slater_radial`` raises ``ValueError`` when the
     principal quantum number ``n`` is less than 1.
@@ -171,12 +168,12 @@ class TestSlaterRadialErrors:
     def test_n_zero_raises(self) -> None:
         """Verify that n=0 raises ValueError.
 
-        Calls ``slater_radial`` with ``n=0`` and asserts a
-        ``ValueError`` matching "n must be >= 1" is raised.
+        The test calls ``slater_radial`` with ``n=0`` and expects a
+        ``ValueError`` that matches "n must be >= 1".
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
 
         r = jnp.array([1.0], dtype=jnp.float64)
@@ -185,7 +182,7 @@ class TestSlaterRadialErrors:
 
 
 class TestHydrogenicRadialErrors:
-    """Tests for invalid input handling in hydrogenic_radial.
+    """Validate invalid input handling in hydrogenic_radial.
 
     Validates that ``hydrogenic_radial`` raises ``ValueError`` for
     invalid principal quantum numbers (n < 1) and for angular momentum
@@ -197,12 +194,12 @@ class TestHydrogenicRadialErrors:
     def test_n_zero_raises(self) -> None:
         """Verify that n=0 raises ValueError for hydrogenic_radial.
 
-        Calls ``hydrogenic_radial`` with ``n=0`` and asserts a
-        ``ValueError`` matching "n must be >= 1" is raised.
+        The test calls ``hydrogenic_radial`` with ``n=0`` and expects a
+        ``ValueError`` that matches "n must be >= 1".
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
 
         r = jnp.array([1.0], dtype=jnp.float64)
@@ -212,13 +209,13 @@ class TestHydrogenicRadialErrors:
     def test_angular_momentum_equals_n_raises(self) -> None:
         """Verify that angular_momentum >= n raises ValueError.
 
-        Calls ``hydrogenic_radial`` with ``n=2, angular_momentum=2``
-        which violates the constraint ``angular_momentum < n``, and
-        asserts a ``ValueError`` matching "angular_momentum" is raised.
+        The test calls ``hydrogenic_radial`` with ``n=2`` and
+        ``angular_momentum=2``. This input violates the angular-momentum
+        constraint. The test expects a matching ``ValueError``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
 
         r = jnp.array([1.0], dtype=jnp.float64)
@@ -227,7 +224,7 @@ class TestHydrogenicRadialErrors:
 
 
 class TestLaguerreRecurrence:
-    """Tests for the Laguerre polynomial recurrence path.
+    """Validate the Laguerre polynomial recurrence path.
 
     Exercises the ``order >= 2`` branch of ``_associated_laguerre``
     that uses ``jax.lax.fori_loop`` for the recurrence, and validates
@@ -239,12 +236,12 @@ class TestLaguerreRecurrence:
     def test_negative_order_raises(self) -> None:
         """Verify that order < 0 raises ValueError in _associated_laguerre.
 
-        This case establishes the negative order raises contract for laguerre recurrence
+        The test establishes the negative order raises contract for laguerre recurrence
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
 
         from diffpes.radial.wavefunctions import _associated_laguerre
@@ -256,12 +253,12 @@ class TestLaguerreRecurrence:
     def test_negative_alpha_raises(self) -> None:
         """Verify that alpha < 0 raises ValueError in _associated_laguerre.
 
-        This case establishes the negative alpha raises contract for laguerre recurrence
+        The test establishes the negative alpha raises contract for laguerre recurrence
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         r: Array
 
         from diffpes.radial.wavefunctions import _associated_laguerre
@@ -278,7 +275,7 @@ class TestLaguerreRecurrence:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         x: Array
         result: Array
         expected: Array
@@ -299,7 +296,7 @@ class TestLaguerreRecurrence:
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         x: Array
         result: Array
 

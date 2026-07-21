@@ -1,9 +1,9 @@
-"""Structured inputs for high-level VASP simulation workflows.
+"""Define structured inputs for high-level VASP simulation workflows.
 
 Extended Summary
 ----------------
-Defines the Equinox container that bundles parsed VASP outputs for the
-high-level simulation workflow.  Keeping this carrier in :mod:`diffpes.types`
+This module defines the Equinox container that bundles parsed VASP outputs for
+the high-level simulation workflow. Its location in :mod:`diffpes.types`
 provides one canonical import surface for every diffpes PyTree.
 
 Routine Listings
@@ -68,9 +68,9 @@ def make_workflow_context(
 ) -> WorkflowContext:
     """Create a workflow context from parsed VASP inputs.
 
-    Collects parsed electronic bands and orbital projections with optional
-    k-path and density-of-states data. The result is one immutable Equinox
-    PyTree for high-level simulation workflows.
+    This type collects parsed electronic bands and orbital projections with
+    optional k-path and density-of-states data. The result is one immutable
+    Equinox PyTree for high-level simulation workflows.
 
     :see: :class:`~.test_context.TestMakeWorkflowContext`
 

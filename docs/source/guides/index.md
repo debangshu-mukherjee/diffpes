@@ -1,15 +1,18 @@
 # diffpes Theory and Architecture Guides
 
-This documentation provides comprehensive coverage of the physics and software architecture underlying diffpes, a JAX-based framework for differentiable Angle-Resolved PhotoEmission Spectroscopy (ARPES) simulation.
+These guides describe the physics and software architecture of diffpes.
+diffpes uses JAX for differentiable Angle-Resolved PhotoEmission Spectroscopy
+(ARPES) simulations.
 
 ## Target Audience
 
-These guides are written for **physics researchers** working with ARPES who want to understand:
+These guides support **physics researchers** who work with ARPES and want to
+understand:
 
-- The photoemission physics implemented at each simulation level
-- How electronic-structure data flows through the simulation pipeline
+- The photoemission physics at each simulation level
+- Electronic-structure data flow through the simulation pipeline
 - The physical meaning of simulation parameters and outputs
-- How differentiability enables inverse recovery of band-structure parameters
+- Differentiability for inverse recovery of band-structure parameters
 
 ## Guide Overview
 
@@ -27,7 +30,7 @@ These guides are written for **physics researchers** working with ARPES who want
 | Guide | Description |
 |-------|-------------|
 | [PyTree Architecture](pytree-architecture.md) | Equinox data structures enabling GPU acceleration and autodiff |
-| [JAX Transformability and Gradients](jax-transformability-and-gradients.md) | Which of `grad`/`vmap`/`jit` are supported where, and gradient flow through the forward model |
+| [JAX Transformability and Gradients](jax-transformability-and-gradients.md) | Support for `grad`, `vmap`, and `jit`, with gradient flow through the forward model |
 | [Certified Forward Models](certified-forward-models.md) | Bounded scientific claims, provenance, differentiable evidence, information flow, and portable records |
 | [VASP Data Ingestion](vasp-data-ingestion.md) | Parsing POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, and CHGCAR into PyTrees |
 | [Expanded Wrappers and Conventions](expanded-wrappers-and-conventions.md) | The `simulate_*_expanded` wrapper family and its argument conventions |
@@ -38,7 +41,7 @@ For hands-on examples, see the [tutorials](../tutorials/index.md).
 
 ## Mathematical Notation
 
-Throughout these guides, we use:
+The guides use these symbols:
 
 - $\mathbf{k}$ for wavevectors (in $\text{Å}^{-1}$)
 - $E_B$ for binding energy and $E_F$ for the Fermi level (in eV)
@@ -48,4 +51,4 @@ Throughout these guides, we use:
 - $\phi$ for azimuthal angle
 - $\Sigma(\omega)$ for the electron self-energy
 
-Equations are rendered using LaTeX notation compatible with GitHub and MathJax.
+GitHub and MathJax render the equations from compatible LaTeX notation.

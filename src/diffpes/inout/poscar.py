@@ -1,8 +1,8 @@
-"""VASP POSCAR file parser.
+"""Parse a VASP POSCAR/CONTCAR file.
 
 Extended Summary
 ----------------
-Reads VASP POSCAR/CONTCAR crystal structure files and returns
+The module reads VASP POSCAR and CONTCAR crystal structure files. It returns
 a :class:`~diffpes.types.CrystalGeometry` PyTree containing lattice
 vectors, atomic coordinates, element symbols, and atom counts.
 
@@ -13,7 +13,7 @@ Routine Listings
 
 Notes
 -----
-Handles both direct (fractional) and Cartesian coordinate formats,
+The parser supports direct and Cartesian coordinate formats,
 optional selective dynamics, and automatic reciprocal lattice
 computation.
 """
@@ -36,12 +36,11 @@ def read_poscar(
 ) -> CrystalGeometry:
     """Parse a VASP POSCAR/CONTCAR file.
 
-    Reads a VASP POSCAR (or CONTCAR) file that defines the crystal
-    structure: lattice vectors, element symbols, atom counts, and
-    atomic coordinates in either direct (fractional) or Cartesian
-    form. The function returns a :class:`~diffpes.types.CrystalGeometry`
-    PyTree with coordinates always stored in fractional form and the
-    lattice pre-scaled by the universal scaling factor.
+    The function reads a VASP POSCAR or CONTCAR file. The file defines lattice
+    vectors, element symbols, atom counts, and atomic coordinates. The
+    coordinates can use direct or Cartesian form. The function returns a
+    :class:`~diffpes.types.CrystalGeometry` PyTree with fractional coordinates.
+    It applies the universal scaling factor to the lattice.
 
     The POSCAR file format used by VASP has the following structure:
 
@@ -59,8 +58,7 @@ def read_poscar(
       fractional coordinates, or ``"Cartesian"`` / ``"Cart"`` for
       Cartesian.
     * **Coordinate lines**: ``natoms`` lines, each with at least three
-      floats. Additional columns (selective-dynamics T/F flags) are
-      silently ignored.
+      floats. The parser ignores additional selective-dynamics columns.
 
     :see: :class:`~.test_poscar.TestReadPoscar`
 
@@ -97,15 +95,13 @@ def read_poscar(
 
     Notes
     -----
-    Coordinates are always returned in **fractional** (direct) form,
-    regardless of the input format. If the input is Cartesian, the
-    conversion ``frac = lattice^{-T} @ cart^T`` is performed via
-    ``np.linalg.solve`` for numerical stability. The optional
-    selective-dynamics flags (``T T F`` appended to coordinate lines)
-    are detected and skipped but not stored. VASP-4 style files that
-    lack the element-symbol line will produce an empty ``symbols``
-    tuple; the caller should supply symbols from an external source
-    (e.g. POTCAR) in that case.
+    The function always returns fractional coordinates. For Cartesian input,
+    ``np.linalg.solve`` computes
+    ``frac = lattice^{-T} @ cart^T`` with numerical stability. The parser
+    detects and ignores optional selective-dynamics flags. VASP-4 files can
+    omit the element-symbol line. In this case, the function returns an empty
+    ``symbols`` tuple. Supply the symbols from an external source such as
+    POTCAR.
     """
     fid: TextIO
     i: int

@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-These tests compare all seven safe-math helpers with NumPy away from their
-guards, check forward- and reverse-mode derivatives against central finite
-differences, and pin each documented guard value and subgradient. Property
-tests cover broadcasting and sign symmetry on generated finite inputs.
+The tests compare all seven safe-math helpers with NumPy away from their
+guards. They compare both autodiff modes with central finite differences.
+They also verify each documented guard value and subgradient. Property tests
+cover broadcasting and sign symmetry on generated finite inputs.
 """
 
 import chex
@@ -44,14 +44,14 @@ class TestSafeDivide:
         ----------------
         Ordinary values must match NumPy to ``rtol=1e-15`` and derivatives
         must pass the smooth program-wide gradient harness. At a zero divisor,
-        the configured fallback is returned and operand gradients are exactly
-        zero with no NaNs.
+        the function returns the configured fallback. Both operand gradients
+        equal zero and contain no NaNs.
 
         Notes
         -----
-        Uses a length-three numerator and nonzero divisor away from the guard,
-        then differentiates a scalar guarded call with respect to both
-        operands under JIT-backed autodiff.
+        The test uses a length-three numerator and a nonzero divisor.
+        It differentiates a scalar guarded call for both operands with
+        JIT-backed autodiff.
         """
         numerator: Float[Array, " 3"] = jnp.array([1.5, -2.0, 4.0])
         denominator: Float[Array, " 3"] = jnp.array([0.5, 4.0, -2.0])
@@ -103,10 +103,9 @@ class TestSafeDivide:
 
         Extended Summary
         ----------------
-        For generated finite vectors and a positive scalar divisor,
-        ``safe_divide`` must broadcast the scalar and obey
-        ``safe_divide(-x, d) = -safe_divide(x, d)`` exactly to floating-point
-        tolerance.
+        For finite vectors and a positive scalar divisor, ``safe_divide``
+        must broadcast the scalar. It must also preserve odd symmetry within
+        floating-point tolerance.
 
         Notes
         -----
@@ -143,7 +142,7 @@ class TestSafeSqrt:
 
         Notes
         -----
-        Evaluates three positive values away from the branch boundary and a
+        The test evaluates three positive values away from the branch boundary and a
         JIT-compiled two-value guard probe before differentiating each guard.
         """
         x: Float[Array, " 3"] = jnp.array([0.25, 2.0, 9.0])
@@ -186,7 +185,7 @@ class TestSafeNorm:
 
         Notes
         -----
-        Uses two generic three-vectors for the ordinary path and an independent
+        The test uses two generic three-vectors for the ordinary path and an independent
         JIT and reverse-mode probe at the origin.
         """
         x: Float[Array, "2 3"] = jnp.array([[3.0, 4.0, 1.0], [-2.0, 5.0, 7.0]])
@@ -258,7 +257,7 @@ class TestSafeArccos:
 
         Notes
         -----
-        Uses three generic interior cosines and a four-value JIT guard probe
+        The test uses three generic interior cosines and a four-value JIT guard probe
         spanning both endpoints and both out-of-domain sides.
         """
         x: Float[Array, " 3"] = jnp.array([-0.6, 0.2, 0.7])
@@ -304,7 +303,7 @@ class TestSafeArctan2:
 
         Notes
         -----
-        Uses points in three quadrants for ordinary behavior, then runs the
+        The test uses points in three quadrants for ordinary behavior, then runs the
         scalar origin through JIT and differentiates both arguments.
         """
         coordinates: Float[Array, "3 2"] = jnp.array(
@@ -360,7 +359,7 @@ class TestSafeLog:
 
         Notes
         -----
-        Uses three ordinary positive values and a three-value JIT probe
+        The test uses three ordinary positive values and a three-value JIT probe
         containing the floor, zero, and a negative input.
         """
         x: Float[Array, " 3"] = jnp.array([0.25, 2.0, 10.0])
@@ -406,7 +405,7 @@ class TestSafePower:
 
         Notes
         -----
-        Uses exponent ``1.7`` on three positive bases, then evaluates and
+        The test uses exponent ``1.7`` on three positive bases, then evaluates and
         differentiates a two-base guarded sum under JIT-compatible primitives.
         """
         exponent: Float[Array, ""] = jnp.array(1.7)

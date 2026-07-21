@@ -13,20 +13,21 @@
 [![jax_badge](https://tinyurl.com/mucknrvu)](https://docs.jax.dev/)
 [![Lines of Code](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/debangshu-mukherjee/diffpes/main/.github/badges/loc.json)](https://github.com/debangshu-mukherjee/diffpes)
 
-JAX-based ARPES simulation toolkit with Python-native APIs and certified
-forward execution. A certified run carries bounded physics claims, provenance,
-domain margins, derivative evidence, local information-flow diagnostics, and a
-named assurance policy in the same differentiable PyTree as its observable.
-The numerical certification path compiles and batches with JAX; portable
-serialization stays at the filesystem boundary.
+diffpes is a JAX-based ARPES simulation toolkit with Python-native APIs and
+certified forward execution. A certified run stores its observable and
+scientific evidence in the same differentiable PyTree. The evidence includes
+bounded physics claims, provenance, domain margins, derivatives, local
+information-flow diagnostics, and a named assurance policy. JAX compiles and
+batches the numerical certification path. Portable serialization stays at the
+filesystem boundary.
 
 Certification here means bounded scientific evidence, not a security
 credential. Storage consistency markers detect accidental mismatches only.
 
 ## Expanded-input workflows
 
-The package includes expanded-input wrappers that let you call the
-simulator with plain arrays/scalars while still running JAX kernels.
+The package provides expanded-input wrappers for plain arrays and scalars.
+These wrappers run the same JAX kernels as the typed interfaces.
 
 ### Function mapping
 
@@ -43,7 +44,7 @@ simulator with plain arrays/scalars while still running JAX kernels.
 
 - Default energy-axis padding behavior:
   `min(eigenbands)-1` to `max(eigenbands)+1`.
-- Incident angles for expanded wrappers are interpreted in degrees.
+- Expanded wrappers interpret incident angles in degrees.
 - Wrappers return the standard `ArpesSpectrum` PyTree.
 
 ### Python indexing conventions
@@ -86,30 +87,24 @@ spectrum = simulate_expanded(
 
 ## Test coverage
 
-Test coverage measures which lines of source code are executed
-during tests. Run it with:
+Test coverage identifies the source lines that the tests execute. Run the
+coverage check with this command:
 
 ```bash
 source .venv/bin/activate
 pytest tests/ --cov=src/diffpes --cov-report=term-missing
 ```
 
-To get as close to 100% as possible:
+Use these priorities to increase coverage toward 100%:
 
-1. **Simul and types** — Already well covered. Any new branch
-   (e.g. new polarization or dispatch level) should have a
-   corresponding test.
-2. **Expanded dispatch** — Test every `simulate_expanded(level=...)`
-   branch (novice, basic, basicplus, advanced, expert, soc) and
-   the unknown-level `ValueError`.
-3. **HDF5** — Round-trip all PyTree types; test error paths
-   (unknown type on load, missing group, unsupported type on save).
-4. **VASP file readers** (`read_doscar`, `read_eigenval`, `read_kpoints`,
-   `read_poscar`, `read_procar`) — Add tests that call each reader
-   on minimal in-repo fixture files (e.g. under `tests/fixtures/`)
-   so the parsing code paths are executed.
-5. **Plotting** — Exercise the public plotting API in tests (or
-   accept lower coverage for GUI-oriented code).
-6. **Edge branches** — Cover optional arguments (e.g.
-   `make_band_structure(..., kpoint_weights=...)`) and error
-   messages so one-off branches are hit.
+1. **Simulation and types:** These modules already have good coverage.
+   Add a test for each new polarization or dispatch branch.
+2. **Expanded dispatch:** Test every `simulate_expanded(level=...)` branch.
+   Also test the `ValueError` for an unknown level.
+3. **HDF5:** Round-trip every PyTree type. Test each load and save error path.
+4. **VASP file readers:** Test `read_doscar`, `read_eigenval`, `read_kpoints`,
+   `read_poscar`, and `read_procar` with minimal repository fixtures.
+5. **Plotting:** Exercise the public plotting API in tests. GUI code can use a
+   lower coverage target.
+6. **Edge branches:** Cover optional arguments and their error messages.
+   Include `make_band_structure(..., kpoint_weights=...)`.

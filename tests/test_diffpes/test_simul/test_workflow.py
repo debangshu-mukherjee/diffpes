@@ -1,4 +1,4 @@
-"""Tests for high-level workflow helpers in :mod:`diffpes.simul.workflow`.
+"""Validate high-level workflow helpers in :mod:`diffpes.simul.workflow`.
 
 Extended Summary
 ----------------
@@ -39,7 +39,7 @@ _FIXTURES_DIR: Path = (
 
 
 class TestLoadVaspContextEdgeCases(chex.TestCase):
-    """Additional edge-case tests for :func:`diffpes.simul.load_vasp_context`.
+    """Validate additional paths in :func:`diffpes.simul.load_vasp_context`.
 
     :see: :func:`~diffpes.simul.load_vasp_context`
     """
@@ -47,13 +47,13 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
     def test_no_doscar_fermi_defaults_to_zero(self) -> None:
         """Verify Fermi energy is 0.0 when doscar_file=None and fermi_energy=None.
 
-        Passes ``doscar_file=None`` and ``fermi_energy=None``, exercising
+        The test passes ``doscar_file=None`` and ``fermi_energy=None``, exercising
         workflow.py line 142 (``resolved_fermi = 0.0``). Asserts the
         returned band structure has fermi_energy == 0.0.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         context: diffpes.types.WorkflowContext
 
         context = load_vasp_context(
@@ -71,14 +71,14 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
         assert context.dos is None
 
     def test_missing_doscar_raises(self) -> None:
-        """Verify FileNotFoundError when DOSCAR is required but absent.
+        """Verify that a missing required DOSCAR raises FileNotFoundError.
 
-        Passes a non-existent ``doscar_file`` with ``fermi_energy=None``,
+        The test passes a non-existent ``doscar_file`` with ``fermi_energy=None``,
         exercising workflow.py lines 146-150 (FileNotFoundError path).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         with pytest.raises(FileNotFoundError):
             load_vasp_context(
                 directory=str(_FIXTURES_DIR),
@@ -91,15 +91,15 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
             )
 
     def test_explicit_fermi_reads_doscar_optionally(self) -> None:
-        """Verify DOSCAR is still read for context when fermi_energy is provided.
+        """Verify optional DOSCAR loading with an explicit Fermi energy.
 
-        Passes ``fermi_energy=1.5`` and a valid ``doscar_file``, exercising
-        workflow.py lines 154-158 (optional DOSCAR read). Asserts the
-        provided fermi_energy is used, but ``dos`` is populated from the file.
+        The test passes ``fermi_energy=1.5`` and a valid ``doscar_file``, exercising
+        workflow.py lines 154-158 (optional DOSCAR read). The explicit
+        Fermi energy controls the bands, and the file supplies ``dos``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         context: diffpes.types.WorkflowContext
 
         context = load_vasp_context(
@@ -118,7 +118,7 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
 
 
 class TestLoadVaspContext(chex.TestCase):
-    """Tests for :func:`diffpes.simul.load_vasp_context`.
+    """Validate :func:`diffpes.simul.load_vasp_context`.
 
     :see: :func:`~diffpes.simul.load_vasp_context`
     """
@@ -126,12 +126,12 @@ class TestLoadVaspContext(chex.TestCase):
     def test_loads_context_with_optional_dos_and_kpath(self) -> None:
         """Verify context loading with inferred Fermi level and checks.
 
-        This case establishes the loads context with optional dos and kpath contract for
+        The test establishes the loads context with optional dos and kpath contract for
         load vasp context with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         context: diffpes.types.WorkflowContext
 
         context = load_vasp_context(
@@ -156,7 +156,7 @@ class TestLoadVaspContext(chex.TestCase):
 
 
 class TestPrepareProjection(chex.TestCase):
-    """Tests for :func:`diffpes.simul.prepare_projection`.
+    """Validate :func:`diffpes.simul.prepare_projection`.
 
     :see: :func:`~diffpes.simul.prepare_projection`
     """
@@ -164,14 +164,14 @@ class TestPrepareProjection(chex.TestCase):
     def test_spin_orbital_projection_attaches_oam(self) -> None:
         """Verify OAM attachment works for SpinOrbitalProjection input.
 
-        Constructs a SpinOrbitalProjection and calls ``prepare_projection``
+        The test constructs a SpinOrbitalProjection and calls ``prepare_projection``
         with ``attach_oam=True``. Asserts the returned object is still a
         SpinOrbitalProjection with OAM attached, covering workflow.py
         line 224 (make_spin_orbital_projection with oam).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         projections: Array
         spin: Array
         orb: diffpes.types.SpinOrbitalProjection
@@ -191,12 +191,12 @@ class TestPrepareProjection(chex.TestCase):
     def test_selects_atoms_and_attaches_oam(self) -> None:
         """Verify atom sub-selection and OAM attachment in one call.
 
-        This case establishes the selects atoms and attaches oam contract for prepare
+        The test establishes the selects atoms and attaches oam contract for prepare
         projection with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         projections: Array
         orb: diffpes.types.OrbitalProjection
         prepared: (
@@ -217,7 +217,7 @@ class TestPrepareProjection(chex.TestCase):
 
 
 class TestSimulateContext(chex.TestCase):
-    """Tests for :func:`diffpes.simul.simulate_context`.
+    """Validate :func:`diffpes.simul.simulate_context`.
 
     :see: :func:`~diffpes.simul.simulate_context`
     """
@@ -225,12 +225,12 @@ class TestSimulateContext(chex.TestCase):
     def test_momentum_broadening_changes_output(self) -> None:
         """Verify nonzero dk changes simulated intensity.
 
-        This case establishes the momentum broadening changes output contract for
+        The test establishes the momentum broadening changes output contract for
         simulate context with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         eigenbands: Array
         kx: Array
         kpoints: Array
@@ -297,16 +297,15 @@ class TestSimulateContext(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies an explicit scalar-array Fermi energy remains a traced leaf
-        through ``load_vasp_context`` and ``simulate_context`` and produces a
-        finite, nonzero derivative that agrees with central finite
-        differences to the stiff ``rtol=1e-5`` gate.
+        The test traces an explicit scalar Fermi energy through
+        ``load_vasp_context`` and ``simulate_context``. Its finite,
+        nonzero derivative matches central differences at ``rtol=1e-5``.
 
         Notes
         -----
-        Loads the two-k-point spin fixtures inside the traced loss, simulates
-        the basic Gaussian level at 300 K, and applies the shared
-        differentiability harness to the summed intensity.
+        The test loads two-k-point spin fixtures inside the traced loss.
+        It simulates the basic level at 300 K and checks the summed
+        intensity with the shared gradient harness.
         """
 
         def workflow_loss(
@@ -347,7 +346,7 @@ class TestSimulateContext(chex.TestCase):
 
 
 class TestRunVaspWorkflow(chex.TestCase):
-    """Tests for :func:`diffpes.simul.run_vasp_workflow`.
+    """Validate :func:`diffpes.simul.run_vasp_workflow`.
 
     :see: :func:`~diffpes.simul.run_vasp_workflow`
     """
@@ -355,12 +354,12 @@ class TestRunVaspWorkflow(chex.TestCase):
     def test_runs_end_to_end_with_normalization(self) -> None:
         """Verify one-call workflow runs and returns normalized spectrum.
 
-        This case establishes the runs end to end with normalization contract for run
+        The test establishes the runs end to end with normalization contract for run
         vasp workflow with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: diffpes.types.ArpesSpectrum
         mean_val: Array
 

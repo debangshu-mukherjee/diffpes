@@ -1,4 +1,4 @@
-"""Tests for provenance DAG validation and information propagation.
+"""Validate provenance DAG validation and information propagation.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.
@@ -58,7 +58,7 @@ class TestValidateProvenance:
 
         Notes
         -----
-        Builds and independently validates the minimal graph.
+        The test builds and independently validates the minimal graph.
         """
         graph: Any
         graph = build_provenance(())
@@ -287,7 +287,7 @@ class TestBuildProvenance:
             build_provenance((first, second))
 
     def test_unused_external_input_is_rejected(self) -> None:
-        """Expose required inputs that were declared but never consumed.
+        """Expose declared required inputs that no transformation consumes.
 
         The case uses explicit inputs in the supported certification regime.
         It checks the public result or the documented failure state.

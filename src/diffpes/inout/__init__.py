@@ -1,41 +1,40 @@
-"""VASP file parsers for ARPES simulation input.
+"""Parse VASP files for ARPES simulation input.
 
 Extended Summary
 ----------------
-Provides parsers for VASP output files (POSCAR, EIGENVAL, KPOINTS,
-DOSCAR, PROCAR, CHGCAR) that return PyTree data structures suitable
-for ARPES simulations, along with HDF5 persistence, parser-adjacent
-workflow helpers, and plotting utilities.
+The subpackage parses VASP output files into PyTrees for ARPES simulations.
+It supports POSCAR, EIGENVAL, KPOINTS, DOSCAR, PROCAR, and CHGCAR files. It
+also provides HDF5 persistence, workflow helpers, and plotting utilities.
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`chgcar`
-    VASP CHGCAR file parser.
+    Parse a VASP CHGCAR file.
 - :mod:`certificate`
-    Portable persistence for forward-model certificates.
+    Persist forward-model certificates in portable formats.
 - :mod:`doscar`
-    VASP DOSCAR file parser.
+    Parse a VASP DOSCAR file.
 - :mod:`eigenval`
-    VASP EIGENVAL file parser.
+    Parse a VASP EIGENVAL file.
 - :mod:`hdf5`
-    HDF5 serializer and deserializer for diffpes PyTrees.
+    Serialize and deserialize diffpes PyTrees in HDF5.
 - :mod:`helpers`
-    Parser-adjacent workflow helpers for assembling simulation-ready arrays.
+    Provide workflow helpers for simulation-ready parser arrays.
 - :mod:`kpoints`
-    VASP KPOINTS file parser.
+    Parse a VASP KPOINTS file.
 - :mod:`plotting`
-    Plotting utilities for ARPES spectra.
+    Plot ARPES spectra with analysis utilities.
 - :mod:`poscar`
-    VASP POSCAR file parser.
+    Parse a VASP POSCAR/CONTCAR file.
 - :mod:`procar`
-    VASP PROCAR file parser.
+    Parse a VASP PROCAR file.
 
 Routine Listings
 ----------------
 :func:`aggregate_atoms`
     Sum orbital projections over a set of atoms.
 :func:`attach_certificate_h5`
-    Atomically attach a certificate to an HDF5 result file.
+    Attach a certificate atomically to an HDF5 result file.
 :func:`apply_kpath_ticks`
     Apply symmetry-point ticks/labels from KPathInfo to an axis.
 :func:`check_consistency`
@@ -73,15 +72,14 @@ Routine Listings
 :func:`save_to_h5`
     Save one or more named PyTrees to an HDF5 file.
 :func:`save_certificate_json`
-    Atomically save a forward certificate as canonical JSON.
+    Save a forward certificate atomically as canonical JSON.
 :func:`select_atoms`
     Extract orbital projections for a subset of atoms.
 
 Notes
 -----
-All parsers use standard Python I/O (not JAX) since file
-parsing is inherently sequential. They convert parsed data
-to JAX arrays via factory functions.
+All parsers use standard Python I/O because file parsing is sequential. Factory
+functions convert the parsed data to JAX arrays.
 """
 
 from .certificate import (

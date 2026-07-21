@@ -1,4 +1,4 @@
-"""JAX-native carriers for certified forward-model executions.
+"""Store JAX-native carriers for certified forward-model executions.
 
 Extended Summary
 ----------------
@@ -125,8 +125,8 @@ from .contracts import TransformationContract
 class ArtifactRef(eqx.Module):
     """Store static identity and role for one source or derived artifact.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestArtifactref`
 
@@ -167,8 +167,8 @@ class ArtifactRef(eqx.Module):
 class ConventionRef(eqx.Module):
     """Store a versioned semantic convention used by a scientific model.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestConventionref`
 
@@ -193,8 +193,8 @@ class ConventionRef(eqx.Module):
 class DomainPredicate(eqx.Module):
     """Store a static declaration of one model-domain predicate.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestDomainpredicate`
 
@@ -223,8 +223,8 @@ class DomainPredicate(eqx.Module):
 class DomainResult(eqx.Module):
     """Store the traced evaluation of one declared domain predicate.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestDomainresult`
 
@@ -280,8 +280,8 @@ type CheckFunction = Callable[[PyTree], DomainResult]
 class ForwardModelSpec(eqx.Module):
     """Store the identity of a differentiable forward model.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestForwardmodelspec`
 
@@ -330,8 +330,8 @@ class ForwardModelSpec(eqx.Module):
 class RegisteredModel(eqx.Module):
     """Store a frozen binding between a model spec and its executor.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestRegisteredmodel`
 
@@ -356,8 +356,8 @@ class RegisteredModel(eqx.Module):
 class RegisteredTransformation(eqx.Module):
     """Store a frozen transformation and its consistency checksum.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestRegisteredtransformation`
 
@@ -378,8 +378,8 @@ class RegisteredTransformation(eqx.Module):
 class RegistrySnapshot(eqx.Module):
     """Store an immutable deterministic snapshot of registry entries.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestRegistrysnapshot`
 
@@ -404,8 +404,8 @@ class RegistrySnapshot(eqx.Module):
 class RegistryReport(eqx.Module):
     """Store the structural validation result for one registry snapshot.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestRegistryreport`
 
@@ -442,8 +442,8 @@ class RegistryReport(eqx.Module):
 class TransformationRecord(eqx.Module):
     """Store one transformation and its semantic information effects.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestTransformationrecord`
 
@@ -492,8 +492,8 @@ class TransformationRecord(eqx.Module):
 class EvidenceRef(eqx.Module):
     """Store numerical evidence with static method and source identity.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestEvidenceref`
 
@@ -542,8 +542,8 @@ class EvidenceRef(eqx.Module):
 class CertificationClaim(eqx.Module):
     """Store a named claim and its continuous numerical evidence.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestCertificationclaim`
 
@@ -608,8 +608,8 @@ class CertificationClaim(eqx.Module):
 class DerivativeEvidence(eqx.Module):
     """Store JVP, VJP, reference, and information-spectrum evidence.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestDerivativeevidence`
 
@@ -674,8 +674,8 @@ class DerivativeEvidence(eqx.Module):
 class DependencyMap(eqx.Module):
     """Store declared and JAXPR-observed dependency relations.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestDependencymap`
 
@@ -708,8 +708,8 @@ class DependencyMap(eqx.Module):
 class SensitivityMap(eqx.Module):
     """Store scaled sensitivities from inputs to output projections.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestSensitivitymap`
 
@@ -746,8 +746,8 @@ class SensitivityMap(eqx.Module):
 class InformationSpectrum(eqx.Module):
     """Store a matrix-free information spectrum in input coordinates.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestInformationspectrum`
 
@@ -784,8 +784,8 @@ class InformationSpectrum(eqx.Module):
 class ExecutionManifest(eqx.Module):
     """Store software and execution identity prepared at the I/O boundary.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestExecutionmanifest`
 
@@ -838,8 +838,8 @@ class ExecutionManifest(eqx.Module):
 class PolicyReport(eqx.Module):
     """Store a traced policy truth table for derived certification levels.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestPolicyreport`
 
@@ -880,8 +880,8 @@ class PolicyReport(eqx.Module):
 class CertificationContext(eqx.Module):
     """Store prepared selections and references for compiled certification.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestCertificationcontext`
 
@@ -926,8 +926,8 @@ class CertificationContext(eqx.Module):
 class ForwardCertificate(eqx.Module):
     """Store the complete assurance record for one forward execution.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestForwardcertificate`
 
@@ -1000,8 +1000,8 @@ class ForwardCertificate(eqx.Module):
 class CertifiedResult(eqx.Module):
     """Store a numerical result paired with its differentiable certificate.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestCertifiedresult`
 
@@ -1022,8 +1022,8 @@ class CertifiedResult(eqx.Module):
 class EvidenceReport(eqx.Module):
     """Store the offline consistency outcome for one evidence record.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestEvidencereport`
 
@@ -1056,8 +1056,8 @@ class EvidenceReport(eqx.Module):
 class VerificationReport(eqx.Module):
     """Store an offline certificate-verification outcome.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestVerificationreport`
 
@@ -1090,8 +1090,8 @@ class VerificationReport(eqx.Module):
 class ReproductionReport(eqx.Module):
     """Store a numerical comparison from deliberate forward re-execution.
 
-    Carry static scientific vocabulary separately from traced numerical leaves
-    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+    Carry scientific vocabulary separately from traced leaves.
+    The record remains stable under JIT, VMAP, JVP, and VJP transforms.
 
     :see: :class:`~.test_certification.TestReproductionreport`
 
@@ -1257,8 +1257,8 @@ def make_artifact_ref(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: ArtifactRef = ArtifactRef(
         artifact_id=_require_text(artifact_id, "artifact_id"),
@@ -1308,8 +1308,8 @@ def make_convention_ref(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: ConventionRef = ConventionRef(
         convention_id=_require_text(convention_id, "convention_id"),
@@ -1357,8 +1357,8 @@ def make_domain_predicate(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: DomainPredicate = DomainPredicate(
         predicate_id=_require_text(predicate_id, "predicate_id"),
@@ -1430,8 +1430,8 @@ def make_domain_result(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: DomainResult = DomainResult(
         predicate_id=_require_text(predicate_id, "predicate_id"),
@@ -1514,8 +1514,8 @@ def make_forward_model_spec(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     diff_paths: tuple[str, ...] = _text_tuple(
         differentiable_paths,
@@ -1591,8 +1591,8 @@ def make_registered_model(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     if not callable(executor):
         raise TypeError("model executor must be callable")
@@ -1641,8 +1641,8 @@ def make_registered_transformation(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     if contract is None:
         raise ValueError("contract must not be None")
@@ -1689,8 +1689,8 @@ def make_registry_snapshot(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: RegistrySnapshot = RegistrySnapshot(
         models=tuple(models),
@@ -1750,8 +1750,8 @@ def make_registry_report(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     if model_count < 0 or transformation_count < 0:
         raise ValueError("registry entry counts must be nonnegative")
@@ -1831,8 +1831,8 @@ def make_transformation_record(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     if not output_ids:
         raise ValueError("output_ids must be non-empty")
@@ -1920,8 +1920,8 @@ def make_evidence_ref(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     measured_array: Array = _float(measured, "measured", 1)
     reference_array: Array = _float(reference, "reference", 1)
@@ -2030,8 +2030,8 @@ def make_certification_claim(  # noqa: PLR0913
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     measured_array: Array = _float(measured, "measured", 1)
     reference_array: Array = _float(reference, "reference", 1)
@@ -2143,8 +2143,8 @@ def make_derivative_evidence(  # noqa: PLR0913
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     paths: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
     projections: tuple[str, ...] = _text_tuple(
@@ -2241,8 +2241,8 @@ def make_dependency_map(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     inputs: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
     outputs: tuple[str, ...] = _text_tuple(output_paths, "output_paths")
@@ -2313,8 +2313,8 @@ def make_sensitivity_map(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     inputs: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
     outputs: tuple[str, ...] = _text_tuple(
@@ -2395,8 +2395,8 @@ def make_information_spectrum(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     paths: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
     singular_array: Array = _nonnegative(
@@ -2490,8 +2490,8 @@ def make_execution_manifest(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: ExecutionManifest = ExecutionManifest(
         execution_id=_require_text(execution_id, "execution_id"),
@@ -2564,8 +2564,8 @@ def make_policy_report(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     levels: tuple[str, ...] = _text_tuple(level_ids, "level_ids")
     claims: tuple[str, ...] = _text_tuple(
@@ -2656,8 +2656,8 @@ def make_certification_context(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     expected_ref: str = f"{model.model_id}@{model.model_version}"
     if manifest.model_ref not in (model.model_id, expected_ref):
@@ -2774,8 +2774,8 @@ def make_forward_certificate(  # noqa: PLR0913
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     values: Any
     attribute: Any
@@ -2849,8 +2849,8 @@ def make_certified_result(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: CertifiedResult = CertifiedResult(
         value=value,
@@ -2899,8 +2899,8 @@ def make_evidence_report(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: EvidenceReport = EvidenceReport(
         evidence_id=_require_text(evidence_id, "evidence_id"),
@@ -2958,8 +2958,8 @@ def make_verification_report(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     if policy_report.policy_id != policy_id:
         raise ValueError("policy_report policy_id does not match report")
@@ -3021,8 +3021,8 @@ def make_reproduction_report(
 
     Notes
     -----
-    Static structure is checked eagerly; numerical validation remains expressed
-    with JAX arrays so valid inputs retain differentiation behavior.
+    The factory checks static structure eagerly. JAX array operations validate
+    numerical values and preserve differentiation behavior.
     """
     result: ReproductionReport = ReproductionReport(
         execution_id=_require_text(execution_id, "execution_id"),

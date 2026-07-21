@@ -1,23 +1,24 @@
-"""Portable persistence for forward-model certificates.
+"""Persist forward-model certificates in portable formats.
 
 Extended Summary
 ----------------
-Stores ``ForwardCertificate`` PyTrees as deterministic, transparent JSON and
-embeds those exact bytes in HDF5 result files. Numerical leaves are represented
-losslessly with dtype, shape, byte order, and base64-encoded canonical bytes.
-The storage checksum is CRC32 bookkeeping for accidental mismatch detection;
-it is not authentication and contributes no scientific certification claim.
+The module stores ``ForwardCertificate`` PyTrees as deterministic, transparent
+JSON. It embeds the exact JSON bytes in HDF5 result files. The format
+represents numerical leaves without loss. It records the dtype, shape, byte
+order, and base64-encoded canonical bytes. A CRC32 checksum detects accidental
+storage mismatches. The checksum does not provide authentication or support a
+scientific certification claim.
 
 Routine Listings
 ----------------
 :func:`attach_certificate_h5`
-    Atomically attach a certificate to an HDF5 result file.
+    Attach a certificate atomically to an HDF5 result file.
 :func:`load_certificate_h5`
     Load a certificate embedded in an HDF5 result file.
 :func:`load_certificate_json`
     Load a validated forward certificate from canonical JSON.
 :func:`save_certificate_json`
-    Atomically save a forward certificate as canonical JSON.
+    Save a forward certificate atomically as canonical JSON.
 """
 
 from __future__ import annotations
@@ -670,7 +671,7 @@ def save_certificate_json(
     certificate: ForwardCertificate,
     path: str | Path,
 ) -> None:
-    """Atomically save a forward certificate as canonical JSON.
+    """Save a forward certificate atomically as canonical JSON.
 
     The persistence operation retains the complete scientific-assurance record
     and its JAX array leaves. Consistency checks detect accidental storage
@@ -791,7 +792,7 @@ def attach_certificate_h5(
     name: str,
     certificate: ForwardCertificate,
 ) -> None:
-    """Atomically attach a certificate to an HDF5 result file.
+    """Attach a certificate atomically to an HDF5 result file.
 
     The function updates the complete file through a same-directory temporary.
     It preserves existing numerical result groups.

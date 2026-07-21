@@ -36,7 +36,7 @@ _FIXTURES_DIR: Path = Path(__file__).resolve().parent / "fixtures"
 
 
 class TestReadDoscar(chex.TestCase):
-    """Tests for :func:`diffpes.inout.read_doscar`.
+    """Validate :func:`diffpes.inout.read_doscar`.
 
     Verifies that the DOSCAR parser produces a valid DensityOfStates
     PyTree with correct array shapes and expected numeric values from
@@ -48,15 +48,14 @@ class TestReadDoscar(chex.TestCase):
     def test_parses_minimal_doscar(self) -> None:
         """Read minimal DOSCAR fixture and assert shape and key values of DensityOfStates.
 
-        Loads the fixtures/DOSCAR file and asserts that energy and
-        total_dos have shape (5,), fermi_energy is scalar, and
-        selected elements match the known fixture values (fermi 0.5,
-        first energy -2.0, middle DOS 0.5). Ensures the parser
-        correctly interprets the DOSCAR header and data block.
+        The test loads the ``fixtures/DOSCAR`` file. It checks the array
+        shapes and the scalar Fermi energy. It compares selected elements
+        with the known fixture values. These checks verify the DOSCAR header
+        and data block.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -77,7 +76,7 @@ class TestReadDoscar(chex.TestCase):
 
 
 class TestReadDoscarFull(chex.TestCase):
-    """Tests for :func:`diffpes.inout.read_doscar` with ``return_mode='full'``.
+    """Validate :func:`diffpes.inout.read_doscar` with ``return_mode='full'``.
 
     Validates the full-mode DOSCAR parser that returns
     ``FullDensityOfStates`` objects containing spin-resolved total DOS,
@@ -93,16 +92,14 @@ class TestReadDoscarFull(chex.TestCase):
         """Read spin-polarized DOSCAR in full mode and verify both spin channels.
 
         Parses the DOSCAR_spin fixture with ``return_mode="full"``.
-        Asserts the result is a ``FullDensityOfStates``, energy has
-        shape (5,), both ``total_dos_up`` and ``total_dos_down`` have
-        shape (5,) and are not None, both integrated DOS arrays have
-        shape (5,), ``fermi_energy`` is 0.5, the first spin-up DOS
-        value is 0.10, and the first spin-down DOS value is 0.08,
-        all verified to within ``atol=1e-12``.
+        The test checks the result type and the shape of each DOS array.
+        It checks that both spin-down arrays exist. It compares the Fermi
+        energy and the first value of each spin channel with fixture values.
+        The comparisons use ``atol=1e-12``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -130,16 +127,13 @@ class TestReadDoscarFull(chex.TestCase):
         """Read non-spin-polarized DOSCAR in full mode and verify spin-down fields are None.
 
         Parses the standard DOSCAR fixture (non-spin-polarized) with
-        ``return_mode="full"``. Asserts the result is a
-        ``FullDensityOfStates``, energy and ``total_dos_up`` both have
-        shape (5,), ``integrated_dos_up`` has shape (5,), and both
-        ``total_dos_down`` and ``integrated_dos_down`` are ``None``,
-        confirming the parser correctly detects non-spin data and
-        leaves spin-down fields unset.
+        ``return_mode="full"``. The test checks the result type and the
+        three spin-up array shapes. It verifies that both spin-down arrays
+        are ``None``. These checks confirm detection of non-spin data.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -156,16 +150,14 @@ class TestReadDoscarFull(chex.TestCase):
         """Read DOSCAR containing per-atom PDOS blocks in full mode.
 
         Parses the DOSCAR_pdos fixture with ``return_mode="full"``.
-        Asserts the result is a ``FullDensityOfStates``, ``pdos`` is
-        not None, its shape is (2, 3, 10) corresponding to 2 atoms,
-        3 energy points, and 10 data columns (9 orbital channels plus
-        a total column), and ``natoms`` is 2. This validates the PDOS
-        block parsing path which reads per-atom decomposed DOS after
-        the total DOS header.
+        The test checks the result type and verifies that ``pdos`` exists.
+        The PDOS shape represents two atoms, three energies, and ten columns.
+        The test also verifies ``natoms=2``. These checks validate the PDOS
+        block after the total DOS header.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -178,19 +170,17 @@ class TestReadDoscarFull(chex.TestCase):
         assert dos.natoms == 2
 
     def test_spin_doscar_legacy(self) -> None:
-        """Read spin-polarized DOSCAR in legacy mode and verify only spin-up is returned.
+        """Read a legacy spin-polarized DOSCAR and verify the spin-up result.
 
         Parses the DOSCAR_spin fixture with ``return_mode="legacy"``.
-        Asserts the result is a plain ``DensityOfStates`` (not
-        ``FullDensityOfStates``), energy has shape (5,), ``total_dos``
-        has shape (5,), and the first total DOS value is 0.10
-        (matching the spin-up channel), verified to within
-        ``atol=1e-12``. This exercises the backward-compatible path
-        that discards spin-down data.
+        The test verifies a plain ``DensityOfStates`` result and both array
+        shapes. It compares the first total DOS value with the spin-up value.
+        The comparison uses ``atol=1e-12``. This test covers the compatible
+        path that discards spin-down data.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -205,24 +195,23 @@ class TestReadDoscarFull(chex.TestCase):
 
 
 class TestReadDoscarPdosHeader(chex.TestCase):
-    """Tests for :func:`read_doscar` PDOS parsing with per-atom header lines.
+    """Validate :func:`read_doscar` PDOS parsing with per-atom header lines.
 
     :see: :func:`~diffpes.inout.read_doscar`
     """
 
     def test_pdos_with_header_line(self) -> None:
-        """DOSCAR with per-atom header line exercises doscar.py lines 204-221.
+        """Exercise DOSCAR parsing with a header for each atom.
 
-        Uses the DOSCAR_pdos_header fixture where each atom's PDOS block
+        The test uses the DOSCAR_pdos_header fixture where each atom's PDOS block
         starts with a 4-value header line (EMIN EMAX NEDOS EFERMI).
-        The condition ``NONSPIN_COLS <= len(line_vals) <= SPIN_COLS``
-        is True (4 values), so lines 204-221 are executed. Asserts the
-        PDOS array has the correct shape (1 atom, 3 energy points, 9
-        orbital columns).
+        The four values satisfy the column-count condition. Therefore, the
+        parser executes the applicable header path. The test checks the PDOS
+        shape for one atom, three energies, and nine orbital columns.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         dos: diffpes.types.DensityOfStates | diffpes.types.FullDensityOfStates
 
@@ -234,9 +223,9 @@ class TestReadDoscarPdosHeader(chex.TestCase):
         chex.assert_shape(dos.pdos, (1, 3, 9))
 
     def test_pdos_early_break_on_empty_line(self) -> None:
-        """PDOS block with fewer data rows than NEDOS exercises doscar.py line 230.
+        """Exercise PDOS parsing with fewer rows than ``NEDOS``.
 
-        Writes a DOSCAR where natoms=1, NEDOS=3 but the PDOS block has
+        The test writes a DOSCAR where natoms=1, NEDOS=3 but the PDOS block has
         only 1 data row followed by an empty line. This causes the
         ``for j in range(1, nedos):`` loop to hit an empty ``row_line``
         and execute the ``break`` on line 230. Asserts the result is
@@ -244,7 +233,7 @@ class TestReadDoscarPdosHeader(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fh: TextIO
 
         content: str
@@ -278,19 +267,19 @@ class TestReadDoscarPdosHeader(chex.TestCase):
             os.unlink(tmpname)
 
     def test_pdos_header_then_empty_line_breaks(self) -> None:
-        """PDOS block whose header is followed by an empty line exercises doscar.py line 206.
+        """Exercise PDOS parsing with an empty line after the header.
 
-        Writes a DOSCAR with natoms=1, NEDOS=3 where the PDOS block has a
-        4-value header line (satisfying ``NONSPIN_COLS <= len <= SPIN_COLS``)
-        immediately followed by an empty line. The parser reads the header
+        The test writes a DOSCAR with ``natoms=1`` and ``NEDOS=3``.
+        Its PDOS block has a four-value header followed by an empty line.
+        The parser reads the header
         (line 204), then reads the empty line as ``pdos_ncols_check`` and
         hits ``if not pdos_ncols_check.strip(): break`` on line 205-206.
-        Asserts the result is a ``FullDensityOfStates`` with ``pdos=None``
+        The test asserts the result is a ``FullDensityOfStates`` with ``pdos=None``
         (no PDOS data collected before the break).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fh: TextIO
 
         content: str
@@ -325,17 +314,17 @@ class TestReadDoscarPdosHeader(chex.TestCase):
             os.unlink(tmpname)
 
     def test_pdos_header_inner_loop_empty_row_breaks(self) -> None:
-        """Empty data row inside PDOS-with-header loop exercises doscar.py line 218.
+        """Exercise the PDOS header loop with an empty data row.
 
-        Writes a DOSCAR with natoms=1, NEDOS=3 where the PDOS block starts
-        with a 4-value header line, then a valid first data row, then an
-        empty line for the second data row (j=1). The inner loop reads the
+        The test writes a DOSCAR with ``natoms=1`` and ``NEDOS=3``.
+        The PDOS block has a header, one valid row, and one empty row.
+        The inner loop reads the
         empty ``row_line`` and hits ``if not row_line.strip(): break`` on
         line 217-218. Asserts the result is a ``FullDensityOfStates``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fh: TextIO
 
         content: str

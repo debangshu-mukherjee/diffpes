@@ -1,10 +1,10 @@
-"""Photon polarization and dipole matrix element calculations.
+"""Compute photon polarization and dipole matrix elements.
 
 Extended Summary
 ----------------
-Computes electric field polarization vectors from incident photon
-geometry and evaluates dipole transition matrix elements for each
-atomic orbital, following standard ARPES selection rules.
+The module computes electric field polarization vectors from the photon
+geometry. It computes dipole transition matrix elements for each atomic
+orbital according to standard ARPES selection rules.
 
 Routine Listings
 ----------------
@@ -44,10 +44,10 @@ def build_polarization_vectors(
 ) -> Tuple[Float[Array, " 3"], Float[Array, " 3"]]:
     """Construct s- and p-polarization basis vectors.
 
-    Builds an orthonormal pair of polarization vectors (e_s, e_p)
-    from the photon incidence angles, defining the s-polarization
-    (perpendicular to the incidence plane) and p-polarization (in
-    the incidence plane, perpendicular to the wavevector).
+    The function constructs an orthonormal pair of polarization vectors from
+    the photon incidence angles. The s-polarization is perpendicular to the
+    incidence plane. The p-polarization is in the incidence plane and
+    perpendicular to the wavevector.
 
     :see: :class:`~.test_polarization.TestBuildPolarizationVectors`
 
@@ -67,10 +67,10 @@ def build_polarization_vectors(
            ref = z_hat  unless  |k . z_hat| >= 0.99
            ref = y_hat  if k is nearly collinear with z_hat
 
-       The reference axis is used to define the incidence plane.
+       The reference axis defines the incidence plane.
        When k is nearly parallel to z_hat, the cross product
-       k x z_hat would be poorly conditioned, so y_hat is used
-       as a fallback.
+       A nearly parallel k makes k x z_hat poorly conditioned. Therefore, use
+       y_hat as the fallback.
 
     3. **Compute s-polarization** ``e_s = normalize(k x ref)``::
 
@@ -149,11 +149,10 @@ def photon_wavevector(
 ) -> Float[Array, " 3"]:
     """Build the unit photon wavevector from incidence angles.
 
-    Builds the unit vector in the direction of photon propagation
-    from spherical coordinates (theta from surface normal, phi
-    azimuthal): k = [sin(theta)*cos(phi), sin(theta)*sin(phi),
-    cos(theta)] / ||...||. Used in spin-orbit ARPES simulations
-    to form the S·k_photon correction for circular dichroism.
+    The function constructs the unit photon propagation vector from spherical
+    coordinates. Theta starts at the surface normal, and phi is the azimuthal
+    angle. Spin-orbit ARPES simulations use the vector in the S·k_photon
+    correction for circular dichroism.
 
     :see: :class:`~.test_polarization.TestPhotonWavevector`
 
@@ -176,9 +175,9 @@ def photon_wavevector(
 
     See Also
     --------
-    build_polarization_vectors : Builds the same k internally for
-        the s- and p-polarization basis; use this when only the
-        propagation direction is needed.
+    build_polarization_vectors : Build the same k for the s-polarization and
+        p-polarization basis. Use this function only for the propagation
+        direction.
     """
     k: Float[Array, " 3"] = jnp.array(
         [
@@ -253,12 +252,13 @@ def build_efield(
     ] = (e_s_c, e_p_c, angle)
 
     def branch_lvp(op: Tuple) -> Complex[Array, " 3"]:
-        """Linear vertical: electric field equals s-polarization basis.
+        """Return the s-polarization basis for linear vertical polarization.
 
         Parameters
         ----------
         op : Tuple
-            Operand (e_s_c, e_p_c, angle). Only the first element is used.
+            Operand (e_s_c, e_p_c, angle). The branch uses only the first
+            element.
 
         Returns
         -------
@@ -269,12 +269,13 @@ def build_efield(
         return branch_efield
 
     def branch_lhp(op: Tuple) -> Complex[Array, " 3"]:
-        """Linear horizontal: electric field equals p-polarization basis.
+        """Return the p-polarization basis for linear horizontal polarization.
 
         Parameters
         ----------
         op : Tuple
-            Operand (e_s_c, e_p_c, angle). Only the second element is used.
+            Operand (e_s_c, e_p_c, angle). The branch uses only the second
+            element.
 
         Returns
         -------
@@ -285,7 +286,7 @@ def build_efield(
         return branch_efield
 
     def branch_lap(op: Tuple) -> Complex[Array, " 3"]:
-        """Linear arbitrary: cos(angle)*e_s + sin(angle)*e_p.
+        """Return the basis for arbitrary linear polarization.
 
         Parameters
         ----------
@@ -304,12 +305,13 @@ def build_efield(
         return branch_efield
 
     def branch_rcp(op: Tuple) -> Complex[Array, " 3"]:
-        """Right circular polarization: (e_s + i*e_p)/sqrt(2).
+        """Return the right circular polarization vector.
 
         Parameters
         ----------
         op : Tuple
-            Operand (e_s_c, e_p_c, angle). First two elements are used.
+            Operand (e_s_c, e_p_c, angle). The branch uses the first two
+            elements.
 
         Returns
         -------
@@ -322,12 +324,13 @@ def build_efield(
         return branch_efield
 
     def branch_lcp(op: Tuple) -> Complex[Array, " 3"]:
-        """Left circular polarization: (e_s - i*e_p)/sqrt(2).
+        """Return the left circular polarization vector.
 
         Parameters
         ----------
         op : Tuple
-            Operand (e_s_c, e_p_c, angle). First two elements are used.
+            Operand (e_s_c, e_p_c, angle). The branch uses the first two
+            elements.
 
         Returns
         -------
@@ -340,12 +343,13 @@ def build_efield(
         return branch_efield
 
     def branch_default(op: Tuple) -> Complex[Array, " 3"]:
-        """Fallback for unknown or unpolarized type: return s-polarization.
+        """Return s-polarization for an unknown or unpolarized type.
 
         Parameters
         ----------
         op : Tuple
-            Operand (e_s_c, e_p_c, angle). Only the first element is used.
+            Operand (e_s_c, e_p_c, angle). The branch uses only the first
+            element.
 
         Returns
         -------

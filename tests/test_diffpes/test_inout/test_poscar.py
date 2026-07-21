@@ -36,7 +36,7 @@ _FIXTURES_DIR: Path = Path(__file__).resolve().parent / "fixtures"
 
 
 class TestReadPoscar(chex.TestCase):
-    """Tests for :func:`diffpes.inout.read_poscar`.
+    """Validate :func:`diffpes.inout.read_poscar`.
 
     Covers VASP5 (species + Direct), VASP4 (Cartesian), and
     selective-dynamics POSCAR formats. Asserts lattice, coords,
@@ -50,11 +50,11 @@ class TestReadPoscar(chex.TestCase):
 
         Parses the default POSCAR fixture. Asserts lattice (3,3),
         coords (6,3), symbols ("Si", "O"), and atom_counts [2, 4].
-        Validates species line parsing and direct-coordinate scaling.
+        The test validates species line parsing and direct-coordinate scaling.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         geom: diffpes.types.CrystalGeometry
 
@@ -76,7 +76,7 @@ class TestReadPoscar(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         geom: diffpes.types.CrystalGeometry
 
@@ -92,13 +92,12 @@ class TestReadPoscar(chex.TestCase):
         """Read POSCAR with Selective dynamics line and assert coordinates.
 
         Parses POSCAR_selective. Asserts coords shape (1, 3) and
-        first coordinate [0, 0, 0]. Validates that the selective
-        dynamics line is consumed and coordinates are still read
-        correctly.
+        first coordinate [0, 0, 0]. The test verifies consumption of the
+        selective-dynamics line. It also checks the parsed coordinates.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         path: Path
         geom: diffpes.types.CrystalGeometry
 

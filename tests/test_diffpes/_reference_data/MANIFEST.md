@@ -1,6 +1,6 @@
 # WP6.1 regression-reference manifest
 
-> These files pin pre-refactor behavior, not correctness. They
+> These files preserve pre-refactor behavior, not correctness. They
 > intentionally include known physics defects documented by Plan 01.
 > Regenerate only with a stated physics or migration justification.
 

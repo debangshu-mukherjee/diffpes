@@ -1,35 +1,35 @@
 # JAX Transformability and Gradients
 
-diffpes is a differentiable instrument: the same forward pipeline that maps
-a band structure to an ARPES spectrum is run in reverse — by attaching a
-loss and calling `jax.grad` — to recover band parameters, self-energies, and
-experimental geometry from measured data. That only works if `jit`, `vmap`,
-and `grad` behave predictably everywhere. This guide states what is
-supported where, shows worked examples, and spells out the gradient
-correctness doctrine the codebase is tested against.
+diffpes implements a differentiable forward pipeline. The pipeline maps a band
+structure to an ARPES spectrum. A loss and `jax.grad` provide derivatives for
+recovering band parameters, self-energies, and experimental geometry from
+measured data. This process requires predictable `jit`, `vmap`, and `grad`
+behavior. This guide identifies the supported transformations. It also
+provides examples and states the tested gradient correctness rules.
 
 ## The x64 Policy
 
-Importing `diffpes` enables 64-bit precision *before* JAX is imported:
+Importing `diffpes` enables 64-bit precision before other diffpes modules
+import JAX:
 
 ```python
 jax.config.update("jax_enable_x64", True)
 ```
 
-This happens once, in the top-level `src/diffpes/__init__.py` (together with
-CPU-threading XLA flags), and every factory casts its arrays to `float64`.
-Do not flip x64 off: Fermi-edge derivatives at 15 K and Voigt tails span
-enough orders of magnitude that float32 gradients lose the small
-sensitivities the Fisher-information analysis depends on. Angles are degrees
-at user-facing API boundaries and radians internally — converted once, at
-the boundary.
+The top-level `src/diffpes/__init__.py` performs this initialization once. It
+also sets the XLA flags for CPU threading. Every factory casts its arrays to
+`float64`. Keep x64 enabled. Fermi-edge derivatives at 15 K and Voigt tails
+span many orders of magnitude. Float32 gradients lose small sensitivities
+that the Fisher information analysis requires. User-facing APIs accept angles
+in degrees. The boundary converts them once, and internal functions use
+radians.
 
 ## `jit`: Mark the Static Arguments
 
-The simulators mix traced scalars with genuinely static inputs: `level` and
-`polarization` are Python strings that select code branches, and `fidelity`
-is a Python `int` that sets the energy-axis length (JAX requires static
-shapes). Name them in `static_argnames`:
+The simulators combine traced scalars with static inputs. The Python strings
+`level` and `polarization` select code branches. The Python integer `fidelity`
+sets the energy-axis length because JAX requires static shapes. List these
+arguments in `static_argnames`:
 
 ```python
 import jax
@@ -50,18 +50,19 @@ spectrum = simulate_jit(
 print(spectrum.intensity.shape)  # (20, 500)
 ```
 
-Changing a static argument (a new `fidelity`, a different `level`) triggers
-recompilation; changing a traced one (`sigma`, `ef`, the eigenvalue array
-values) does not. The same split lives inside the PyTrees themselves:
-`SimulationParams.fidelity` and `PolarizationConfig.polarization_type` are
-auxiliary data, so PyTree-accepting functions inherit correct static
-behavior automatically (see
-[PyTree Architecture](pytree-architecture.md)).
+A new static argument value triggers recompilation. Examples include a new
+`fidelity` or a different `level`. Changes to traced values do not trigger
+recompilation. Such values include `sigma`, `ef`, and the eigenvalue array.
+The PyTrees maintain the same distinction. `SimulationParams.fidelity` and
+`PolarizationConfig.polarization_type` are auxiliary data. Therefore,
+PyTree-accepting functions receive the correct static behavior. See
+[PyTree Architecture](pytree-architecture.md).
 
 ## `vmap`: Parameter Sweeps
 
-Anything traced can be batched. A photon-energy sweep is one `vmap` over a
-closure, and the result is a batched `ArpesSpectrum` intensity:
+JAX can batch every traced value. One `vmap` over a closure performs a
+photon-energy sweep. The result contains a batched `ArpesSpectrum.intensity`
+array:
 
 ```python
 def intensity_at(photon_energy):
@@ -77,14 +78,14 @@ stack = jax.vmap(intensity_at)(photon_energies)
 print(stack.shape)  # (3, 20, 500)
 ```
 
-The same pattern batches over polar angles, temperatures, or whole batches
-of eigenvalue sets — any leaf, any carrier.
+The same pattern batches polar angles, temperatures, or complete sets of
+eigenvalues. It applies to any traced leaf in any carrier.
 
 ## `grad`: A Worked Inverse-Problem Loss
 
 A scalar loss on `ArpesSpectrum.intensity` differentiates with respect to
-any traced parameter. Here, sensitivity of a region of the spectrum to the
-broadening, temperature, and Fermi level:
+any traced parameter. The following example computes regional spectrum
+sensitivity to broadening, temperature, and the Fermi level:
 
 ```python
 def loss(sigma, temperature, ef):
@@ -98,22 +99,22 @@ def loss(sigma, temperature, ef):
 g_sigma, g_temp, g_ef = jax.grad(loss, argnums=(0, 1, 2))(0.04, 15.0, 0.0)
 ```
 
-All three come back as finite, nonzero 0-d arrays. In a fitting workflow the
-loss would compare against measured data (`jnp.mean((sim - meas) ** 2)`)
-and the gradient would drive an
-[Optimistix](https://docs.kidger.site/optimistix/) solver — but the
-mechanics are exactly this.
+All three results are finite, nonzero 0-D arrays. In a fitting workflow, the
+loss compares the simulation with measured data. For example, it can use
+`jnp.mean((sim - meas) ** 2)`. An
+[Optimistix](https://docs.kidger.site/optimistix/) solver uses the resulting
+gradient.
 
 ## The Differentiability Doctrine
 
-These are the rules of the house, codified in the project's CONTRIBUTING
-guide and enforced by the test suite (see the *Testing / Validation*
-reference, {doc}`../tests/gradients`).
+The project's CONTRIBUTING guide defines the following rules. The test suite
+enforces them. See the *Testing / Validation* reference,
+{doc}`../tests/gradients`.
 
 ### Grad-vs-finite-difference is the correctness gate
 
-*Finite* is not *correct*. Every differentiable primitive is gated by
-agreement between `jax.grad` and central finite differences:
+*Finite* is not *correct*. Tests require agreement between `jax.grad` and
+central finite differences for every differentiable primitive:
 
 ```python
 def f(sigma):
@@ -130,39 +131,37 @@ central = (f(0.04 + eps) - f(0.04 - eps)) / (2.0 * eps)
 # autodiff and central agree to ~6 significant figures
 ```
 
-A gradient that disagrees with the finite difference is a physics bug even
-when the forward values look right — under the identifiability thesis,
-every row of the Fisher information matrix is built from these gradients.
+A gradient that disagrees with the finite difference is a physics bug. The
+forward values can still appear correct. Under the identifiability thesis,
+these gradients form every row of the Fisher information matrix.
 
 ### Finite-but-zero gradients are bugs — unless the physics is flat
 
-A zero gradient where the physics has real sensitivity is a failure mode
-the tests trip on explicitly. But the converse matters too: some zeros are
-honest, and you must be able to tell them apart. Two real examples from the
-current code:
+The tests detect zero gradients where the physics has real sensitivity.
+However, a zero can also represent a physically constant response. Distinguish
+these cases. The current code provides two examples:
 
-- `jax.grad` of the *total* intensity with respect to `sigma` is ~0 at the
-  basic level: Gaussian broadening is a normalized convolution, so the sum
-  over the full energy axis is conserved. A pointwise or windowed loss (as
-  above) shows the true, large sensitivity.
-- `jax.grad` with respect to `photon_energy` is exactly zero at 11 eV for
-  the Yeh–Lindau levels: the cross-section tables are tabulated at
-  20/40/60 eV with constant extrapolation outside that range, and the
-  heuristic weights are piecewise-constant in photon energy by
-  construction. Inside 20–60 eV the interpolation is piecewise-linear and
-  the gradient is finite; below 20 eV, sweep with `vmap` instead of
-  differentiating.
+- At the basic level, `jax.grad` of the *total* intensity with respect to
+  `sigma` is approximately zero. Gaussian broadening uses a normalized
+  convolution. Therefore, it conserves the sum over the complete energy axis.
+  A pointwise or windowed loss shows the large local sensitivity.
+- At 11 eV, `jax.grad` with respect to `photon_energy` is exactly zero for the
+  Yeh–Lindau levels. The cross-section tables contain values at 20, 40, and
+  60 eV. Constant extrapolation applies outside that range. The heuristic
+  weights also remain piecewise constant in photon energy. Between 20 and
+  60 eV, piecewise-linear interpolation gives a finite gradient. Below 20 eV,
+  use `vmap` for a parameter sweep.
 
-When you hit an unexpected zero, check whether the parameter reaches the
-loss through a genuinely flat map before filing it as a bug — and if the
-physics says it should not be flat, it *is* a bug.
+For an unexpected zero, first check whether a constant map connects the
+parameter to the loss. Report a bug when the physics predicts a nonconstant
+response.
 
 ### The double-`where` NaN guard
 
-`jnp.where(cond, safe, unsafe)` is not enough: JAX evaluates *both*
-branches, and if the unsafe branch produces `nan` on the untaken inputs,
-the *gradient* of the `where` is NaN-poisoned even though the forward value
-is fine. Sanitize the unsafe branch's **input** with an inner `where`:
+`jnp.where(cond, safe, unsafe)` cannot guard an unsafe branch by itself. JAX
+evaluates *both* branches. An untaken branch can therefore produce `nan` and
+contaminate the `where` gradient. The forward value can remain finite.
+Sanitize the unsafe branch **input** with an inner `where`:
 
 ```python
 def safe_sqrt(x):
@@ -173,18 +172,17 @@ def safe_sqrt(x):
 print(jax.grad(safe_sqrt)(-1.0))  # 0.0, not nan
 ```
 
-This pattern appears throughout the simulators wherever kinematics can go
-evanescent (square roots of energy differences, normalizations by sums that
-can vanish).
+The simulators use this pattern for evanescent kinematics. Examples include
+square roots of energy differences and normalization by sums that can vanish.
 
 ### `eigh` at degeneracies: gauge-invariant quantities only
 
-`jnp.linalg.eigh` gradients blow up at degenerate eigenvalues — exactly
-where band structures like to be (high-symmetry points, Kramers pairs under
-SOC). The rule: never differentiate raw eigenvectors near a possible
-degeneracy. Differentiate gauge-invariant combinations instead — projectors
-and spectral weights, in which the arbitrary phase (and, in a degenerate
-subspace, the arbitrary rotation) cancels:
+`jnp.linalg.eigh` gradients diverge at degenerate eigenvalues. Band structures
+often contain degeneracies at high-symmetry points and Kramers pairs under
+SOC. Do not differentiate raw eigenvectors near a possible degeneracy.
+Instead, differentiate gauge-invariant projectors and spectral weights. These
+quantities cancel arbitrary phases and rotations within a degenerate
+subspace:
 
 ```python
 def orbital_weights(theta):
@@ -197,18 +195,18 @@ def orbital_weights(theta):
 print(jax.jacobian(orbital_weights)(0.3))  # finite away from theta = 0
 ```
 
-The weights are differentiable in the parameters away from crossings, and the
-degeneracy-aware machinery in `diffpes.tightb` (or a Green's-function
-formulation) covers the crossings themselves. Complex *parameters* follow
-the real-ification doctrine — carried as stacked reals and re-complexified
-inside the forward — while complex *state* (matrix elements, eigenvectors)
-stays complex, with the modulus-squared applied as late as possible so that
-interference channels survive.
+The weights remain differentiable away from crossings. The degeneracy-aware
+machinery in `diffpes.tightb` handles the crossings. A Green's-function
+formulation provides another option. Represent complex *parameters* as stacked
+reals under the real-ification doctrine. Reconstruct their complex form inside
+the forward model. Keep complex *state*, including matrix elements and
+eigenvectors, complex. Apply the modulus-squared operation late enough to
+preserve interference channels.
 
 ## What Flows Gradients End-to-End Today
 
-Through the `simulate_*_expanded` family and `simulate_context`, measured
-against windowed intensity losses:
+The following table lists live gradients through `simulate_*_expanded` and
+`simulate_context`. It assumes windowed intensity losses:
 
 | Parameter | Levels where the gradient is live |
 |---|---|
@@ -219,11 +217,11 @@ against windowed intensity losses:
 | `photon_energy` | piecewise: linear inside the 20–60 eV cross-section tables, flat outside; piecewise-constant at basic level |
 | `level`, `polarization`, `fidelity` | static — no gradient by design |
 
-The full tight-binding forward model `simulate_tb_radial` extends this to
-hopping parameters (via `DiagonalizedBands`), Slater radial parameters
-(`SlaterParams.zeta` and coefficients), self-energy coefficients
-(`SelfEnergyConfig`), and the work function — the entire pipeline is
-JAX-traceable and `grad`-able in its continuous inputs.
+The full tight-binding forward model `simulate_tb_radial` also supports
+hopping parameters through `DiagonalizedBands`. It supports Slater radial
+parameters through `SlaterParams.zeta` and its coefficients. It also supports
+`SelfEnergyConfig` coefficients and the work function. JAX can trace and
+differentiate the complete pipeline with respect to continuous inputs.
 
 ## Related Reading
 

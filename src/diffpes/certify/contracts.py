@@ -1,11 +1,11 @@
-"""Semantic contracts for composable certified transformations.
+"""Define semantic contracts for composable certified transformations.
 
 Extended Summary
 ----------------
-Transformation contracts state the meaning required and produced by a step,
-which properties are explicitly preserved, what information is destroyed,
-and which prior claims cease to apply.  Composition is conservative: an
-inherited property survives only when the next transformation names it in
+Transformation contracts state the meaning that a step requires and
+produces. They identify the preserved properties, destroyed information, and
+invalid prior claims. Composition applies a conservative rule. An inherited
+property survives only when the next transformation names it in
 ``preserves``.
 
 Contracts are static Equinox PyTrees.  They select and describe JAX programs;
@@ -18,7 +18,7 @@ Routine Listings
 :func:`validate_composition`
     Validate and conservatively compose transformation semantics.
 :func:`compose_transformations`
-    Compose contracts and raise if any requirement is unsatisfied.
+    Compose contracts and raise for unsatisfied requirements.
 """
 
 from __future__ import annotations
@@ -67,8 +67,8 @@ def validate_contract(contract: TransformationContract) -> tuple[str, ...]:
 
            result: tuple[str, ...] = tuple(errors)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -126,13 +126,14 @@ def validate_composition(
     -------
     report : CompositionReport
         Deterministic semantics, information-loss, and claim-invalidation
-        summary. Invalid composition is reported rather than raised.
+        summary. The report contains invalid composition instead of raising an
+        exception.
 
     Notes
     -----
-    A property not named in ``preserves`` is conservatively considered lost
-    at that step. This prevents an undeclared transformation from silently
-    carrying a scientific claim forward.
+    The operation treats a property as lost when ``preserves`` does not name
+    it at that step. This rule prevents an undeclared transformation from
+    retaining a scientific claim.
     """
     index: Any
     contract: Any
@@ -182,7 +183,7 @@ def compose_transformations(
     *,
     initial_semantics: Iterable[str] = (),
 ) -> CompositionReport:
-    """Compose contracts and raise if any requirement is unsatisfied.
+    """Compose contracts and raise for unsatisfied requirements.
 
     The operation propagates declared semantics and information loss
     conservatively. It never infers that an undeclared scientific property
@@ -197,8 +198,8 @@ def compose_transformations(
 
            msg: str = "; ".join(report.errors)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

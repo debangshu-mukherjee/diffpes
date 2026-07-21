@@ -1,10 +1,9 @@
-"""Expanded-input workflows for ARPES simulation.
+"""Run expanded-input workflows for ARPES simulation.
 
 Extended Summary
 ----------------
-Provides convenience wrappers that accept plain arrays and scalars
-so that the user does not need to know about the PyTree structures
-used internally by diffpes.
+The module provides wrappers that accept plain arrays and scalars. Users do not
+need to construct the internal diffpes PyTrees.
 
 Routine Listings
 ----------------
@@ -25,7 +24,7 @@ Routine Listings
 
 Notes
 -----
-Energy axes are built as
+The wrappers construct energy axes as
 ``linspace(min(eigenbands)-1, max(eigenbands)+1, fidelity)``.
 """
 
@@ -75,15 +74,14 @@ def _build_inputs(
 
     Implementation Logic
     --------------------
-    1. **Cast to float64**: ``eigenbands`` and ``surface_orb`` are
-       promoted to ``jnp.float64`` via ``jnp.asarray`` so that all
-       downstream arithmetic operates at double precision.
+    1. **Cast to float64**: Convert ``eigenbands`` and ``surface_orb`` to
+       ``jnp.float64`` with ``jnp.asarray``. Downstream arithmetic then uses
+       double precision.
 
-    2. **Synthesize k-point coordinates**: A placeholder array of
-       zeros with shape ``(K, 3)`` is created. The expanded-input
-       workflow does not require physical k-point coordinates because
-       the simulation kernels only use the eigenvalues; the k-point
-       axis merely indexes the bands.
+    2. **Create k-point coordinates**: Create a zero array with shape
+       ``(K, 3)``. The expanded-input workflow does not require physical
+       k-point coordinates. Its kernels use only the eigenvalues. The k-point
+       axis indexes the bands.
 
     3. **Build PyTrees**: ``make_band_structure`` and
        ``make_orbital_projection`` assemble the validated PyTrees.
@@ -144,10 +142,10 @@ def _build_polarization(
 
     Implementation Logic
     --------------------
-    1. **Convert angles**: ``incident_theta`` and ``incident_phi``
-       are converted from degrees to radians via ``jnp.deg2rad``.
-    2. **Pass through**: ``polarization_angle`` is already in
-       radians and is forwarded without conversion.
+    1. **Convert the angles**: Convert ``incident_theta`` and ``incident_phi``
+       from degrees to radians with ``jnp.deg2rad``.
+    2. **Retain the rotation**: Forward ``polarization_angle`` without
+       conversion because it already uses radians.
     3. **Delegate**: Calls :func:`~diffpes.types.make_polarization_config`
        to construct the validated PyTree.
 
@@ -407,11 +405,10 @@ def simulate_basicplus_expanded(
 ) -> ArpesSpectrum:
     """Run basicplus-level ARPES simulation from plain arrays.
 
-    Applies Gaussian broadening with interpolated Yeh-Lindau
-    photoionization cross-sections. Unlike the heuristic weights
-    used at the basic level, Yeh-Lindau cross-sections are derived
-    from tabulated atomic data and provide physically accurate
-    orbital-dependent intensity scaling at each photon energy.
+    The function applies Gaussian broadening with interpolated Yeh-Lindau
+    photoionization cross-sections. Tabulated atomic data defines these
+    cross-sections. They provide orbital-dependent intensity scaling at each
+    photon energy.
 
     :see: :class:`~.test_expanded.TestSimulateBasicplusExpanded`
 
@@ -511,12 +508,11 @@ def simulate_advanced_expanded(  # noqa: PLR0913
 ) -> ArpesSpectrum:
     """Run advanced-level ARPES simulation from plain arrays.
 
-    Builds on the basicplus level by adding polarization-dependent
-    selection rules. The photoemission intensity is weighted by
-    ``|e . d|^2``, where e is the light electric-field vector and d is
-    the dipole matrix element for each orbital channel. For
-    unpolarized light the s- and p-polarization contributions are
-    averaged.
+    The function adds polarization-dependent selection rules to the basicplus
+    level. The factor ``|e . d|^2`` weights the photoemission intensity. Here,
+    e is the electric field, and d is the orbital dipole matrix element. For
+    unpolarized light, the function averages the s-polarization and
+    p-polarization contributions.
 
     :see: :class:`~.test_expanded.TestSimulateAdvancedExpanded`
 
@@ -645,8 +641,8 @@ def simulate_expert_expanded(  # noqa: PLR0913
     Most physically complete model. Combines Voigt broadening
     (Gaussian + Lorentzian), Yeh-Lindau photoionization
     cross-sections, polarization selection rules, and full dipole
-    matrix element weighting. For unpolarized light the s- and
-    p-polarization contributions are averaged.
+    matrix element weighting. For unpolarized light, the function averages the
+    s-polarization and p-polarization contributions.
 
     :see: :class:`~.test_expanded.TestSimulateExpertExpanded`
 
@@ -781,7 +777,7 @@ def simulate_soc_expanded(  # noqa: PLR0913
     Expert model plus spin-dependent intensity correction
     (S·k_photon). Requires spin projections of shape
     ``(n_kpoints, n_bands, n_atoms, 6)`` (up/down for x, y, z).
-    Incident angles are interpreted in degrees.
+    The function interprets the incident angles in degrees.
 
     :see: :class:`~.test_expanded.TestSimulateSocExpanded`
 
@@ -844,9 +840,9 @@ def simulate_soc_expanded(  # noqa: PLR0913
         Orbital projection coefficients, shape
         ``(n_kpoints, n_bands, n_atoms, 9)``.
     surface_spin : Float[Array, "K B A 6"]
-        Spin projections (required for SOC), shape
-        ``(n_kpoints, n_bands, n_atoms, 6)`` with channels
-        (x up, x down, y up, y down, z up, z down).
+        Spin projections for SOC, with shape
+        ``(n_kpoints, n_bands, n_atoms, 6)``. The channels are x up, x down,
+        y up, y down, z up, and z down.
     ef : ScalarFloat
         Fermi energy in eV.
     sigma : ScalarFloat
@@ -860,7 +856,7 @@ def simulate_soc_expanded(  # noqa: PLR0913
     photon_energy : ScalarFloat
         Incident photon energy in eV.
     polarization : str, optional
-        Polarization type (e.g. ``"unpolarized"``, ``"LHP"``).
+        Polarization type, for example ``"unpolarized"`` or ``"LHP"``.
         Default is ``"unpolarized"``.
     incident_theta : ScalarFloat, optional
         Polar angle of the incident beam in degrees. Default 45.
@@ -935,12 +931,10 @@ def simulate_expanded(  # noqa: PLR0913
 ) -> ArpesSpectrum:
     """Dispatch an expanded-input simulation by complexity level.
 
-    Single entry-point that routes to one of the six simulation
-    functions based on ``level``. All parameters have sensible
-    defaults, so only ``level``, ``eigenbands``, and ``surface_orb``
-    are required. Parameters that are unused by the selected level
-    (e.g. ``gamma`` for basic/basicplus/advanced, or polarization
-    settings for novice/basic/basicplus) are silently ignored.
+    This entry point selects one of six simulation functions from ``level``.
+    Only ``level``, ``eigenbands``, and ``surface_orb`` require explicit
+    values. The function supplies defaults for all other parameters. It ignores
+    parameters that the selected level does not use.
 
     :see: :class:`~.test_expanded.TestSimulateExpanded`
 

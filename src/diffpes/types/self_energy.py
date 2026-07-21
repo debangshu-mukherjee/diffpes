@@ -1,8 +1,8 @@
-"""Self-energy configuration data structures.
+"""Define self-energy configuration data structures.
 
 Extended Summary
 ----------------
-Defines the PyTree type for energy-dependent self-energy
+This module defines the PyTree type for energy-dependent self-energy
 (lifetime broadening) used by the differentiable forward simulator.
 
 Routine Listings
@@ -31,26 +31,25 @@ from .aliases import ScalarFloat
 class SelfEnergyConfig(eqx.Module):
     """Store energy-dependent self-energy data in a JAX PyTree.
 
-    Models the imaginary part of the electronic self-energy
+    This type models the imaginary part of the electronic self-energy
     Im[Sigma(E)] as a function of binding energy. In the forward
     ARPES simulator this replaces the scalar Lorentzian half-width
     ``gamma`` with an energy-dependent broadening that captures
     quasiparticle lifetime effects more realistically.
 
-    Three modes are supported, selected by the ``mode`` string:
+    The ``mode`` string selects one of three modes:
 
     - **constant**: a single scalar broadening ``gamma`` applied
       uniformly at all energies. Equivalent to the standard
       ``SimulationParams.gamma``.
     - **polynomial**: Im[Sigma(E)] = a0 + a1*E + a2*E^2 + ...,
       with coefficients stored in ``coefficients``.
-    - **tabulated**: Im[Sigma] is specified at discrete energy nodes
-      and interpolated between them. Requires ``energy_nodes``.
+    - **tabulated**: Discrete energy nodes specify Im[Sigma]. The function
+      interpolates between them and requires ``energy_nodes``.
 
-    The ``coefficients`` array is the primary differentiable
-    quantity: ``jax.grad`` with respect to these coefficients gives
-    the sensitivity of the simulated ARPES spectrum to the
-    self-energy shape, enabling inverse fitting of lifetime
+    The ``coefficients`` array is the primary differentiable quantity.
+    ``jax.grad`` gives the sensitivity of the simulated ARPES spectrum to the
+    self-energy shape. This sensitivity supports inverse fitting of lifetime
     broadening from experimental data.
 
 
@@ -78,9 +77,9 @@ class SelfEnergyConfig(eqx.Module):
     Notes
     -----
     Implemented as an immutable :class:`equinox.Module` PyTree.
-    ``coefficients`` and ``energy_nodes`` are children (on the
-    gradient tape); ``mode`` is auxiliary data (compile-time
-    constant). Changing ``mode`` triggers JIT recompilation because
+    JAX stores ``coefficients`` and ``energy_nodes`` as children on the
+    gradient tape. It stores ``mode`` as compile-time auxiliary data.
+    Changing ``mode`` triggers JIT recompilation because
     it alters the computation graph.
 
     See Also
@@ -103,16 +102,13 @@ def make_self_energy_config(  # noqa: DOC503
 ) -> SelfEnergyConfig:
     """Create a validated ``SelfEnergyConfig`` instance.
 
-    Factory function that validates inputs and constructs a
-    ``SelfEnergyConfig`` PyTree. Performs mode validation (only
-    ``"constant"``, ``"polynomial"``, ``"tabulated"`` are accepted)
-    and ensures that ``energy_nodes`` is provided when required by
-    the tabulated mode.
+    The factory validates inputs and constructs a ``SelfEnergyConfig`` PyTree.
+    It accepts only the ``"constant"``, ``"polynomial"``, and ``"tabulated"``
+    modes. It requires ``energy_nodes`` for the tabulated mode.
 
     The convenience parameter ``gamma`` provides a shortcut for the
-    common constant-broadening case: when ``coefficients`` is
-    ``None``, a single-element array ``[gamma]`` is created
-    automatically.
+    common constant-broadening case. When ``coefficients`` is ``None``, the
+    factory creates the single-element array ``[gamma]``.
 
     :see: :class:`~.test_self_energy.TestMakeSelfEnergyConfig`
 
@@ -173,9 +169,8 @@ def make_self_energy_config(  # noqa: DOC503
     Raises
     ------
     ValueError
-        If ``mode`` is not one of the three supported strings, or if
-        ``energy_nodes`` is present for a non-tabulated mode, absent for
-        tabulated mode, or has a different length from ``coefficients``.
+        If ``mode`` has an unsupported value. The function also rejects an
+        invalid presence or length of ``energy_nodes``.
     EquinoxRuntimeError
         If coefficients are non-finite or tabulated energy nodes are
         non-finite or not strictly increasing.

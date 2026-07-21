@@ -1,14 +1,11 @@
-"""Tests for ARPES broadening functions.
+"""Validate ARPES broadening functions.
 
 Extended Summary
 ----------------
-Exercises the broadening module: gaussian, voigt, and fermi_dirac.
-Each test is run with and without JIT (via chex.variants) to ensure
-correctness under transformation. Tests cover normalization (unit
-integral), peak position, symmetry, reduction of Voigt to Gaussian
-when Lorentzian width is negligible, and Fermi-Dirac behaviour at
-and away from the Fermi level. All test logic and assertions are
-documented in the docstrings of each test class and method.
+The tests exercise Gaussian, Voigt, and Fermi-Dirac functions.
+``chex.variants`` runs applicable tests with and without JIT.
+The tests cover normalization, peak position, symmetry, limiting profiles,
+and Fermi-Dirac values.
 
 """
 
@@ -63,7 +60,7 @@ def _voigt_width_loss(
 
 
 class TestGaussian(chex.TestCase):
-    """Tests for :func:`diffpes.simul.broadening.gaussian`.
+    """Validate :func:`diffpes.simul.broadening.gaussian`.
 
     Verifies the normalized Gaussian broadening profile, including
     normalization (unit integral), peak position accuracy, and
@@ -76,14 +73,13 @@ class TestGaussian(chex.TestCase):
     def test_normalization(self) -> None:
         """Verify that the Gaussian profile integrates to unity.
 
-        This case establishes the normalization contract for gaussian with the concrete
+        The test establishes the normalization contract for gaussian with the concrete
         values and array shapes described below.
 
         Notes
         -----
         1. **Create dense energy grid**:
-           A wide energy range [-10, 10] eV with 100,000 points ensures
-           accurate numerical integration via the rectangle rule.
+           Use 100,000 points across [-10, 10] eV for accurate integration.
 
         2. **Evaluate Gaussian**:
            Computes the profile centered at 0.0 eV with sigma = 0.5 eV.
@@ -116,14 +112,13 @@ class TestGaussian(chex.TestCase):
     def test_peak_position(self) -> None:
         """Verify that the Gaussian peak occurs at the specified center energy.
 
-        This case establishes the peak position contract for gaussian with the concrete
+        The test establishes the peak position contract for gaussian with the concrete
         values and array shapes described below.
 
         Notes
         -----
         1. **Create energy grid**:
-           A symmetric range [-5, 5] eV with 10,001 points gives a step
-           size of 0.001 eV for precise peak location.
+           Use 10,001 points across [-5, 5] eV for precise peak location.
 
         2. **Evaluate Gaussian**:
            Computes the profile centered at 1.5 eV with sigma = 0.3 eV.
@@ -158,21 +153,19 @@ class TestGaussian(chex.TestCase):
     def test_symmetry(self) -> None:
         """Verify that the Gaussian profile is symmetric about its center.
 
-        This case establishes the symmetry contract for gaussian with the concrete
+        The test establishes the symmetry contract for gaussian with the concrete
         values and array shapes described below.
 
         Notes
         -----
         1. **Create symmetric energy grid**:
-           A range [-5, 5] eV centered at zero with an odd number of
-           points (1001) ensures the center point lies exactly at 0.0 eV.
+           Use 1001 symmetric points so one point lies exactly at 0.0 eV.
 
         2. **Evaluate Gaussian**:
            Computes the profile centered at 0.0 eV with sigma = 0.5 eV.
 
         3. **Compare with reversed profile**:
-           Checks that the profile array equals its reverse, which holds
-           for a symmetric function on a symmetric grid.
+           Check that the profile array equals its reverse.
 
         **Expected assertions**
 
@@ -190,7 +183,7 @@ class TestGaussian(chex.TestCase):
 
 
 class TestVoigt(chex.TestCase):
-    """Tests for :func:`diffpes.simul.broadening.voigt`.
+    """Validate :func:`diffpes.simul.broadening.voigt`.
 
     Verifies the pseudo-Voigt broadening profile, including its
     limiting behavior (reduction to Gaussian when gamma approaches zero),
@@ -203,7 +196,7 @@ class TestVoigt(chex.TestCase):
     def test_reduces_to_gaussian(self) -> None:
         """Verify that the Voigt profile reduces to a Gaussian when gamma is negligible.
 
-        This case establishes the reduces to gaussian contract for voigt with the
+        The test establishes the reduces to gaussian contract for voigt with the
         concrete values and array shapes described below.
 
         Notes
@@ -243,7 +236,7 @@ class TestVoigt(chex.TestCase):
     def test_peak_position(self) -> None:
         """Verify that the Voigt profile peaks at the specified center energy.
 
-        This case establishes the peak position contract for voigt with the concrete
+        The test establishes the peak position contract for voigt with the concrete
         values and array shapes described below.
 
         Notes
@@ -252,17 +245,15 @@ class TestVoigt(chex.TestCase):
            A range [-5, 5] eV with 10,001 points for sub-meV resolution.
 
         2. **Evaluate Voigt profile**:
-           Computes the profile centered at -1.0 eV with sigma = 0.3 eV
-           and gamma = 0.1 eV (mixed Gaussian-Lorentzian regime).
+           Compute a profile centered at -1.0 eV with both broadening terms.
 
         3. **Locate peak**:
            Finds the energy corresponding to the maximum profile value.
 
         **Expected assertions**
 
-        The peak energy is within 0.01 eV of the requested center (-1.0 eV),
-        confirming that both Gaussian and Lorentzian components share the
-        same center.
+        The peak is within 0.01 eV of the requested center. Both profile
+        components share this center.
         """
         e_range: Array
         center: Array
@@ -285,19 +276,16 @@ class TestVoigt(chex.TestCase):
     def test_positive_values(self) -> None:
         """Verify that the Voigt profile produces finite values everywhere.
 
-        This case establishes the positive values contract for voigt with the concrete
+        The test establishes the positive values contract for voigt with the concrete
         values and array shapes described below.
 
         Notes
         -----
         1. **Evaluate Voigt profile**:
-           Computes the profile on [-5, 5] eV with sigma = 0.5 eV and
-           gamma = 0.2 eV, a typical mixed-broadening regime.
+           Compute a profile on [-5, 5] eV with both broadening terms.
 
         2. **Check finiteness**:
-           Ensures no NaN or infinity values appear in the output, which
-           could arise from division-by-zero in the Lorentzian component
-           or overflow in intermediate calculations.
+           Check that the output contains no NaN or infinity values.
 
         **Expected assertions**
 
@@ -319,13 +307,12 @@ class TestVoigt(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies the Thompson-Cox-Hastings mixing law reduces to the exact
-        normalized Gaussian at ``gamma = 0`` and the exact normalized Cauchy
-        density at ``sigma = 0``, both to ``rtol=1e-12``.
+        The test verifies the exact Gaussian and Cauchy limits of the mixing
+        law. Both comparisons use ``rtol=1e-12``.
 
         Notes
         -----
-        Evaluates both rays eagerly and under JIT on an asymmetric energy
+        The test evaluates both rays eagerly and under JIT on an asymmetric energy
         grid, then compares against ``scipy.stats.norm.pdf`` and
         ``scipy.stats.cauchy.pdf`` as independent external truths.
         """
@@ -361,13 +348,13 @@ class TestVoigt(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies sensitivities on the pure-Gaussian and pure-Lorentzian rays
+        The test verifies sensitivities on the pure-Gaussian and pure-Lorentzian rays
         remain finite, nonzero, and central-FD-correct to the stiff
         ``rtol=1e-5`` gate.
 
         Notes
         -----
-        Applies the shared program-wide gradient harness at three step scales
+        The test applies the shared program-wide gradient harness at three step scales
         to both width vectors, for eager and JIT-transformed scalar losses.
         """
         widths: Array
@@ -397,12 +384,12 @@ class TestVoigt(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies ``sigma = gamma = 0`` is reported as undefined instead of
-        returning a pointwise value with a fabricated derivative.
+        The test verifies rejection of ``sigma = gamma = 0``. It does not
+        accept a pointwise value with a fabricated derivative.
 
         Notes
         -----
-        Uses the shared rejection helper on a finite energy grid, exercising
+        The test uses the shared rejection helper on a finite energy grid, exercising
         both direct execution and ``equinox.filter_jit``.
         """
         energy_axis: Float[Array, "5"] = jnp.linspace(-1.0, 1.0, 5)
@@ -417,11 +404,10 @@ class TestVoigt(chex.TestCase):
 
 
 class TestFermiDirac(chex.TestCase):
-    """Tests for :func:`diffpes.simul.broadening.fermi_dirac`.
+    """Validate :func:`diffpes.simul.broadening.fermi_dirac`.
 
-    Verifies the Fermi-Dirac thermal distribution function, including
-    the exact value at the Fermi level, asymptotic limits deep below
-    and high above the Fermi energy, and the bounded output range [0, 1].
+    The tests verify the value at the Fermi level and both asymptotic limits.
+    They also verify the bounded output range ``[0, 1]``.
 
     :see: :func:`~diffpes.simul.fermi_dirac`
     """
@@ -430,18 +416,16 @@ class TestFermiDirac(chex.TestCase):
     def test_at_fermi_level(self) -> None:
         """Verify that the Fermi-Dirac function equals 0.5 at the Fermi energy.
 
-        This case establishes the at fermi level contract for fermi dirac with the
+        The test establishes the at fermi level contract for fermi dirac with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Evaluate at E = Ef**:
-           Calls ``fermi_dirac(0.0, 0.0, 300.0)`` where energy and Fermi
-           level are both 0.0 eV at room temperature (300 K).
+           Call ``fermi_dirac(0.0, 0.0, 300.0)`` at the Fermi level.
 
         2. **Check analytic result**:
-           At E = Ef the exponent is zero, so f(Ef) = 1/(1+1) = 0.5
-           regardless of temperature.
+           Check the analytical value 0.5 for a zero exponent.
 
         **Expected assertions**
 
@@ -457,16 +441,15 @@ class TestFermiDirac(chex.TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_deep_below_fermi(self) -> None:
-        """Verify that states deep below the Fermi level are fully occupied.
+        """Verify full occupation deep below the Fermi level.
 
-        This case establishes the deep below fermi contract for fermi dirac with the
+        The test establishes the deep below fermi contract for fermi dirac with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Evaluate far below Ef**:
-           Calls ``fermi_dirac(-5.0, 0.0, 15.0)`` where E - Ef = -5.0 eV
-           at T = 15 K (kT ~ 1.3 meV), making the exponent ~ -3900.
+           Call ``fermi_dirac`` at -5.0 eV and 15 K.
 
         2. **Check saturation**:
            For large negative exponents, exp(x) approaches 0 and the
@@ -486,9 +469,9 @@ class TestFermiDirac(chex.TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_high_above_fermi(self) -> None:
-        """Verify that states far above the Fermi level are unoccupied.
+        """Verify zero occupation far above the Fermi level.
 
-        This case establishes the high above fermi contract for fermi dirac with the
+        The test establishes the high above fermi contract for fermi dirac with the
         concrete values and array shapes described below.
 
         Notes
@@ -517,15 +500,13 @@ class TestFermiDirac(chex.TestCase):
     def test_range_0_to_1(self) -> None:
         """Verify that the Fermi-Dirac output lies within [0, 1].
 
-        This case establishes the range 0 to 1 contract for fermi dirac with the
+        The test establishes the range 0 to 1 contract for fermi dirac with the
         concrete values and array shapes described below.
 
         Notes
         -----
         1. **Evaluate at a typical energy**:
-           Calls ``fermi_dirac(-0.5, 0.0, 300.0)`` at E = -0.5 eV
-           relative to Ef = 0.0 eV at room temperature (300 K), where
-           the result should be between 0 and 1 (closer to 1).
+           Call ``fermi_dirac`` at -0.5 eV and 300 K.
 
         2. **Bound checks**:
            Asserts the scalar result is non-negative and does not
@@ -550,15 +531,14 @@ class TestFermiDirac(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies values against a 50-decimal-digit ``mpmath`` logistic and
-        derivatives with respect to energy, Fermi energy, and temperature
-        against the analytic Fermi-Dirac formulas to ``rtol=1e-12``.
+        The test compares values with a high-precision ``mpmath`` logistic.
+        It compares three derivatives with analytical formulas at ``rtol=1e-12``.
 
         Notes
         -----
-        Evaluates ``x`` in ``{0, ±1, ±10, ±100, ±700}`` at 5, 15, and
-        300 K, both eagerly and under JIT. Closed forms are evaluated from
-        the independently computed occupation after f64 rounding, including
+        The test evaluates ``x`` in ``{0, ±1, ±10, ±100, ±700}`` at 5, 15, and
+        300 K, both eagerly and under JIT. The test evaluates closed forms from
+        the independent occupation after f64 rounding, including
         the representable saturation convention.
         """
         temperature: float
@@ -620,13 +600,12 @@ class TestFermiDirac(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies the original ``+1 eV`` at 15 K failure and tails through
-        ``|x| = 5000`` have finite values and finite derivatives, with exact
-        zero derivatives after f64 underflow or saturation.
+        The test verifies finite values and derivatives at the former failure
+        point and extreme tails. Saturated derivatives equal zero exactly.
 
         Notes
         -----
-        Evaluates the occupation and all three gradients eagerly and under
+        The test evaluates the occupation and all three gradients eagerly and under
         JIT, then checks the positive audit/tail values and every saturated
         derivative exactly.
         """
@@ -655,13 +634,13 @@ class TestFermiDirac(chex.TestCase):
 
         Extended Summary
         ----------------
-        Verifies energy, Fermi-energy, and temperature sensitivities are
+        The test verifies energy, Fermi-energy, and temperature sensitivities are
         finite, nonzero, and central-FD-correct at ``x = 1`` and 15 K to the
         smooth ``rtol=1e-6`` gate.
 
         Notes
         -----
-        Runs the shared gradient harness against eager and JIT-transformed
+        The test runs the shared gradient harness against eager and JIT-transformed
         scalar functions on the three-parameter vector.
         """
         var_fn: Callable[..., Any]

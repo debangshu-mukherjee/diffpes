@@ -1,11 +1,10 @@
-r"""Full dipole matrix element assembly.
+r"""Assemble full dipole matrix elements.
 
 Extended Summary
 ----------------
-Combines radial integrals :math:`B^{l'}(k)`, Gaunt coefficients,
-real spherical harmonics :math:`Y_{l'm'}(\hat{k})`, and the
-polarization vector :math:`\hat{e}` to compute photoemission
-dipole matrix elements from first principles:
+The module combines radial integrals, Gaunt coefficients, real spherical
+harmonics, and the polarization vector. These quantities determine the
+photoemission dipole matrix elements:
 
 .. math::
 
@@ -48,18 +47,18 @@ def _cartesian_to_spherical_dipole(
 ) -> Complex[Array, " 3"]:
     r"""Convert Cartesian E-field to real-harmonic dipole components.
 
-    Maps (e_x, e_y, e_z) to (e_{q=-1}, e_{q=0}, e_{q=+1}) where
-    the q index matches the real spherical harmonic convention for
-    the dipole operator (l=1):
+    The function maps (e_x, e_y, e_z) to
+    (e_{q=-1}, e_{q=0}, e_{q=+1}). The q index follows the real spherical
+    harmonic convention for the dipole operator with l=1:
 
     - q = -1 corresponds to Y_1^{-1}(real) ~ sin(theta)sin(phi) ~ y
     - q =  0 corresponds to Y_1^0(real) ~ cos(theta) ~ z
     - q = +1 corresponds to Y_1^{+1}(real) ~ sin(theta)cos(phi) ~ x
 
-    The dipole operator :math:`\hat{r}` is expanded in the real spherical
-    harmonic basis for l=1. In Cartesian coordinates the three components
-    of the position vector are :math:`(x, y, z)`, and they map to real
-    spherical harmonics as:
+    The function expands the dipole operator :math:`\hat{r}` in the real
+    spherical harmonic basis for l=1. The Cartesian position vector has
+    components :math:`(x, y, z)`. These components map to real spherical
+    harmonics as follows:
 
     .. math::
 
@@ -69,13 +68,11 @@ def _cartesian_to_spherical_dipole(
 
         z = r \cos\theta \propto Y_1^{0}(\text{real}) \quad (q=0)
 
-    The returned array is ordered by ascending q: ``[e_y, e_z, e_x]``,
-    so that indexing with ``q_idx = q + 1`` (for q in {-1, 0, +1})
-    selects the correct Cartesian component of the polarization vector.
+    The returned array follows ascending q: ``[e_y, e_z, e_x]``. Therefore,
+    ``q_idx = q + 1`` selects the corresponding Cartesian component.
 
-    This is a pure permutation with no complex rotation because the
-    real spherical harmonics for l=1 directly correspond to the
-    Cartesian axes without mixing.
+    This operation is a pure permutation without a complex rotation. The real
+    spherical harmonics for l=1 correspond directly to the Cartesian axes.
 
     Parameters
     ----------
@@ -115,27 +112,26 @@ def dipole_matrix_element_single(
     where the sum is over dipole components q in {-1, 0, +1} and
     final-state angular momenta l' in {l-1, l+1}.
 
-    This function assembles the full photoemission dipole matrix element
-    by combining four ingredients:
+    The function assembles the full photoemission dipole matrix element from
+    four quantities:
 
     1. **Radial integral** :math:`B^{l'}(|k|)` -- the overlap between
        the initial radial wavefunction and the final-state spherical
-       Bessel function :math:`j_{l'}(kr)`, weighted by :math:`r^3`,
-       evaluated via trapezoidal quadrature on the supplied radial grid.
+       Bessel function :math:`j_{l'}(kr)`. The radial integral applies the
+       :math:`r^3` weight and trapezoidal quadrature.
 
     2. **Gaunt coefficient** :math:`G(l, m, l', m')` -- the angular
-       integral coupling initial (l, m) and final (l', m') states
-       through the dipole operator, looked up from the precomputed
-       ``GAUNT_TABLE``.
+       integral that couples the initial and final states through the dipole
+       operator. The function reads this coefficient from ``GAUNT_TABLE``.
 
     3. **Real spherical harmonic** :math:`Y_{l'}^{m'}(\hat{k})` --
-       the angular part of the final-state plane wave expansion,
-       evaluated at the direction of the photoelectron wavevector.
+       the angular part of the final-state plane wave expansion. The function
+       computes it at the direction of the photoelectron wavevector.
 
     4. **Polarization component** :math:`\hat{e}_q` -- the q-th
-       spherical component of the polarization vector, obtained by
-       mapping Cartesian (x, y, z) to the real harmonic basis via
-       `_cartesian_to_spherical_dipole`.
+       spherical component of the polarization vector. The
+       `_cartesian_to_spherical_dipole` function maps the Cartesian components
+       to the real harmonic basis.
 
     The dipole selection rule :math:`l' = l \pm 1` restricts the
     final-state sum to at most two terms per q value. The magnetic
@@ -171,12 +167,10 @@ def dipole_matrix_element_single(
 
     Notes
     -----
-    The loop over q and l' is unrolled at Python trace time (not
-    inside ``jax.lax`` control flow) because the iteration bounds
-    depend on the static quantum numbers (l, m). This produces a
-    fixed computation graph per (l, m) pair, which is efficient
-    for JIT compilation but means different orbitals trace distinct
-    XLA programs.
+    Python unrolls the loop over q and l' during tracing. Static quantum
+    numbers determine the iteration bounds. This process produces one fixed
+    computation graph for each (l, m) pair. Different orbitals therefore
+    produce distinct XLA programs.
     """
     q_idx: int
     q: int
@@ -230,20 +224,19 @@ def dipole_intensity_orbital(
 ) -> Float[Array, " "]:
     r"""Compute ``|M|^2`` for one orbital.
 
-    Computes the photoemission intensity for a single initial-state
-    orbital characterized by quantum numbers (l, m) and a radial
-    wavefunction sampled on a grid. The intensity is the squared
-    modulus of the complex dipole matrix element:
+    The function computes the photoemission intensity for one initial-state
+    orbital. The quantum numbers (l, m) and the sampled radial wavefunction
+    define this orbital. The intensity is the squared modulus of the complex
+    dipole matrix element:
 
     .. math::
 
         I(\mathbf{k}) = |M(\mathbf{k}, l, m)|^2
 
-    This is a thin wrapper that calls `dipole_matrix_element_single`
-    and returns :math:`|M|^2 = M \cdot M^*`. The result is real and
-    non-negative by construction, and is differentiable with respect
-    to all continuous inputs (k_vec, r_grid, radial_values, efield)
-    through JAX automatic differentiation.
+    This wrapper calls `dipole_matrix_element_single` and returns
+    :math:`|M|^2 = M \cdot M^*`. The construction gives a real, nonnegative
+    result. JAX differentiates the result with respect to all continuous
+    inputs.
 
     :see: :class:`~.test_dipole.TestDipoleIntensityOrbital`
 
@@ -289,12 +282,11 @@ def dipole_intensities_all_orbitals(
 ) -> Float[Array, " O"]:
     r"""Compute ``|M|^2`` for all orbitals in the basis.
 
-    Scans over every orbital in the Slater basis set, computes its
-    radial wavefunction from ``slater_params``, and evaluates the
-    squared dipole matrix element. ``jax.lax.switch`` specializes one
-    branch per static ``(n, l, m)`` tuple, while ``jax.lax.scan`` carries
-    the differentiable exponent and coefficient arrays through the
-    orbital axis.
+    The function scans every orbital in the Slater basis. It computes each
+    radial wavefunction from ``slater_params`` and then computes the squared
+    dipole matrix element. ``jax.lax.switch`` specializes one branch for each
+    static ``(n, l, m)`` tuple. ``jax.lax.scan`` carries the differentiable
+    arrays along the orbital axis.
 
     For each orbital *o*, the function:
 
@@ -307,8 +299,8 @@ def dipole_intensities_all_orbitals(
        single-zeta bases).
     4. Calls `dipole_intensity_orbital` to compute :math:`|M|^2`.
 
-    The results are stacked into a 1-D array of length equal to the
-    number of orbitals in the basis.
+    The function stacks the results into a one-dimensional array. Its length
+    equals the number of orbitals in the basis.
 
     :see: :class:`~.test_dipole.TestDipoleIntensitiesAllOrbitals`
 

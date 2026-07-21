@@ -1,8 +1,8 @@
-"""Radial wavefunction parameter data structures.
+"""Define radial-wavefunction parameter structures.
 
 Extended Summary
 ----------------
-Defines PyTree types for orbital basis metadata and Slater-type
+This module defines PyTree types for orbital basis metadata and Slater-type
 radial wavefunction parameters used by the differentiable dipole
 matrix element pipeline.
 
@@ -19,9 +19,9 @@ Routine Listings
 
 Notes
 -----
-``OrbitalBasis`` is purely static (all auxiliary data) because the
-quantum numbers (n, l, m) control code paths (recurrence depths in
-spherical Bessel functions and associated Legendre polynomials).
+``OrbitalBasis`` contains only static auxiliary data. The quantum numbers
+(n, l, m) control recurrence depths in spherical Bessel functions and
+associated Legendre polynomials.
 ``SlaterParams`` wraps differentiable Slater exponents alongside
 the static orbital basis.
 """
@@ -36,18 +36,17 @@ from jaxtyping import Array, Float, jaxtyped
 class OrbitalBasis(eqx.Module):
     """Store orbital quantum-number metadata in a JAX PyTree.
 
-    Describes the orbital basis set used in dipole matrix element
+    This type describes the orbital basis for dipole matrix-element
     calculations for the differentiable Chinook pipeline. The quantum
     numbers (n, l, m) parameterize the radial wavefunctions (via
     Slater-type orbitals) and angular parts (spherical harmonics) that
     enter the photoemission matrix element.
 
-    All fields are static (auxiliary data) because quantum numbers
-    control code paths: they determine recurrence depths in spherical
-    Bessel functions and associated Legendre polynomials, and they
-    index into the Gaunt coefficient table. Changing any quantum
-    number alters the computational graph structure, so JAX must
-    recompile when these values change.
+    All fields contain static auxiliary data because quantum numbers control
+    code paths. They determine recurrence depths in spherical Bessel functions
+    and associated Legendre polynomials. They also index the Gaunt coefficient
+    table. A quantum-number change alters the computational graph. JAX must
+    therefore recompile after this change.
 
 
     :see: :class:`~.test_radial_params.TestOrbitalBasis`
@@ -55,10 +54,9 @@ class OrbitalBasis(eqx.Module):
     Attributes
     ----------
     n_values : tuple[int, ...]
-        Principal quantum numbers, one per orbital. Determines the
-        radial node count and the power of *r* in the Slater-type
-        radial function R_nl(r) ~ r^{n-1} exp(-zeta*r) (**static** --
-        compile-time constants; changing them triggers retracing).
+        Principal quantum numbers, one per orbital. Each value determines the
+        radial node count and the power of *r* in the Slater-type radial
+        function R_nl(r) ~ r^{n-1} exp(-zeta*r). These values are static.
     l_values : tuple[int, ...]
         Angular momentum quantum numbers, one per orbital (0=s, 1=p,
         2=d, 3=f). Determines the spherical harmonic Y_l^m used in
@@ -98,18 +96,16 @@ class OrbitalBasis(eqx.Module):
 class SlaterParams(eqx.Module):
     """Store Slater radial-wavefunction parameters in a JAX PyTree.
 
-    Wraps differentiable Slater exponents and linear combination
+    This type contains differentiable Slater exponents and linear-combination
     coefficients alongside the static orbital basis metadata.
-    The Slater exponents (zeta) are the primary quantities to be
-    optimized in inverse fitting workflows -- ``jax.grad`` with
-    respect to ``zeta`` gives the gradient of the simulated ARPES
-    intensity with respect to the radial wavefunction shape.
+    Inverse fitting workflows optimize the Slater exponents (zeta).
+    ``jax.grad`` gives the gradient of the simulated ARPES intensity with
+    respect to the radial wavefunction shape.
 
-    In a multi-zeta basis (C > 1), each orbital's radial function
-    is expressed as a linear combination of C Slater-type functions
-    with different exponents, weighted by the ``coefficients``
-    matrix. For single-zeta (C=1), each orbital has exactly one
-    exponent and a coefficient of 1.0.
+    In a multi-zeta basis (C > 1), the ``coefficients`` matrix combines C
+    Slater-type functions for each orbital. These functions have different
+    exponents. In a single-zeta basis (C=1), each orbital has one exponent and
+    a coefficient of 1.0.
 
 
     :see: :class:`~.test_radial_params.TestSlaterParams`
@@ -162,11 +158,11 @@ def make_orbital_basis(
 ) -> OrbitalBasis:
     """Create a validated ``OrbitalBasis`` instance.
 
-    Factory function that validates quantum number tuples and
+    The factory validates quantum number tuples and
     constructs an ``OrbitalBasis`` PyTree. The three quantum number
     tuples must all have the same length (one entry per orbital).
-    If ``labels`` is not provided, generic labels ``"orb_0"``,
-    ``"orb_1"``, ... are generated automatically.
+    If ``labels`` is absent, the factory generates generic labels such as
+    ``"orb_0"`` and ``"orb_1"``.
 
     Use this factory instead of the raw ``OrbitalBasis`` constructor
     to get automatic length validation and default label generation.
@@ -220,17 +216,16 @@ def make_orbital_basis(
     Raises
     ------
     ValueError
-        If ``n_values``, ``l_values``, and ``m_values`` do not all
-        have the same length, or if ``labels`` has a mismatched
-        length; if any principal quantum number is less than one; if
-        any angular quantum number is outside ``0 <= l < n``; or if
-        any magnetic quantum number is outside ``-l <= m <= l``.
+        If the quantum-number tuples have different lengths or ``labels`` has
+        a different length. The function also rejects invalid values of
+        ``n``, ``l``, or ``m``.
 
     Notes
     -----
-    All validation is static because every ``OrbitalBasis`` field is stored
-    with ``eqx.field(static=True)``. Invalid tuple lengths or quantum numbers
-    raise ``ValueError`` before tracing; no ``eqx.error_if`` checks apply.
+    Every ``OrbitalBasis`` field uses ``eqx.field(static=True)``, so the
+    factory performs static validation. Invalid tuple lengths or quantum
+    numbers raise ``ValueError`` before tracing. No ``eqx.error_if`` checks
+    apply.
 
     See Also
     --------
@@ -280,16 +275,14 @@ def make_slater_params(  # noqa: DOC503
 ) -> SlaterParams:
     """Create a validated ``SlaterParams`` instance.
 
-    Factory function that validates Slater radial wavefunction
+    The factory validates Slater radial wavefunction
     parameters and constructs a ``SlaterParams`` PyTree. The ``zeta``
-    array length must match the number of orbitals in the provided
-    ``orbital_basis``. If ``coefficients`` is not provided, a
-    single-zeta basis is assumed and a column of ones is created
-    (shape ``(O, 1)``).
+    array length must match the orbital count in ``orbital_basis``. If
+    ``coefficients`` is absent, the factory uses a single-zeta basis. It
+    creates a column of ones with shape ``(O, 1)``.
 
-    Use this factory instead of the raw ``SlaterParams`` constructor
-    to get automatic size validation, default coefficient generation,
-    and guaranteed ``float64`` dtypes.
+    Use this factory for automatic size validation and default coefficient
+    generation. The factory also guarantees ``float64`` dtypes.
 
     :see: :class:`~.test_radial_params.TestMakeSlaterParams`
 
@@ -343,9 +336,9 @@ def make_slater_params(  # noqa: DOC503
     Raises
     ------
     ValueError
-        If the length of ``zeta`` does not match the number of
-        orbitals in ``orbital_basis``, or if the first coefficient
-        dimension does not match that orbital count.
+        If ``zeta`` and ``orbital_basis`` contain different orbital counts.
+        The function also rejects a different orbital count in
+        ``coefficients``.
     EquinoxRuntimeError
         If ``zeta`` is non-finite or non-positive, or if
         ``coefficients`` contains a non-finite value.

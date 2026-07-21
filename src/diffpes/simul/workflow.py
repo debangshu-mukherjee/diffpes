@@ -1,11 +1,10 @@
-"""High-level workflow helpers for VASP-to-ARPES simulation.
+"""Run high-level workflows for VASP-to-ARPES simulation.
 
 Extended Summary
 ----------------
-Provides convenience functions that combine common multi-step tasks:
-loading VASP outputs, selecting atom subsets, attaching OAM channels,
-running ARPES simulations by level, and optional post-processing
-(momentum broadening and z-score normalization).
+The module combines common workflow tasks. These tasks load VASP outputs,
+select atoms, attach OAM channels, and run an ARPES simulation. Optional steps
+apply momentum broadening and z-score normalization.
 
 Routine Listings
 ----------------
@@ -124,8 +123,8 @@ def load_vasp_context(
         KPOINTS filename for optional path metadata. Use ``None`` to
         skip KPOINTS parsing.
     fermi_energy : Optional[ScalarFloat], optional
-        Manual Fermi energy in eV. If ``None``, DOSCAR is used when
-        available, otherwise 0.0.
+        Manual Fermi energy in eV. If ``None``, the function reads DOSCAR when
+        available. Otherwise, it uses 0.0.
     procar_mode : Literal["legacy", "full"], optional
         PROCAR return mode. ``"full"`` preserves spin data when present.
     doscar_mode : Literal["legacy", "full"], optional
@@ -141,7 +140,8 @@ def load_vasp_context(
     Raises
     ------
     FileNotFoundError
-        If DOSCAR is required to infer Fermi energy but is missing.
+        If the function needs DOSCAR to infer the Fermi energy but cannot find
+        the file.
     """
     root: Path = Path(directory)
 
@@ -352,7 +352,7 @@ def simulate_context(  # noqa: PLR0913
     photon_energy : ScalarFloat, optional
         Incident photon energy in eV.
     polarization : str, optional
-        Polarization type (e.g. ``"unpolarized"``, ``"LHP"``).
+        Polarization type, for example ``"unpolarized"`` or ``"LHP"``.
     incident_theta : ScalarFloat, optional
         Incident polar angle in degrees.
     incident_phi : ScalarFloat, optional

@@ -30,7 +30,7 @@ class TestCrystalGeometry:
 
         Notes
         -----
-        Constructs a one-atom geometry, flattens and unflattens it with JAX,
+        The test constructs a one-atom geometry, flattens and unflattens it with JAX,
         then uses Chex for the numerical and static comparisons.
         """
         lattice: Float[Array, "3 3"] = jnp.eye(3) * 3.0
@@ -67,7 +67,7 @@ class TestMakeCrystalGeometry:
 
         Notes
         -----
-        Constructs the cubic geometry, calculates the closed-form reciprocal
+        The test constructs the cubic geometry, calculates the closed-form reciprocal
         matrix independently, and compares both matrices with Chex.
         """
         lattice_constant: float = 5.0

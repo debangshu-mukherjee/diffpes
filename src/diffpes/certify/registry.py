@@ -1,12 +1,12 @@
-"""Deterministic registries for certified models and transformations.
+"""Register certified models and transformations deterministically.
 
 Extended Summary
 ----------------
 The registry binds permanent scientific identities to model executors and
-semantic transformation contracts.  Entries are stored as sorted immutable
-tuples, duplicate identities are rejected, and callers receive frozen
-snapshots.  Registration order therefore cannot alter lookup, listing, or the
-registry consistency checksum.
+semantic transformation contracts. It stores entries as sorted immutable
+tuples and rejects duplicate identities. Callers receive frozen snapshots.
+Registration order therefore cannot alter lookup, listing, or the registry
+consistency checksum.
 
 Registry checksums are non-security bookkeeping values.  They identify an
 accidental record mismatch and never establish scientific validity or the
@@ -65,7 +65,7 @@ from .contracts import validate_contract
 
 
 class _RegistryState:
-    """Mutable process-local state hidden behind immutable public snapshots."""
+    """Store mutable process-local state behind immutable public snapshots."""
 
     def __init__(self) -> None:
         self.models: tuple[RegisteredModel, ...] = ()
@@ -142,8 +142,8 @@ def register_model(
 
            state.models = tuple(sorted((*state.models, entry), key=_model_key))
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -156,8 +156,8 @@ def register_model(
     Raises
     ------
     ValueError
-        If the identity is invalid, already registered, or the registry is
-        frozen.
+        If the identity is invalid or already exists. The function also raises
+        when the registry no longer accepts changes.
     """
     _validate_model_spec(spec)
     checksum: str = checksum_pytree(
@@ -201,8 +201,8 @@ def register_transformation(contract: TransformationContract) -> None:
                        )
                    )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -212,7 +212,8 @@ def register_transformation(contract: TransformationContract) -> None:
     Raises
     ------
     ValueError
-        If the contract is invalid, duplicated, or the registry is frozen.
+        If the contract is invalid or duplicated. The function also raises
+        when the registry no longer accepts changes.
     """
     errors: tuple[str, ...] = validate_contract(contract)
     if errors:
@@ -261,8 +262,8 @@ def get_model(model_id: str, model_version: str) -> RegisteredModel:
 
            msg: str = f"unknown model identity: {model_id}@{model_version}"
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -316,8 +317,8 @@ def get_transformation(
                    f"{transformation_id}@{transformation_version}"
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -369,8 +370,8 @@ def list_models() -> tuple[ForwardModelSpec, ...]:
                        entry.spec for entry in state.models
                    )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------
@@ -401,8 +402,8 @@ def list_registered_models() -> tuple[RegisteredModel, ...]:
 
            models: tuple[RegisteredModel, ...] = state.models
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------
@@ -433,8 +434,8 @@ def list_transformations() -> tuple[TransformationContract, ...]:
                        entry.contract for entry in state.transformations
                    )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------
@@ -496,8 +497,8 @@ def registry_snapshot() -> RegistrySnapshot:
                    checksum=checksum,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------
@@ -532,7 +533,7 @@ def freeze_registry() -> RegistrySnapshot:
     Returns
     -------
     snapshot : RegistrySnapshot
-        Final immutable contents after mutation is disabled.
+        Final immutable contents after the function disables mutation.
 
     Notes
     -----
@@ -570,8 +571,8 @@ def validate_registry() -> RegistryReport:
                    frozen=frozen,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Returns
     -------

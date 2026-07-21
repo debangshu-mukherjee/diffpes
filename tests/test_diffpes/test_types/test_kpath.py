@@ -26,7 +26,7 @@ class TestKPathInfo:
 
         Notes
         -----
-        Constructs the carrier through its validated factory, checks the array
+        The test constructs the carrier through its validated factory, checks the array
         shape with Chex, and compares the static metadata exactly.
         """
         kpath: KPathInfo = make_kpath_info(
@@ -54,8 +54,8 @@ class TestMakeKPathInfo:
     def test_rejects_unknown_mode(self) -> None:
         """Reject a k-path mode outside the supported static set.
 
-        The check isolates the mode selector contract before any optional
-        mode-specific arrays are interpreted.
+        The check isolates the mode selector contract before interpretation
+        of optional arrays for a mode.
 
         Notes
         -----

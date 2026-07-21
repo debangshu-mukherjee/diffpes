@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-Certification levels are derived from traced claim outcomes rather than stored
-as trusted labels. Policies select required claim categories and accumulate
-from identified through reproducible. A failed, unchecked, or out-of-domain
-required claim prevents that level and every level above it.
+The module derives certification levels from traced claim outcomes. It does
+not store trusted labels. Policies select the required claim categories and
+accumulate from identified through reproducible. A failed, unchecked, or
+out-of-domain required claim prevents that level and every higher level.
 
 Routine Listings
 ----------------
@@ -168,7 +168,7 @@ def achieved_levels(report: PolicyReport) -> tuple[str, ...]:
     Notes
     -----
     This eager inspection helper converts the traced Boolean vector to a
-    Python tuple and must not be called inside a compiled kernel.
+    Python tuple. Do not call the helper inside a compiled kernel.
     """
     levels: tuple[str, ...] = tuple(
         level

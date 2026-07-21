@@ -1,8 +1,8 @@
-"""Orbital angular momentum calculation.
+"""Compute orbital angular momentum.
 
 Extended Summary
 ----------------
-Computes the z-component of orbital angular momentum (OAM)
+The module computes the z-component of orbital angular momentum (OAM)
 from orbital projections, separating p-orbital and d-orbital
 contributions.
 
@@ -41,9 +41,9 @@ def compute_oam(
 
         OAM_z = sum_m  m * |c_m|^2
 
-    where m is the magnetic quantum number and c_m is the orbital
-    projection coefficient. Contributions from p- and d-orbitals
-    are computed separately and then summed.
+    Here, m is the magnetic quantum number, and c_m is the orbital projection
+    coefficient. The function computes the p-orbital and d-orbital
+    contributions separately. It then adds them.
 
     :see: :class:`~.test_oam.TestComputeOam`
 

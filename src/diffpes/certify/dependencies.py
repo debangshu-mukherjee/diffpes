@@ -2,10 +2,11 @@
 
 Extended Summary
 ----------------
-Provides JAX-native structural dependency, local sensitivity, retained
-linearization, and matrix-free information-spectrum tools used by certified
-forward executions. Structural flow is read from typed JAXPR, while numerical
-flow is measured with JVP and VJP operations on the actual forward program.
+This module provides JAX-native tools for structural dependencies, local
+sensitivity, retained linearization, and matrix-free information spectra.
+Certified forward executions use these tools. Typed JAXPR provides the
+structural flow. JVP and VJP operations measure numerical flow through the
+actual forward program.
 
 Routine Listings
 ----------------
@@ -119,8 +120,8 @@ def linearized_forward(
 
            linearized = jax.linearize(forward_fn, inputs)
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -171,8 +172,8 @@ def dependency_map(
                    traced=traced,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -263,8 +264,8 @@ def sensitivity_map(
                    active=active,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------
@@ -430,8 +431,8 @@ def information_spectrum(  # noqa: PLR0915
                    threshold=threshold,
                )
 
-       This expression follows the explicit validation and transformations in
-       the function body. It keeps the documented output bound before return.
+       The function validates and transforms the inputs before it binds the
+       documented output.
 
     Parameters
     ----------

@@ -1,14 +1,10 @@
-"""Tests for ARPES plotting utilities.
+"""Validate ARPES plotting utilities.
 
 Extended Summary
 ----------------
-Exercises the plotting module's public API: plot_arpes_spectrum,
-apply_kpath_ticks, plot_arpes_with_kpath, and projected-band scatter
-helpers. Tests cover successful
-rendering with default and custom options, validation of spectrum array
-shapes and compatibility, reuse of an existing axis, color limits and
-colorbar, and edge cases such as empty k-path labels. All logic is
-documented in the docstrings of each test class and test method.
+The tests exercise the public plotting functions. They cover default and
+custom rendering, shape validation, and existing axes. They also cover color
+limits, color bars, and empty k-path labels.
 
 """
 
@@ -106,7 +102,7 @@ def _make_spectrum(nk: int = 20, ne: int = 120) -> ArpesSpectrum:
 
 
 class TestPlotArpesSpectrum(chex.TestCase):
-    """Tests for :func:`diffpes.inout.plot_arpes_spectrum`.
+    """Validate :func:`diffpes.inout.plot_arpes_spectrum`.
 
     Covers default plotting, optional color limits and colorbar,
     validation of spectrum array dimensions and shape compatibility,
@@ -118,15 +114,13 @@ class TestPlotArpesSpectrum(chex.TestCase):
     def test_returns_expected_objects(self) -> None:
         """Plot with default options returns figure, axis, and image with correct shape and labels.
 
-        Builds a spectrum and calls plot_arpes_spectrum with colorbar=False.
-        Asserts that the returned image array has shape (E, K) i.e. (120, 20)
-        after transpose, and that the axis has the default xlabel, ylabel,
-        and title. The figure is closed after assertions to avoid leaking
-        resources.
+        The test builds a spectrum and calls plot_arpes_spectrum with colorbar=False.
+        The test checks the transposed image shape ``(120, 20)``. It also
+        checks the default axis labels and title. The test closes the figure.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: diffpes.types.ArpesSpectrum
         fig: Figure
         ax: Axes
@@ -141,15 +135,15 @@ class TestPlotArpesSpectrum(chex.TestCase):
         plt.close(fig)
 
     def test_with_clim_and_colorbar(self) -> None:
-        """Passing clim and colorbar=True applies color limits and adds a colorbar.
+        """Verify color limits and a color bar with custom options.
 
-        Calls plot_arpes_spectrum with colorbar=True and clim=(0.0, 0.5).
-        Asserts that the image's color limits are set to (0.0, 0.5) via
-        get_clim(), ensuring the clim and colorbar code paths are exercised.
+        The test calls plot_arpes_spectrum with colorbar=True and clim=(0.0, 0.5).
+        The test compares the image color limits with ``(0.0, 0.5)`` through
+        ``get_clim``. This input covers the limits and color bar paths.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: diffpes.types.ArpesSpectrum
         fig: Figure
         ax: Axes
@@ -165,7 +159,7 @@ class TestPlotArpesSpectrum(chex.TestCase):
     def test_validation_rejects_wrong_intensity_ndim(self) -> None:
         """_prepare_plot_arrays raises ValueError when intensity is not 2D.
 
-        Constructs an ArpesSpectrum with 1D intensity (bypassing the
+        The test constructs an ArpesSpectrum with 1D intensity (bypassing the
         factory's type checks) and calls plot_arpes_spectrum. Expects
         a ValueError whose message indicates that spectrum.intensity
         must have shape (K, E). This validates the dimension check
@@ -173,7 +167,7 @@ class TestPlotArpesSpectrum(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: ArpesSpectrum = eqx.tree_at(
             lambda candidate: candidate.intensity,
             _make_spectrum(nk=5, ne=10),
@@ -187,13 +181,13 @@ class TestPlotArpesSpectrum(chex.TestCase):
     def test_validation_rejects_wrong_energy_axis_ndim(self) -> None:
         """_prepare_plot_arrays raises ValueError when energy_axis is not 1D.
 
-        Constructs an ArpesSpectrum with 2D energy_axis and calls
+        The test constructs an ArpesSpectrum with 2D energy_axis and calls
         plot_arpes_spectrum. Expects a ValueError whose message
         indicates that spectrum.energy_axis must have shape (E,).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: ArpesSpectrum = eqx.tree_at(
             lambda candidate: candidate.energy_axis,
             _make_spectrum(nk=5, ne=10),
@@ -207,13 +201,13 @@ class TestPlotArpesSpectrum(chex.TestCase):
     def test_validation_rejects_shape_mismatch(self) -> None:
         """_prepare_plot_arrays raises ValueError when intensity and energy_axis lengths disagree.
 
-        Uses intensity of shape (5, 10) and energy_axis of length 7, so
+        The test uses intensity of shape (5, 10) and energy_axis of length 7, so
         intensity.shape[1] != energy_axis.shape[0]. Expects a ValueError
         with a message about incompatible shapes.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: ArpesSpectrum = eqx.tree_at(
             lambda candidate: candidate.energy_axis,
             _make_spectrum(nk=5, ne=10),
@@ -223,16 +217,15 @@ class TestPlotArpesSpectrum(chex.TestCase):
             plot_arpes_spectrum(spectrum, colorbar=False)
 
     def test_uses_existing_axis(self) -> None:
-        """When ax is provided, the same figure and axis are returned and used for plotting.
+        """Verify reuse of a given figure and axis.
 
-        Creates a figure and axis with plt.subplots(), then passes ax to
-        plot_arpes_spectrum. Asserts that the returned figure and axis
-        are the same objects as those passed in, and that the image was
-        drawn on the provided axis (no new figure created).
+        The test creates a figure and axis with plt.subplots(), then passes ax to
+        ``plot_arpes_spectrum``. The test verifies the identities of the
+        returned figure and axis. It also verifies the image on the given axis.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: diffpes.types.ArpesSpectrum
         fig: Figure
         ax: Axes
@@ -250,11 +243,10 @@ class TestPlotArpesSpectrum(chex.TestCase):
 
 
 class TestApplyKpathTicks(chex.TestCase):
-    """Tests for :func:`diffpes.inout.apply_kpath_ticks`.
+    """Validate :func:`diffpes.inout.apply_kpath_ticks`.
 
-    Covers application of symmetry-point ticks and labels to an axis,
-    behaviour when the number of labels is less than the number of
-    label indices, and the early-return path when there are no labels.
+    The tests apply symmetry-point ticks and labels to an axis. They cover
+    fewer labels than indices and the path without labels.
 
     :see: :func:`~diffpes.inout.apply_kpath_ticks`
     """
@@ -262,15 +254,13 @@ class TestApplyKpathTicks(chex.TestCase):
     def test_sets_ticks_and_labels(self) -> None:
         """apply_kpath_ticks sets x-axis ticks and labels from KPathInfo.
 
-        Builds a KPathInfo with four label indices and four labels
-        (G, M, K, G). Applies apply_kpath_ticks to a fresh axis and
-        asserts that the x-tick labels after the call are exactly
-        ["G", "M", "K", "G"], confirming that indices and labels
-        are applied in order.
+        The test builds a KPathInfo with four label indices and four labels
+        (G, M, K, G). The test applies ``apply_kpath_ticks`` to a new axis.
+        It compares the x-axis labels with the expected ordered labels.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fig: Figure
         ax: Axes
         kpath: diffpes.types.KPathInfo
@@ -289,16 +279,15 @@ class TestApplyKpathTicks(chex.TestCase):
         plt.close(fig)
 
     def test_handles_label_index_mismatch(self) -> None:
-        """When labels are fewer than label_indices, only the available labels are used.
+        """Verify truncation when labels are fewer than label indices.
 
-        Provides four label indices but only two labels (G, M). Asserts
-        that the axis ends up with exactly two tick labels, ["G", "M"],
-        so that the truncation logic (min(len(indices), len(labels)))
-        is exercised and no index error occurs.
+        The fixture provides four label indices but only two labels.
+        The test expects exactly the two available labels. This input covers
+        the truncation logic without an index error.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fig: Figure
         ax: Axes
         kpath: diffpes.types.KPathInfo
@@ -312,16 +301,15 @@ class TestApplyKpathTicks(chex.TestCase):
         plt.close(fig)
 
     def test_empty_labels_returns_ax_unchanged(self) -> None:
-        """When KPathInfo has no labels, apply_kpath_ticks returns the axis without setting ticks.
+        """Verify the unchanged axis when the k-path has no labels.
 
-        Builds a KPathInfo with empty label_indices and empty labels so
-        that n_labels is zero. Asserts that the return value is the
-        same axis object and that the early-return path (no tick/label
-        setting) is taken without error.
+        The test builds a KPathInfo with empty label_indices and empty labels so
+        that ``n_labels`` is zero. The test verifies the identity of the
+        returned axis. It also verifies the return path without tick changes.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         fig: Figure
         ax: Axes
         kpath: diffpes.types.KPathInfo
@@ -335,7 +323,7 @@ class TestApplyKpathTicks(chex.TestCase):
 
 
 class TestPlotArpesWithKpath(chex.TestCase):
-    """Tests for :func:`diffpes.inout.plot_arpes_with_kpath`.
+    """Validate :func:`diffpes.inout.plot_arpes_with_kpath`.
 
     Covers the combined workflow of plotting an ARPES spectrum and
     annotating the k-axis with symmetry labels from KPathInfo.
@@ -346,16 +334,14 @@ class TestPlotArpesWithKpath(chex.TestCase):
     def test_combined_plot(self) -> None:
         """plot_arpes_with_kpath produces a spectrum image and applies k-path ticks and labels.
 
-        Builds a spectrum and a KPathInfo with three symmetry points.
-        Calls plot_arpes_with_kpath and asserts that the image array
-        has the expected shape (120, 20), that the x-tick labels are
-        ("G", "M", "K"), and that the x-axis label is "Momentum (k)",
-        confirming that both the spectrum plot and the k-path
-        annotation are applied correctly.
+        The test builds a spectrum and a KPathInfo with three symmetry points.
+        The test calls ``plot_arpes_with_kpath`` and checks the image shape.
+        It also compares the tick labels and the x-axis label. These checks
+        verify the spectrum plot and its k-path annotation.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         spectrum: diffpes.types.ArpesSpectrum
         kpath: diffpes.types.KPathInfo
         fig: Figure
@@ -440,7 +426,7 @@ class TestListBandScatterPresets(chex.TestCase):
 
         Notes
         -----
-        Calls the listing function once and checks representative public names
+        The test calls the listing function once and checks representative public names
         in the returned immutable tuple.
         """
         presets: tuple[str, ...]
@@ -452,7 +438,7 @@ class TestListBandScatterPresets(chex.TestCase):
 
 
 class TestPlotBandScatterPreset(chex.TestCase):
-    """Tests for projected-band scatter plotting presets.
+    """Validate projected-band scatter plotting presets.
 
     :see: :func:`~diffpes.inout.plot_band_scatter_preset`
     """
@@ -460,12 +446,12 @@ class TestPlotBandScatterPreset(chex.TestCase):
     def test_lists_presets(self) -> None:
         """list_band_scatter_presets returns known keys.
 
-        This case establishes the lists presets contract for plot band scatter with the
+        The test establishes the lists presets contract for plot band scatter with the
         concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         presets: tuple[str, ...]
 
         presets = list_band_scatter_presets()
@@ -475,14 +461,14 @@ class TestPlotBandScatterPreset(chex.TestCase):
         assert "oam_total" in presets
 
     def test_orbital_preset_plot(self) -> None:
-        """Orbital preset renders a scatter with one point per (k, band).
+        """Verify the orbital preset scatter for each k-point and band.
 
-        This case establishes the orbital preset plot contract for plot band scatter
+        The test establishes the orbital preset plot contract for plot band scatter
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         fig: Figure
@@ -502,14 +488,14 @@ class TestPlotBandScatterPreset(chex.TestCase):
         plt.close(fig)
 
     def test_signed_spin_preset_with_colorbar(self) -> None:
-        """Signed spin preset can render with colorbar.
+        """Verify a signed-spin preset with a color bar.
 
-        This case establishes the signed spin preset with colorbar contract for plot
+        The test establishes the signed spin preset with colorbar contract for plot
         band scatter with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         fig: Figure
@@ -526,14 +512,14 @@ class TestPlotBandScatterPreset(chex.TestCase):
         plt.close(fig)
 
     def test_spin_preset_requires_spin_data(self) -> None:
-        """Spin presets raise when projection has no spin field.
+        """Verify that spin presets require a spin field.
 
-        This case establishes the spin preset requires spin data contract for plot band
+        The test establishes the spin preset requires spin data contract for plot band
         scatter with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         no_spin: diffpes.types.OrbitalProjection
@@ -550,14 +536,14 @@ class TestPlotBandScatterPreset(chex.TestCase):
             )
 
     def test_band_scatter_with_kpath(self) -> None:
-        """K-path wrapper applies symmetry labels on projected-band scatter.
+        """Verify symmetry labels on the projected-band scatter.
 
-        This case establishes the band scatter with kpath contract for plot band scatter
+        The test establishes the band scatter with kpath contract for plot band scatter
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         orb: diffpes.types.OrbitalProjection
         kpath: diffpes.types.KPathInfo
@@ -603,7 +589,7 @@ class TestPlotBandScatterWithKpath(chex.TestCase):
 
         Notes
         -----
-        Builds deterministic band and projection carriers, applies a three-label
+        The test builds deterministic band and projection carriers, applies a three-label
         ``KPathInfo``, and checks the collection size and rendered tick text.
         """
         bands: diffpes.types.BandStructure
@@ -635,20 +621,11 @@ class TestPlotBandScatterWithKpath(chex.TestCase):
 
 
 class TestPlotBandScatterEdgeCases(chex.TestCase):
-    """Edge-case tests for the band-scatter plotting helpers.
+    """Validate additional paths in the band-scatter plotting helpers.
 
-    Covers remaining uncovered lines in plotting.py:
-    - Lines 449-450: ``_prepare_band_arrays`` ValueError for wrong ndim
-    - Lines 463-464: ``_subset_atom_axis`` with explicit atom_indices
-    - Lines 497-498: orbital-index preset ("s")
-    - Line 502: "total" preset
-    - Line 528: spin_channel preset ("spin_z_up")
-    - Line 541: OAM array subsetting when oam is not None
-    - Lines 551-553: OAM preset requires OAM data (oam is None → ValueError)
-    - Lines 554-556: oam_component preset branch
-    - Lines 562-564: unknown preset → ValueError
-    - Lines 644-648: weight shape mismatch → ValueError
-    - Line 667: ``fig = ax.figure`` when ax is provided
+    The tests cover invalid array ranks and incompatible weight shapes.
+    They cover selections by atom, orbital, spin, and OAM. They also cover
+    unknown presets, missing OAM data, and an existing axis.
 
     :see: :func:`~diffpes.inout.plot_band_scatter_preset`
     """
@@ -684,13 +661,13 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
     def test_prepare_band_arrays_wrong_ndim_raises(self) -> None:
         """``_prepare_band_arrays`` with 1D eigenvalues raises ValueError (lines 449-450).
 
-        Constructs a BandStructure with 1D eigenvalues (bypassing the
+        The test constructs a BandStructure with 1D eigenvalues (bypassing the
         factory), then calls ``plot_band_scatter_preset``. Asserts a
         ``ValueError`` matching ``"shape (K, B)"``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         bands: diffpes.types.BandStructure
         proj: Array
         orb: diffpes.types.OrbitalProjection
@@ -702,15 +679,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
             plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="p")
 
     def test_subset_atom_axis_with_indices(self) -> None:
-        """Passing atom_indices calls ``_subset_atom_axis`` (lines 463-464).
+        """Verify atom-axis selection with explicit atom indices.
 
-        Plots the "p" preset with ``atom_indices=[0]`` so that
-        ``_subset_atom_axis`` is called with a non-None index array.
-        Asserts the scatter point count equals nk * nb.
+        The test plots the p preset with ``atom_indices=[0]``.
+        Thus, ``_subset_atom_axis`` receives an index array.
+        The test asserts the scatter point count equals nk * nb.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         na: int
@@ -742,15 +719,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_s_orbital_preset(self) -> None:
-        """'s' preset uses ORBITAL_INDEX branch (lines 497-498).
+        """Verify the s-orbital preset branch.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='s'``. Asserts
+        The test calls ``plot_band_scatter_preset`` with ``preset='s'``. Asserts
         that the scatter renders without error and the point count is
         correct (exercises the ``ORBITAL_INDEX[key]`` branch).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -778,15 +755,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_total_preset(self) -> None:
-        """'total' preset sums all orbital channels (line 502).
+        """Verify that the total preset sums all orbital channels.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='total'``.
-        Asserts the scatter renders and the point count is correct
+        The test calls ``plot_band_scatter_preset`` with ``preset='total'``.
+        The test asserts the scatter renders and the point count is correct
         (exercises the ``elif key == 'total'`` branch at line 501-502).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -814,15 +791,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_spin_channel_preset(self) -> None:
-        """'spin_z_up' preset uses the spin_channel branch (line 528).
+        """Verify the spin-channel preset branch.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='spin_z_up'``.
+        The test calls ``plot_band_scatter_preset`` with ``preset='spin_z_up'``.
         This exercises the ``if key in spin_channel`` branch (line 527-528).
-        Asserts the scatter renders without error.
+        The test asserts the scatter renders without error.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -852,16 +829,16 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_oam_preset_with_oam_data(self) -> None:
-        """OAM preset with OAM data exercises oam_arr subsetting and component branch.
+        """Verify OAM selection and the component branch.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='oam_total'``
+        The test calls ``plot_band_scatter_preset`` with ``preset='oam_total'``
         and an OrbitalProjection that has ``oam`` data. This exercises
         line 541 (``oam_arr = _subset_atom_axis(...)``) and lines
         554-556 (``if key in oam_component: weights = ...``).
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -887,9 +864,9 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_oam_abs_total_preset(self) -> None:
-        """'oam_abs_total' preset uses ``np.abs`` on OAM component 2 (lines 557-559).
+        """Verify the absolute-total OAM preset.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='oam_abs_total'``
+        The test calls ``plot_band_scatter_preset`` with ``preset='oam_abs_total'``
         and an OrbitalProjection with OAM data present. This exercises
         the ``elif key == 'oam_abs_total'`` branch at lines 557-559,
         which computes ``np.sum(np.abs(oam_arr[..., 2]), axis=2)`` and
@@ -897,7 +874,7 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -923,15 +900,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_oam_preset_without_oam_data_raises(self) -> None:
-        """OAM preset without OAM data raises ValueError (lines 551-553).
+        """Verify that an OAM preset requires OAM data.
 
-        Calls ``plot_band_scatter_preset`` with ``preset='oam_p'`` but
+        The test calls ``plot_band_scatter_preset`` with ``preset='oam_p'`` but
         provides an OrbitalProjection with ``oam=None``. Asserts
         ``ValueError`` matching ``"requires OAM data"``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -953,14 +930,14 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
             plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="oam_p")
 
     def test_unknown_preset_raises(self) -> None:
-        """Unknown preset string raises ValueError (lines 562-564).
+        """Verify that an unknown preset raises ``ValueError``.
 
-        Calls ``plot_band_scatter_preset`` with an unrecognized preset
+        The test calls ``plot_band_scatter_preset`` with an unrecognized preset
         name. Asserts ``ValueError`` matching ``"Unknown preset"``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array
@@ -984,16 +961,16 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
             )
 
     def test_weight_shape_mismatch_raises(self) -> None:
-        """Weights shape != eigenvalues shape raises ValueError (lines 644-648).
+        """Verify rejection of weights with an incompatible shape.
 
-        Creates a BandStructure with shape (4, 2) but an OrbitalProjection
-        with shape (4, 3, 1, 9), so the "p" preset produces weights of
-        shape (4, 3) != (4, 2). Asserts ``ValueError`` matching
+        The test creates incompatible band and projection shapes.
+        The ``"p"`` preset produces weights with shape ``(4, 3)`` instead of
+        ``(4, 2)``. The test expects a ``ValueError`` that matches
         ``"Preset weights must have shape"``.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb_bands: int
         nb_proj: int
@@ -1018,16 +995,15 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
             plot_band_scatter_preset(bands=bands, orb_proj=orb, preset="p")
 
     def test_uses_provided_ax(self) -> None:
-        """When ax is provided, ``fig = ax.figure`` is used (line 667).
+        """Verify reuse of a given axis for a band scatter.
 
-        Creates a figure and axis, passes them to ``plot_band_scatter_preset``,
-        and asserts the returned figure is the same object, confirming
-        that line 667 (``fig = ax.figure``) is executed instead of
-        ``fig, ax = plt.subplots()``.
+        The test creates a figure and passes its axis to the plotting function.
+        It verifies the identity of the returned figure. This check covers
+        the existing-axis path instead of the new-figure path.
 
         Notes
         -----
-        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         nk: int
         nb: int
         eigen: Array

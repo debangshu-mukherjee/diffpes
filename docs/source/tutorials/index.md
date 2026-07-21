@@ -1,9 +1,8 @@
 # Tutorials
 
-Tutorial notebooks for diffpes. They are authored as MyST text notebooks
-(Markdown files with executable code cells), so they render with live,
-executed outputs in these docs while keeping reviewable plain-text sources
-in git.
+The diffpes tutorials use MyST text notebooks. These Markdown files contain
+executable code cells. The documentation build executes the cells and shows
+their outputs. Git stores the reviewable plain-text sources.
 
 ```{toctree}
 :maxdepth: 1
@@ -12,20 +11,19 @@ quickstart
 certified-forward-model
 ```
 
-- [Quickstart](quickstart.md) — build a synthetic band structure, simulate
-  ARPES spectra at two fidelity levels, and differentiate through the
-  spectrometer model with `jax.grad`.
-- [Inspect and persist a certified forward run](certified-forward-model.md) —
-  read bounded claims and differentiable evidence, save canonical JSON, and
+- [Quickstart](quickstart.md): Build a synthetic band structure. Simulate two
+  ARPES fidelity levels and differentiate the spectrometer model with
+  `jax.grad`.
+- [Inspect and persist a certified forward run](certified-forward-model.md):
+  Read bounded claims and differentiable evidence. Save canonical JSON and
   attach the same record to an HDF5 result.
 
-More worked, end-to-end examples are under development, such as:
+The project is developing more complete examples:
 
 - Loading VASP output and simulating a basic ARPES spectrum
 - Stepping through the six simulation fidelity levels
 - Polarization-dependent matrix element effects
 - Gradient-based recovery of band-structure parameters from spectra
 
-Also see the [guides](../guides/index.md) for theory and architecture
-documentation, and the [API reference](../api/index.rst) for the complete
-function-level documentation.
+Read the [guides](../guides/index.md) for theory and architecture. Read the
+[API reference](../api/index.rst) for complete function documentation.

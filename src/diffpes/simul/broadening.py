@@ -1,8 +1,8 @@
-"""Energy broadening functions for ARPES simulations.
+"""Compute energy broadening functions for ARPES simulations.
 
 Extended Summary
 ----------------
-Provides JAX-compatible broadening profiles including Gaussian
+The module provides JAX-compatible broadening profiles, including Gaussian
 (instrumental resolution), pseudo-Voigt (combined Gaussian-Lorentzian),
 and Fermi-Dirac thermal occupation functions.
 
@@ -17,7 +17,7 @@ Routine Listings
 
 Notes
 -----
-All functions are JIT-compilable and support ``jax.vmap``
+JAX can compile all functions. They support ``jax.vmap``
 for vectorized evaluation across k-points and bands.
 """
 
@@ -63,7 +63,7 @@ def gaussian(
            norm_factor = sqrt(2 * pi) * sigma
 
        This prefactor ensures the profile integrates to unity over
-       (-inf, +inf), i.e. the Gaussian is normalized to unit area.
+       (-inf, +inf). Thus, the Gaussian has a unit area.
 
     3. **Evaluate Gaussian profile**::
 
@@ -103,10 +103,9 @@ def voigt(  # noqa: DOC502 -- eqx.error_if raises under JAX execution.
 ) -> Float[Array, " E"]:
     """Compute a normalized Thompson-Cox-Hastings pseudo-Voigt profile.
 
-    Evaluates a Voigt lineshape using the pseudo-Voigt method of
-    Thompson, Cox & Hastings (1987) [1]_, which expresses the Voigt
-    profile as a linear combination of Gaussian and Lorentzian
-    components:
+    The function uses the pseudo-Voigt method from Thompson, Cox, and Hastings
+    (1987) [1]_. This method expresses the Voigt profile as a linear
+    combination of Gaussian and Lorentzian components:
 
         V(E) = eta * L(E) + (1 - eta) * G(E)
 
@@ -138,8 +137,8 @@ def voigt(  # noqa: DOC502 -- eqx.error_if raises under JAX execution.
 
        The Thompson-Cox-Hastings empirical relation approximates
        the FWHM of the true Voigt convolution from the component
-       FWHMs. The width polynomial is sanitized before its fractional
-       power is evaluated so an inactive branch cannot poison gradients.
+       FWHMs. The function sanitizes the width polynomial before the fractional
+       power. Thus, an inactive branch cannot produce invalid gradients.
 
     3. **Compute mixing ratio eta**::
 
@@ -181,16 +180,16 @@ def voigt(  # noqa: DOC502 -- eqx.error_if raises under JAX execution.
     Raises
     ------
     EquinoxRuntimeError
-        If ``sigma`` and ``gamma`` are simultaneously zero, where the
-        normalized profile and its directional derivative are undefined.
+        If ``sigma`` and ``gamma`` are both zero. The normalized profile and
+        its directional derivative have no definition at this point.
 
     Notes
     -----
     Quotients use :func:`diffpes.maths.safe_divide`, so inactive zero-width
     branches cannot inject NaNs into reverse-mode gradients. The
     pure-Gaussian ray ``gamma = 0`` and pure-Lorentzian ray ``sigma = 0``
-    retain their genuine finite boundary sensitivities; only their singular
-    intersection is rejected.
+    retain their finite boundary sensitivities. The function rejects only
+    their singular intersection.
 
     References
     ----------

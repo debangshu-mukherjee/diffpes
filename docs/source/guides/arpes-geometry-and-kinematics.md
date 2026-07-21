@@ -1,6 +1,12 @@
 # ARPES Geometry and Kinematics
 
-Angle-Resolved PhotoEmission Spectroscopy (ARPES) measures the kinetic energy and emission angle of electrons ejected from a solid by monochromatic light. Because both energy and crystal momentum are conserved in the photoemission process, the measured $(E_{\mathrm{kin}}, \theta, \phi)$ distribution can be inverted into the occupied band structure $E(\mathbf{k})$. This guide covers the kinematic relations diffpes uses, the incidence-geometry conventions of its API, and how a simulated $(E, k)$ intensity map is produced.
+Angle-Resolved PhotoEmission Spectroscopy (ARPES) measures electron kinetic
+energy and emission angle. Monochromatic light ejects these electrons from a
+solid. Energy and crystal momentum conservation let researchers invert the
+measured $(E_{\mathrm{kin}}, \theta, \phi)$ distribution into the occupied band
+structure $E(\mathbf{k})$. This guide describes the diffpes kinematic relations
+and API incidence geometry. It also explains how diffpes produces a simulated
+$(E, k)$ intensity map.
 
 ## Unit and Sign Conventions
 
@@ -8,18 +14,21 @@ diffpes pins the following conventions throughout the codebase:
 
 | Quantity | Unit | Notes |
 |----------|------|-------|
-| Energies ($h\nu$, $E_B$, $E_F$, $\sigma$, $\gamma$) | eV | Band eigenvalues are absolute eV; the Fermi level `ef` is passed separately |
-| Wavevectors $\mathbf{k}$ | $\text{Å}^{-1}$ | Reciprocal lattice includes the $2\pi$ prefactor |
-| Angles at API boundaries | degrees | `incident_theta`, `incident_phi` in the `simulate_*_expanded` family |
-| Angles internally | radians | `PolarizationConfig.theta/phi`, `make_polarization_config` |
-| Temperature | Kelvin | Enters through the Fermi-Dirac factor |
-| Precision | float64 | `jax_enable_x64` is switched on when `diffpes` is imported |
+| Energies ($h\nu$, $E_B$, $E_F$, $\sigma$, $\gamma$) | eV | Band eigenvalues use absolute eV; callers pass the Fermi level `ef` separately |
+| Wavevectors $\mathbf{k}$ | $\text{Å}^{-1}$ | The reciprocal lattice includes the $2\pi$ prefactor |
+| Angles at API boundaries | degrees | The `simulate_*_expanded` family accepts `incident_theta` and `incident_phi` |
+| Angles internally | radians | `PolarizationConfig.theta/phi` and `make_polarization_config` use radians |
+| Temperature | Kelvin | The Fermi-Dirac factor uses the temperature |
+| Precision | float64 | Importing `diffpes` enables `jax_enable_x64` |
 
-Polar angles $\theta$ are measured from the surface normal ($z$-axis); azimuthal angles $\phi$ are measured in the surface plane from the $x$-axis.
+diffpes measures polar angles $\theta$ from the surface normal, or $z$-axis.
+It measures azimuthal angles $\phi$ in the surface plane from the $x$-axis.
 
 ## Energy Conservation and the Work Function
 
-In the three-step model of photoemission, an electron bound at energy $E_B$ below the Fermi level absorbs a photon of energy $h\nu$, travels to the surface, and escapes over the surface potential barrier. Its kinetic energy in vacuum is
+In the three-step photoemission model, a bound electron absorbs a photon of
+energy $h\nu$. The electron then travels to the surface and crosses the surface
+potential barrier. Its kinetic energy in vacuum is
 
 $$
 E_{\mathrm{kin}} = h\nu - W - |E_B|
@@ -27,15 +36,25 @@ $$
 
 where:
 
-- $h\nu$ = photon energy (eV), e.g. 21.2 eV for He-I$\alpha$, 6-11 eV for laser ARPES
-- $W$ = work function (eV), typically 4-5.5 eV — the minimum energy to remove an electron at $E_F$
-- $E_B$ = binding energy relative to $E_F$ (the absolute value is used, so the sign convention of the band data does not matter)
+- $h\nu$ denotes photon energy in eV. He-I$\alpha$ uses 21.2 eV, while laser
+  ARPES typically uses 6-11 eV.
+- $W$ denotes the work function in eV. Materials typically have values from
+  4-5.5 eV. This energy removes an electron at $E_F$.
+- $E_B$ denotes binding energy relative to $E_F$. The equation uses its
+  absolute value. Therefore, the sign convention of the band data does not
+  matter.
 
-A state can only be photoemitted if $E_{\mathrm{kin}} > 0$; diffpes clamps negative kinetic energies to zero (yielding $|\mathbf{k}| = 0$) so the forward model stays gradient-safe.
+Photoemission requires $E_{\mathrm{kin}} > 0$. diffpes clamps negative kinetic
+energies to zero, which gives $|\mathbf{k}| = 0$. This guard keeps the forward
+model gradient-safe.
 
 ## Momentum Conservation and the $k_\parallel$ Mapping
 
-The photon momentum is negligible at UV energies ($\sim 10^{-3}\,\text{Å}^{-1}$ at 21 eV, compared to Brillouin-zone dimensions of $\sim 1\,\text{Å}^{-1}$), so the electron's crystal momentum parallel to the surface is conserved up to a surface reciprocal lattice vector:
+At 21 eV, the photon momentum is approximately
+$10^{-3}\,\text{Å}^{-1}$. Brillouin-zone dimensions are approximately
+$1\,\text{Å}^{-1}$. Therefore, UV experiments can neglect the photon momentum.
+The electron conserves crystal momentum parallel to the surface, up to a
+surface reciprocal lattice vector:
 
 $$
 \mathbf{k}_\parallel^{\mathrm{crystal}} = \mathbf{k}_\parallel^{\mathrm{vacuum}} + \mathbf{G}_\parallel
@@ -49,7 +68,10 @@ k_\parallel = \frac{\sqrt{2 m_e E_{\mathrm{kin}}}}{\hbar} \sin\theta
   \quad [\text{Å}^{-1}]
 $$
 
-The numerical prefactor comes from $\sqrt{2 m_e c^2}/(\hbar c) = \sqrt{2 \times 0.511 \times 10^6}/1973.27 \approx 0.5123$ in natural units — exactly the constants (`_ME_EV`, `_HBAR_C_EV_A`) used inside {mod}`diffpes.simul`:
+The numerical prefactor follows from
+$\sqrt{2 m_e c^2}/(\hbar c) = \sqrt{2 \times 0.511 \times 10^6}/1973.27
+\approx 0.5123$ in natural units. {mod}`diffpes.simul` uses the corresponding
+`_ME_EV` and `_HBAR_C_EV_A` constants:
 
 ```python
 import jax.numpy as jnp
@@ -64,37 +86,54 @@ k_par = 0.5123 * jnp.sqrt(e_kin) * jnp.sin(jnp.deg2rad(theta_deg))
 print(float(k_par))  # 0.434 1/Angstrom
 ```
 
-At He-I energies the full angular window of $\pm 15°$ maps to roughly $\pm 0.5\,\text{Å}^{-1}$ — enough to cover the first Brillouin zone of most quasi-2D materials.
+At He-I energies, an angular window of $\pm 15°$ maps to approximately
+$\pm 0.5\,\text{Å}^{-1}$. This range covers the first Brillouin zone of most
+quasi-2D materials.
 
 ## Free-Electron Final State and the Inner Potential
 
-The perpendicular momentum $k_z$ is *not* conserved across the surface. To assign a $k_z$ to a measured spectrum one conventionally assumes a **free-electron final state**: inside the solid the photoelectron behaves as a free electron whose energy is offset by the **inner potential** $V_0$ (the depth of the crystal's average potential below the vacuum level, typically 10-15 eV):
+The surface does *not* conserve the perpendicular momentum $k_z$. Researchers
+usually assign $k_z$ with a **free-electron final state**. This model treats the
+photoelectron inside the solid as a free electron. The **inner potential**
+$V_0$ offsets its energy. This potential measures the average crystal
+potential below the vacuum level and typically spans 10-15 eV:
 
 $$
 k_z = \frac{\sqrt{2 m_e}}{\hbar} \sqrt{E_{\mathrm{kin}} \cos^2\theta + V_0}
 $$
 
-Scanning the photon energy scans $k_z$, which is how 3D band dispersions are mapped experimentally.
+Photon-energy scans vary $k_z$. Researchers use this variation to map 3D band
+dispersions.
 
-diffpes uses the free-electron final-state approximation when it needs the **magnitude** of the photoelectron wavevector — in the differentiable forward model `simulate_tb_radial` the radial matrix elements are evaluated at
+diffpes uses the free-electron final-state approximation to compute the
+photoelectron wavevector **magnitude**. The differentiable
+`simulate_tb_radial` model evaluates the radial matrix elements at
 
 $$
 |\mathbf{k}| = \frac{\sqrt{2 m_e (h\nu - W - |E_B|)}}{\hbar}
 $$
 
-with the work function `work_function` as an explicit (and differentiable) parameter. The inner potential $V_0$ is not currently a model parameter: the projection-based `simulate_*` levels take band energies on a user-supplied k-path as ground truth, so no explicit $k_z$ reconstruction is performed. Keep $V_0$ in mind when comparing simulated k-paths against photon-energy-dependent experiments.
+The explicit `work_function` parameter remains differentiable. The current
+model does not include the inner potential $V_0$. The projection-based
+`simulate_*` levels use band energies on a user-supplied k-path as fixed input
+data. Therefore, these levels do not reconstruct $k_z$. Consider $V_0$ when
+you compare simulated k-paths with photon-energy-dependent experiments.
 
 ## Incidence Geometry in the API
 
-Two distinct geometries appear in an ARPES setup, and it is worth keeping them separate:
+An ARPES setup contains two distinct geometries:
 
-1. **Photon incidence** — the direction the light comes from, which fixes the polarization vectors and hence the dipole matrix elements.
-2. **Electron emission** — the direction the analyzer looks, which fixes $k_\parallel$ through the mapping above.
+1. **Photon incidence** specifies the light direction. This direction fixes
+   the polarization vectors and dipole matrix elements.
+2. **Electron emission** specifies the analyzer direction. This direction
+   fixes $k_\parallel$ through the preceding mapping.
 
 The diffpes simulation API parameterizes the **photon incidence** with two angles:
 
-- `incident_theta` — polar angle of the photon beam from the surface normal, **in degrees** (default 45)
-- `incident_phi` — azimuthal angle in the surface plane, **in degrees** (default 0)
+- `incident_theta` specifies the photon-beam polar angle from the surface
+  normal, **in degrees**. Default 45.
+- `incident_phi` specifies the surface-plane azimuthal angle, **in degrees**.
+  Default 0.
 
 The expanded wrappers convert these to radians before building a {class}`~diffpes.types.PolarizationConfig`. Internally, `photon_wavevector` constructs the unit propagation direction
 
@@ -102,26 +141,37 @@ $$
 \hat{k}_{\mathrm{ph}} = (\sin\theta\cos\phi,\; \sin\theta\sin\phi,\; \cos\theta)
 $$
 
-and `build_polarization_vectors` derives the s/p polarization basis from it (see [Matrix Elements and Polarization](matrix-elements-and-polarization.md)). The electron-emission side is implicit: the k-points of the supplied band structure *are* the sampled $\mathbf{k}_\parallel$ values, so the emission-angle-to-momentum conversion is assumed to have been done when the k-path was chosen.
+`build_polarization_vectors` derives the s/p polarization basis from this
+direction. See [Matrix Elements and Polarization](matrix-elements-and-polarization.md).
+The API represents electron emission implicitly. The supplied band-structure
+k-points define the sampled $\mathbf{k}_\parallel$ values. Users perform the
+emission-angle conversion when they select the k-path.
 
 ## What an $(E, k)$ Spectrum Is
 
 The primary output of every diffpes simulation is an {class}`~diffpes.types.ArpesSpectrum` PyTree with two fields:
 
-- `intensity` — a `(K, E)` array: photoemission intensity for `K` k-points along the sampled path and `E` energy grid points
-- `energy_axis` — the `(E,)` energy grid in eV, spanning `[min(bands) - 1, max(bands) + 1]` by default
+- `intensity`: This `(K, E)` array stores the photoemission intensity for `K`
+  k-points and `E` energy-axis points.
+- `energy_axis`: This `(E,)` array stores the energy grid in eV. By default,
+  it spans `[min(bands) - 1, max(bands) + 1]`.
 
-Schematically, each level of the simulation ladder evaluates
+Schematically, each simulation level evaluates
 
 $$
 I(\mathbf{k}, E) \;\propto\; \sum_{b} \, w_b(\mathbf{k}) \; f(E_b(\mathbf{k}); E_F, T)\; \mathcal{L}\!\left(E - E_b(\mathbf{k}); \sigma, \gamma\right)
 $$
 
-where $w_b$ is an orbital/matrix-element weight, $f$ is the Fermi-Dirac occupation, and $\mathcal{L}$ is a Gaussian or Voigt lineshape. Columns of `intensity` at fixed $\mathbf{k}$ are **energy distribution curves** (EDCs); rows at fixed $E$ are **momentum distribution curves** (MDCs).
+Here, $w_b$ is an orbital or matrix-element weight. $f$ is the Fermi-Dirac
+occupation, and $\mathcal{L}$ is a Gaussian or Voigt lineshape. Each
+`intensity` column at fixed $\mathbf{k}$ forms an **energy distribution curve**
+(EDC). Each row at fixed $E$ forms a **momentum distribution curve** (MDC).
 
 ## Worked Example
 
-The following builds a synthetic two-band cosine dispersion (the kind of eigenvalue array you would otherwise read from a VASP `EIGENVAL` file) and simulates its ARPES map:
+The following example builds a synthetic two-band cosine dispersion and
+simulates its ARPES map. A VASP `EIGENVAL` file can provide the equivalent
+eigenvalue array:
 
 ```python
 import jax.numpy as jnp
@@ -159,19 +209,21 @@ idx = jnp.argmin(jnp.abs(spectrum.energy_axis - (-0.5)))
 mdc = spectrum.intensity[:, idx]
 ```
 
-Band 1 disperses from $-2.1$ eV at the zone boundary up to $-0.3$ eV at $\Gamma$; both bands sit below $E_F = 0$, so the Fermi-Dirac factor at 20 K leaves them fully visible while cutting off any weight above zero energy.
+Band 1 disperses from $-2.1$ eV at the zone boundary to $-0.3$ eV at
+$\Gamma$. Both bands remain below $E_F = 0$. Therefore, the Fermi-Dirac factor
+at 20 K preserves their weight and removes weight above zero energy.
 
-## Where Kinematics Enters Each Simulation Path
+## Kinematics by Simulation Path
 
-| Simulation path | How geometry/kinematics is used |
+| Simulation path | Geometry and kinematics behavior |
 |-----------------|--------------------------------|
-| `simulate_novice` … `simulate_basicplus` | None beyond the k-path itself; intensity weights depend only on photon energy |
-| `simulate_advanced`, `simulate_expert`, `simulate_soc` | `incident_theta`/`incident_phi` fix the polarization basis; the SOC level also forms $\mathbf{S}\cdot\hat{k}_{\mathrm{ph}}$ |
-| `simulate_tb_radial` | Full kinematics: $|\mathbf{k}|$ from $h\nu$, $W$, and $E_B$ via the free-electron final state; the crystal k-direction is rescaled to the photoelectron momentum for the matrix-element evaluation |
+| `simulate_novice` … `simulate_basicplus` | The k-path supplies the geometry; photon energy controls the intensity weights |
+| `simulate_advanced`, `simulate_expert`, `simulate_soc` | The incidence angles fix the polarization basis; the SOC level also forms $\mathbf{S}\cdot\hat{k}_{\mathrm{ph}}$ |
+| `simulate_tb_radial` | The free-electron final state computes $|\mathbf{k}|$ from $h\nu$, $W$, and $E_B$; the model rescales the crystal direction for the matrix-element calculation |
 
 ## Further Reading
 
-- [Simulation Levels](simulation-levels.md) — what physics each rung of the six-level ladder adds
+- [Simulation Levels](simulation-levels.md) — what physics each simulation level adds
 - [Matrix Elements and Polarization](matrix-elements-and-polarization.md) — how the incidence angles turn into polarization vectors and dipole weights
 - [Spectral Broadening and Self-Energy](spectral-broadening-and-self-energy.md) — the lineshape $\mathcal{L}$ and its physical content
 - API reference: {doc}`../api/simul`, {doc}`../api/types`

@@ -13,24 +13,22 @@ kernelspec:
 
 # Quickstart: From Bands to a Differentiable ARPES Spectrum
 
-This tutorial walks the shortest path through diffpes: build a synthetic
-band structure, attach orbital characters, simulate an ARPES spectrum at
-two fidelity levels, and then differentiate through the entire
-spectrometer model with `jax.grad`. Everything runs on CPU in under a
-minute and every code cell below is executed when the documentation is
-built, so the outputs you see are real.
+Build a synthetic band structure and attach orbital characters. Then simulate
+two ARPES fidelity levels and differentiate the complete spectrometer model
+with `jax.grad`. The example runs on a CPU in less than one minute. The
+documentation build executes each code cell and displays its output.
 
 ## Installation
 
-diffpes is installed from PyPI:
+Install diffpes from PyPI:
 
 ```bash
 pip install diffpes
 ```
 
-Importing `diffpes` automatically enables 64-bit (double) precision in
-JAX and configures multi-threaded CPU execution, so you do not need to
-set `jax_enable_x64` yourself. We verify that below.
+The `diffpes` import enables 64-bit precision in JAX. It also configures
+multithreaded CPU execution. You do not need to set `jax_enable_x64`.
+Verify the configuration:
 
 ```{code-cell} ipython3
 import diffpes
@@ -44,18 +42,17 @@ print(f"x64 enabled: {jax.config.jax_enable_x64}")
 
 ## A Synthetic Band Structure
 
-diffpes normally consumes electronic-structure output from DFT codes
-(`diffpes.inout` parses VASP `EIGENVAL` and `PROCAR` files), but the
-simulation layer only needs plain arrays. That makes it easy to start
-with a toy model: two cosine bands on a one-dimensional k-path, the
-dispersion you would get from nearest-neighbor tight binding on a chain.
+diffpes usually consumes electronic-structure output from DFT codes.
+`diffpes.inout` parses VASP `EIGENVAL` and `PROCAR` files. The simulation
+layer also accepts plain arrays. Start with two cosine bands on a
+one-dimensional k-path. They represent nearest-neighbor tight binding on a
+chain.
 
-The eigenvalue array has shape `[nkpt, nband]` — the first axis indexes
-points along the momentum path, the second indexes bands. Energies are
-in eV, measured relative to the Fermi level, which we place at
-`ef = 0.0`. The upper band is given a slight phase offset so the two
-bands are not symmetry-related, which will make the matrix-element
-effects easier to see later.
+The eigenvalue array has shape `[nkpt, nband]`. The first axis indexes points
+along the momentum path. The second axis indexes bands. The array stores
+energies in eV relative to the Fermi level at `ef = 0.0`. A small phase offset
+removes the symmetry relation between the bands. This offset makes later
+matrix-element effects easier to identify.
 
 ```{code-cell} ipython3
 nkpt = 200
@@ -67,9 +64,9 @@ eigenbands = jnp.stack([band_lower, band_upper], axis=1)
 print(f"eigenbands shape: {eigenbands.shape}")
 ```
 
-A quick line plot shows the two dispersions. The upper band crosses the
-Fermi level near the zone boundary, so part of it will be cut off by
-Fermi-Dirac occupation in the simulated spectrum.
+Plot the two dispersions. The upper band crosses the Fermi level near the zone
+boundary. Fermi-Dirac occupation therefore suppresses part of it in the
+simulated spectrum.
 
 ```{code-cell} ipython3
 fig, ax = plt.subplots(figsize=(6, 4))
@@ -85,11 +82,11 @@ plt.show()
 
 ## Orbital Weights
 
-ARPES intensity is not just the band structure — each state's orbital
-character determines how strongly it photoemits at a given photon
-energy and light polarization. diffpes encodes this in an
-orbital-projection array of shape `[nkpt, nband, natom, 9]`, matching
-the layout of a VASP `PROCAR` file.
+The band structure alone does not determine ARPES intensity. Each state's
+orbital character controls its photoemission strength for a photon energy and
+polarization. diffpes stores this character in an orbital-projection array
+with shape `[nkpt, nband, natom, 9]`. This shape matches the VASP `PROCAR`
+layout.
 
 The last axis follows the VASP 9-orbital ordering, zero-based:
 
@@ -97,11 +94,10 @@ The last axis follows the VASP 9-orbital ordering, zero-based:
 |-------|---|---|---|---|---|---|---|---|---|
 | Orbital | $s$ | $p_y$ | $p_z$ | $p_x$ | $d_{xy}$ | $d_{yz}$ | $d_{z^2}$ | $d_{xz}$ | $d_{x^2-y^2}$ |
 
-So `weights[:, 0, 0, 2]` is the $p_z$ weight of band 0 on atom 0 at
-every k-point. Below we build a one-atom model where the lower band
-changes character smoothly from $p_z$ at the zone center to $p_x$ at
-the zone boundary, while the upper band is a fixed 70/30 mixture of
-$d_{xy}$ and $d_{x^2-y^2}$.
+`weights[:, 0, 0, 2]` contains the $p_z$ weight for band 0 and atom 0
+at each k-point. Build a one-atom model. The lower band changes smoothly
+from $p_z$ at the zone center to $p_x$ at the zone boundary. The upper band
+uses a fixed 70/30 mixture of $d_{xy}$ and $d_{x^2-y^2}$.
 
 ```{code-cell} ipython3
 natom = 1
@@ -118,16 +114,15 @@ print(f"surface_orb shape: {surface_orb.shape}")
 
 ## Simulating the Spectrum
 
-The single entry point {func}`diffpes.simul.simulate_expanded` takes
-plain arrays plus scalar experiment parameters and dispatches to one of
-six fidelity levels: `novice`, `basic`, `basicplus`, `advanced`,
-`expert`, and `soc`. Each level adds physics; the
-[guides](../guides/index.md) describe the full ladder.
+The {func}`diffpes.simul.simulate_expanded` entry point accepts plain arrays
+and scalar experiment parameters. It selects one of six fidelity levels:
+`novice`, `basic`, `basicplus`, `advanced`, `expert`, or `soc`. Each level adds
+physics. The [guides](../guides/index.md) describe all levels.
 
-We start at `level="basic"`: Gaussian broadening (`sigma`, in eV),
-Fermi-Dirac occupation at the given `temperature`, and a heuristic
-orbital weighting that depends on `photon_energy`. We use 21.2 eV — the
-He-I$\alpha$ line of a helium lamp, the workhorse of lab-based ARPES.
+Start with `level="basic"`. This level applies Gaussian broadening with
+`sigma` in eV. It applies Fermi-Dirac occupation at the specified
+`temperature`. It also applies heuristic orbital weights that depend on
+`photon_energy`. Use 21.2 eV, the He-I$\alpha$ line of a helium lamp.
 
 ```{code-cell} ipython3
 spectrum_basic = diffpes.simul.simulate_expanded(
@@ -144,21 +139,19 @@ print(f"intensity shape: {spectrum_basic.intensity.shape}")
 print(f"energy axis shape: {spectrum_basic.energy_axis.shape}")
 ```
 
-The result is an {class}`~diffpes.types.ArpesSpectrum` PyTree with two
-fields: `intensity` of shape `[nkpt, fidelity]` — the photoemission map
-$I(k, E)$ — and `energy_axis` of shape `[fidelity]`, spanning the band
-extrema plus 1 eV of padding on each side.
+The result is an {class}`~diffpes.types.ArpesSpectrum` PyTree with two fields.
+Its `intensity` field has shape `[nkpt, fidelity]` and contains the
+photoemission map $I(k, E)$. Its `energy_axis` field has shape `[fidelity]`.
+The axis extends 1 eV beyond each band-energy limit.
 
-Now the same system at `level="advanced"`, which replaces the heuristic
-orbital weights with interpolated Yeh-Lindau photoionization
-cross-sections and adds polarization-dependent selection rules: the
-intensity of each orbital channel is weighted by
-$|\hat{\varepsilon} \cdot \vec{d}\,|^2$, where $\hat{\varepsilon}$ is
-the light's electric-field direction. We choose p-polarized light
-(`"LHP"`, linear horizontal — in the plane of incidence) incident at
-45 degrees, a common experimental geometry. The other polarization
-tokens are `"LVP"` (s-pol), `"RCP"`/`"LCP"` (circular), `"LAP"`
-(linear arbitrary), and `"unpolarized"`.
+Now simulate the same system at `level="advanced"`. This level replaces the
+heuristic weights with interpolated Yeh-Lindau photoionization cross-sections.
+It also adds polarization-dependent selection rules. The factor
+$|\hat{\varepsilon} \cdot \vec{d}\,|^2$ weights each orbital channel.
+Here, $\hat{\varepsilon}$ is the electric-field direction. Select
+p-polarized light with `"LHP"`, which means linear horizontal polarization.
+Set its incident angle to 45 degrees. Other tokens are `"LVP"`, `"RCP"`,
+`"LCP"`, `"LAP"`, and `"unpolarized"`.
 
 ```{code-cell} ipython3
 spectrum_adv = diffpes.simul.simulate_expanded(
@@ -176,8 +169,8 @@ spectrum_adv = diffpes.simul.simulate_expanded(
 print(f"intensity shape: {spectrum_adv.intensity.shape}")
 ```
 
-Plotting both spectra side by side. The intensity array is transposed
-so energy runs vertically, as on a hemispherical-analyzer detector.
+Plot both spectra side by side. Transpose the intensity array so that energy
+uses the vertical detector axis.
 
 ```{code-cell} ipython3
 energy_axis = spectrum_basic.energy_axis
@@ -204,28 +197,24 @@ axes[0].set_ylim(-2.5, 0.5)
 plt.show()
 ```
 
-Both panels share the same band positions — matrix elements never move
-a peak, they only rescale it. What changes between the levels is the
-*relative brightness* along and between the bands. In the basic
-spectrum the intensity simply follows the total orbital weight, so the
-lower band is roughly uniform. In the advanced spectrum the
-$p_z \to p_x$ character change of the lower band couples differently to
-the p-polarized field, modulating its brightness along $k$, and the
-$d$-derived upper band picks up a different overall cross-section
-scale. This is exactly the kind of intensity variation that, in real
-experiments, is often mistaken for a change in the underlying
-electronic structure — and why a forward model of the matrix elements
-matters when comparing theory to data. Note also how the Fermi-Dirac
-factor extinguishes both bands above $E_F$ in the two panels.
+Both panels have the same band positions. Matrix elements rescale peaks but do
+not move them. The levels change the *relative brightness* within and between
+the bands. In the basic spectrum, the intensity follows the total orbital
+weight. The lower band is therefore approximately uniform. In the advanced
+spectrum, the $p_z \to p_x$ change couples differently to the p-polarized
+field. This coupling changes the brightness along $k$. The $d$-derived upper
+band also receives a different cross-section scale. Experiments can confuse
+this intensity variation with a change in the electronic structure. A
+matrix-element forward model separates these effects. The Fermi-Dirac factor
+also suppresses both bands above $E_F$.
 
 ## The Differentiable Hook
 
-Everything above — Gaussian broadening, occupation, cross-sections,
-polarization weights — is composed from pure JAX operations, so the
-whole spectrometer model is differentiable end to end. To demonstrate,
-we define a scalar observable: the total intensity in a narrow energy
-window just below the Fermi level, as a function of the experimental
-resolution `sigma` and the Fermi energy `ef`.
+Pure JAX operations implement the broadening, occupation, cross-sections, and
+polarization weights. The complete spectrometer model is therefore
+differentiable. Define a scalar observable to demonstrate this property. The
+observable is the total intensity in a narrow window below the Fermi level.
+Its variables are the resolution `sigma` and the Fermi energy `ef`.
 
 ```{code-cell} ipython3
 def window_intensity(sigma, ef):
@@ -243,9 +232,8 @@ def window_intensity(sigma, ef):
     return jnp.sum(spec.intensity * in_window)
 ```
 
-`jax.grad` differentiates this scalar through the entire simulation —
-through the Voigt/Gaussian lineshapes, the Fermi function, and the
-orbital weighting — with respect to whichever argument we pick.
+Use `jax.grad` to differentiate this scalar with respect to either argument.
+The derivative includes the lineshape, Fermi function, and orbital weighting.
 
 ```{code-cell} ipython3
 grad_sigma = jax.grad(window_intensity, argnums=0)(0.06, 0.0)
@@ -254,26 +242,22 @@ print(f"d(window intensity)/d(sigma) = {float(grad_sigma):.1f} per eV")
 print(f"d(window intensity)/d(ef)    = {float(grad_ef):.1f} per eV")
 ```
 
-Both gradients are positive: broadening leaks spectral weight from the
-band bottoms into the near-$E_F$ window, and raising the Fermi level
-un-occupies less of the upper band inside it. These are exact
-derivatives, not finite differences.
+Both gradients are positive. Broadening moves spectral weight from the band
+bottoms into the window near $E_F$. A higher Fermi level increases the occupied
+part of the upper band in the window. JAX computes exact derivatives instead
+of finite differences.
 
-This is the point of diffpes. A spectrometer model you can
-differentiate is a spectrometer model you can *invert*: wrap a
-chi-squared misfit between simulated and measured spectra in
-`jax.grad`, and gradient-based optimizers (the Equinox/Optimistix
-stack) can recover band parameters, self-energies, or experimental
-settings directly from data. The same gradients also answer design
-questions — how much would the measurement improve if the resolution
-were 10 meV better? — without rerunning parameter sweeps.
+Differentiability makes the spectrometer model invertible. Apply `jax.grad` to
+a chi-squared difference between simulated and measured spectra. The
+Equinox and Optimistix stack can then recover band parameters, self-energies,
+or experimental settings from data. The gradients can also quantify how a
+10 meV improvement in resolution changes the measurement. This calculation
+does not require a parameter sweep.
 
-## Where to Go Next
+## Next Steps
 
-- [Theory and architecture guides](../guides/index.md) — the six
-  fidelity levels in detail, the dipole physics behind the `advanced`
-  and `expert` levels, and which JAX transformations (`grad`, `jit`,
-  `vmap`) are supported where.
-- [API reference](../api/index.rst) — full function-level
-  documentation, including the VASP readers in `diffpes.inout` for
-  running this workflow on real DFT output.
+- [Theory and architecture guides](../guides/index.md): Read about the six
+  fidelity levels and their dipole physics. Check support for the `grad`,
+  `jit`, and `vmap` transformations.
+- [API reference](../api/index.rst): Read the complete function documentation.
+  Use the `diffpes.inout` VASP readers with real DFT output.

@@ -1,8 +1,8 @@
-"""Plotting utilities for ARPES spectra.
+"""Plot ARPES spectra with analysis utilities.
 
 Extended Summary
 ----------------
-Provides Matplotlib helper functions that render publication-style ARPES
+The module provides Matplotlib functions that render publication-style ARPES
 intensity maps. Inputs use :class:`~diffpes.types.ArpesSpectrum` directly.
 
 Routine Listings
@@ -22,10 +22,9 @@ Routine Listings
 
 Notes
 -----
-These functions operate on host-side NumPy arrays and Matplotlib
-objects (not JAX-traced arrays). They are intended for visualization
-at analysis time, not for inclusion inside ``jax.jit``-compiled
-functions.
+These functions operate on host-side NumPy arrays and Matplotlib objects. Use
+them for analysis visualizations. Do not include them in functions that
+``jax.jit`` compiles.
 """
 
 import numpy as np
@@ -61,9 +60,8 @@ def _prepare_plot_arrays(
 
     Extended Summary
     ----------------
-    Internal helper that normalizes an :class:`ArpesSpectrum` PyTree
-    into plain NumPy arrays and verifies that array ranks and lengths
-    are consistent with a 2D ARPES image.
+    The helper converts an :class:`ArpesSpectrum` PyTree to NumPy arrays. It
+    verifies the array ranks and lengths for a two-dimensional ARPES image.
 
     Implementation Logic
     --------------------
@@ -133,10 +131,10 @@ def plot_arpes_spectrum(
 ) -> Tuple[Union[Figure, SubFigure], Axes, AxesImage]:
     """Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 
-    Renders a 2D ARPES map using ``matplotlib.axes.Axes.imshow`` with
-    energy on the vertical axis and k-point index on the horizontal
-    axis. The function accepts an existing axis or creates a new figure
-    and axis when none is supplied.
+    The function renders a two-dimensional ARPES map with
+    ``matplotlib.axes.Axes.imshow``. The vertical axis contains energy, and the
+    horizontal axis contains the k-point index. The function accepts an
+    existing axis. It creates a figure and axis when the caller supplies none.
 
     :see: :class:`~.test_plotting.TestPlotArpesSpectrum`
 
@@ -172,7 +170,8 @@ def plot_arpes_spectrum(
         Spectrum containing ``intensity`` of shape ``(K, E)`` and
         ``energy_axis`` of shape ``(E,)``.
     ax : Optional[Axes], optional
-        Existing axis to draw on. If None, a new figure/axis is created.
+        Existing axis for the image. If ``None``, the function creates a figure
+        and axis.
     cmap : str, optional
         Matplotlib colormap name. Default is ``"gray"``.
     colorbar : bool, optional
@@ -251,7 +250,7 @@ def apply_kpath_ticks(
 ) -> Axes:
     """Apply symmetry-point ticks/labels from KPathInfo to an axis.
 
-    Adds k-path symmetry labels (e.g., G, M, K) to an existing axis
+    The function adds k-path symmetry labels, such as G, M, and K, to an axis
     using :class:`KPathInfo`. Optionally draws vertical guide lines at
     interior symmetry points to visually separate path segments.
 
@@ -347,10 +346,9 @@ def plot_arpes_with_kpath(  # noqa: PLR0913
 ) -> Tuple[Union[Figure, SubFigure], Axes, AxesImage]:
     """Plot ARPES spectrum and annotate k-axis using KPathInfo.
 
-    Convenience wrapper combining :func:`plot_arpes_spectrum` and
-    :func:`apply_kpath_ticks` in one call. Useful for line-mode band
-    paths where symmetry labels should be shown directly on the ARPES
-    image.
+    This wrapper combines :func:`plot_arpes_spectrum` and
+    :func:`apply_kpath_ticks`. Use it to show symmetry labels on a line-mode
+    ARPES image.
 
     :see: :class:`~.test_plotting.TestPlotArpesWithKpath`
 
@@ -504,7 +502,7 @@ def _subset_atom_axis(
     data: Float[NDArray, "K B A C"],
     atom_indices: Optional[list[int]],
 ) -> Float[NDArray, "K B A2 C"]:
-    """Subset an array on atom axis (axis=2) when atom indices are provided."""
+    """Subset an array on atom axis when the caller provides atom indices."""
     if atom_indices is None:
         subset: Float[NDArray, "K B A2 C"] = data
     else:
@@ -535,7 +533,7 @@ def _weights_from_preset(  # noqa: PLR0912
     weights : Float[NDArray, "K B"]
         Band weights with shape ``(K, B)``.
     signed : bool
-        Whether weights are signed and should be color-mapped.
+        Whether the weights have signs and require a color map.
 
     Raises
     ------
@@ -694,7 +692,8 @@ def plot_band_scatter_preset(  # noqa: PLR0913
     atom_indices : Optional[list[int]], optional
         Optional 0-based atom indices used before reduction.
     ax : Optional[Axes], optional
-        Existing axis to draw on. If None, a new figure/axis is created.
+        Existing axis for the plot. If ``None``, the function creates a figure
+        and axis.
     shift_fermi : bool, optional
         If True, plot ``E - E_F`` on y-axis.
     size_scale : float, optional
@@ -708,7 +707,7 @@ def plot_band_scatter_preset(  # noqa: PLR0913
     cmap : str, optional
         Colormap name used for signed presets.
     colorbar : bool, optional
-        If True and preset is signed, draw a colorbar.
+        If ``True`` and the preset has signs, draw a colorbar.
     xlabel : str, optional
         X-axis label.
     ylabel : str, optional

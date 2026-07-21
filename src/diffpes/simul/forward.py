@@ -1,4 +1,4 @@
-r"""End-to-end differentiable ARPES forward model.
+r"""Run an end-to-end differentiable ARPES forward model.
 
 Extended Summary
 ----------------
@@ -14,11 +14,10 @@ The full simulation pipeline is:
     diag_bands --> eigenvectors --> per-orbital M(k) -->
     total |M|^2 x Fermi-Dirac x Voigt --> I(k, E)
 
-Every stage is JAX-traceable, enabling ``jax.grad`` with respect to
-Slater exponents (controlling radial wavefunction extent),
-eigenvectors/eigenvalues, simulation parameters (sigma, gamma,
-temperature), polarization angles, and work function. Optional
-energy-dependent self-energy and momentum broadening are supported.
+JAX can trace every stage. ``jax.grad`` can differentiate the Slater exponents,
+eigenvectors, eigenvalues, simulation parameters, polarization angles, and
+work function. The model also supports an optional energy-dependent self-energy
+and momentum broadening.
 
 Routine Listings
 ----------------
@@ -93,8 +92,9 @@ def _ekin_to_k_magnitude(
         E_{\mathrm{kin}} = h\nu - W - |E_b|
 
     where :math:`h\nu` is the photon energy, :math:`W` is the work
-    function, and :math:`E_b` is the binding energy (negative by
-    convention). The free-electron wavevector magnitude is then:
+    function, and :math:`E_b` is the binding energy with the negative
+    convention. The following equation gives the free-electron wavevector
+    magnitude:
 
     .. math::
 
@@ -102,10 +102,10 @@ def _ekin_to_k_magnitude(
 
     Implementation Logic
     --------------------
-    1. **Compute kinetic energy**:
+    1. **Compute the kinetic energy**:
        ``e_kin = photon_energy - work_function - |binding_energy|``
-       The absolute value of ``binding_energy`` is used so that the
-       sign convention does not matter.
+       Use the absolute value of ``binding_energy`` to accept either sign
+       convention.
 
     2. **Guard against negative kinetic energy**:
        ``safe_sqrt`` returns zero for a non-positive radicand. Negative
@@ -126,8 +126,7 @@ def _ekin_to_k_magnitude(
     work_function : Float[Array, " "]
         Material work function in eV.
     binding_energy : Float[Array, " "]
-        Electron binding energy in eV (sign-agnostic: absolute
-        value is taken internally).
+        Electron binding energy in eV. The function uses its absolute value.
 
     Returns
     -------
@@ -168,13 +167,11 @@ def simulate_tb_radial(  # noqa: PLR0915
     pipeline is JAX-traceable and supports ``jax.grad`` with respect
     to all continuous parameters.
 
-    This is the "Chinook-style" tight-binding ARPES forward model.
-    Unlike the six-level ``simulate_*`` functions in ``spectrum.py``
-    (which use VASP orbital projections as pre-computed weights),
-    this function computes dipole matrix elements ab initio from
-    Slater-type radial wavefunctions and the diagonalized
-    tight-binding eigenvectors. This makes the entire simulation
-    differentiable with respect to:
+    This function provides the Chinook-style tight-binding ARPES forward model.
+    The six-level functions in ``spectrum.py`` use VASP orbital projections as
+    weights. In contrast, this function computes dipole matrix elements from
+    Slater-type radial wavefunctions and tight-binding eigenvectors. JAX can
+    therefore differentiate the complete simulation with respect to:
 
     - ``slater_params.zeta`` (Slater exponents controlling radial
       extent)
@@ -250,10 +247,9 @@ def simulate_tb_radial(  # noqa: PLR0915
     Parameters
     ----------
     diag_bands : DiagonalizedBands
-        Diagonalized electronic structure containing eigenvalues of
-        shape ``(K, B)``, eigenvectors of shape ``(K, B, O)`` where
-        O is the number of orbitals, k-points of shape ``(K, 3)``,
-        and the Fermi energy.
+        Diagonalized electronic structure with eigenvalues of shape ``(K, B)``
+        and eigenvectors of shape ``(K, B, O)``. O is the orbital count. The
+        carrier also contains k-points and the Fermi energy.
     slater_params : SlaterParams
         Slater radial wavefunction parameters including Slater
         exponents ``zeta`` of shape ``(O,)``, expansion coefficients,
@@ -271,14 +267,14 @@ def simulate_tb_radial(  # noqa: PLR0915
         Material work function in eV. Default is 4.5.
     self_energy : Optional[SelfEnergyConfig]
         Energy-dependent self-energy model for the Lorentzian
-        broadening. If ``None``, the constant ``params.gamma`` is
-        used for all energies.
+        broadening. If ``None``, the function uses ``params.gamma`` for all
+        energies.
     r_grid : Optional[Float[Array, " R"]]
         Radial integration grid in Bohr. Default is 10000 points
         linearly spaced on ``[1e-6, 50.0]``.
     dk : Optional[ScalarFloat]
-        Momentum broadening width in inverse Angstroms. If ``None``,
-        no k-space convolution is applied.
+        Momentum broadening width in inverse Angstroms. If ``None``, the
+        function does not apply k-space convolution.
 
     Returns
     -------
@@ -428,12 +424,12 @@ def simulate_tb_radial(  # noqa: PLR0915
     ) -> Float[Array, "K B"]:
         """Compute squared dipole matrix element for all (k, band) pairs.
 
-        For a fixed electric-field polarization vector, evaluates the
-        total dipole matrix element ``M = sum_o c_{k,b,o} * M_o`` for
+        For a fixed electric-field polarization vector, the function computes
+        the total dipole matrix element ``M = sum_o c_{k,b,o} * M_o`` for
         every (k-point, band) pair and returns ``|M|^2``. The
-        computation is vectorized with nested ``jax.vmap``: the inner
-        vmap maps over bands (B) and the outer vmap maps over k-points
-        (K), yielding the full intensity array of shape ``(K, B)``.
+        Nested ``jax.vmap`` operations vectorize the computation. The inner
+        operation maps the bands, and the outer operation maps the k-points.
+        The result has shape ``(K, B)``.
 
         Parameters
         ----------
@@ -561,13 +557,12 @@ def simulate_tb_radial(  # noqa: PLR0915
             energy: Float[Array, " "],
             bi: Float[Array, " "],
         ) -> Float[Array, " E"]:
-            """Spectral contribution of one band with energy-dependent gamma.
+            """Compute one band contribution with energy-dependent gamma.
 
-            Computes the Fermi-Dirac occupation at the band energy,
-            then evaluates a Voigt profile at each energy-axis point
-            with a different Lorentzian width ``gamma(E)`` from the
-            self-energy model. The result is scaled by the band
-            intensity.
+            The function computes the Fermi-Dirac occupation at the band
+            energy. It then computes a Voigt profile at each energy point with
+            ``gamma(E)`` from the self-energy model. The band intensity scales
+            the result.
 
             Parameters
             ----------
@@ -598,9 +593,9 @@ def simulate_tb_radial(  # noqa: PLR0915
         ) -> Float[Array, " E"]:
             """Sum spectral contributions over all bands at one k-point.
 
-            Vmaps ``_single_band_se`` over the band axis and sums the
-            resulting (B, E) array along the band dimension to produce
-            the total spectral intensity at this k-point.
+            The function applies ``jax.vmap`` to ``_single_band_se`` along the
+            band axis. It sums the resulting (B, E) array to produce the total
+            intensity at this k-point.
 
             Parameters
             ----------
@@ -629,7 +624,7 @@ def simulate_tb_radial(  # noqa: PLR0915
             energy: Float[Array, " "],
             bi: Float[Array, " "],
         ) -> Float[Array, " E"]:
-            """Spectral contribution of one band with constant gamma.
+            """Compute one band contribution with constant gamma.
 
             Computes the Fermi-Dirac occupation at the band energy,
             evaluates a Voigt profile with constant ``sigma`` and
@@ -663,9 +658,9 @@ def simulate_tb_radial(  # noqa: PLR0915
         ) -> Float[Array, " E"]:
             """Sum spectral contributions over all bands at one k-point.
 
-            Vmaps ``_single_band`` over the band axis and sums the
-            resulting (B, E) array along the band dimension to produce
-            the total spectral intensity at this k-point.
+            The function applies ``jax.vmap`` to ``_single_band`` along the
+            band axis. It sums the resulting (B, E) array to produce the total
+            intensity at this k-point.
 
             Parameters
             ----------

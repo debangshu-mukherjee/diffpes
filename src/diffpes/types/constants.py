@@ -1,25 +1,18 @@
-r"""Numerical, physical, orbital, and VASP-format constants for diffpes.
+r"""Define numerical, physical, orbital, and VASP-format constants for diffpes.
 
 Extended Summary
 ----------------
-Single home for the scalar and small-array constants shared across
-subpackages. Physical constants (CODATA values in eV-based units: the
-Bohr-to-Angstrom conversion, :math:`\hbar c` in eV Angstrom,
-:math:`\hbar` in eV s, :math:`k_B` in eV/K, and the electron rest
-energy in eV) fix the unit system stated in the conventions charter —
-energies in eV, lengths in Angstrom. Numerical tolerances (epsilon
-floors, minimum-sum thresholds, the small-argument cutoff for
-spherical Bessel seeds, and the Faddeeva Taylor-series order)
-centralize the values that keep kernels finite and differentiable
-near singular points. Orbital conventions (the VASP nine-orbital
-ordering, index slices, magnetic quantum numbers, and normalized
-orbital directions) pin the projection basis every subpackage shares.
-VASP-format constants (parser token counts, column layouts, block
-counts, HDF5 attribute names, and plotting preset names) pin the
-declarative structure of the file formats ``diffpes.inout`` reads
-and writes. Everything consumed outside ``diffpes.types`` is public
-and re-exported through :mod:`diffpes.types`; the only private names
-are module-internal intermediates.
+This module owns the scalar constants and small-array constants that the
+subpackages share. CODATA physical constants fix the unit system from the
+conventions charter. The system uses eV for energies and Angstrom for lengths.
+These constants include the Bohr-to-Angstrom conversion, :math:`\hbar c`,
+:math:`\hbar`, :math:`k_B`, and the electron rest energy.
+
+Numerical tolerances keep kernels finite and differentiable near singular
+points. Orbital conventions fix the shared projection basis. VASP-format
+constants define the file formats that ``diffpes.inout`` reads and writes.
+The module exports every external constant through :mod:`diffpes.types`.
+Private names identify only module intermediates.
 
 Routine Listings
 ----------------
@@ -126,12 +119,10 @@ Routine Listings
 
 Notes
 -----
-Changing a tolerance here changes the numerical behavior of every
-consumer at once; treat edits as physics changes requiring the
-grad-vs-finite-difference gates to be rerun, not as free refactors.
-This module imports JAX (the orbital tables are device arrays), so it
-is not import-side-effect-free; constants that must stay importable
-without JAX do not belong here.
+A tolerance change modifies the numerical behavior of every consumer. Treat
+each edit as a physics change. Rerun the gradient and finite-difference gates.
+This module imports JAX because the orbital tables contain device arrays.
+Place constants that must load without JAX in a different module.
 """
 
 import re

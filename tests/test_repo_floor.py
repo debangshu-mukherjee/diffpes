@@ -1,8 +1,8 @@
 """Verify the repository dependency and runtime foundation.
 
-The tests in this module establish that the differentiable solver stack is
-installed, diffpes enables JAX 64-bit precision before numerical work, and
-Equinox modules retain their structure through JAX PyTree operations.
+The module verifies the dependencies for the differentiable solver stack.
+It confirms that diffpes enables JAX 64-bit precision before numerical work.
+It also checks Equinox module structure through JAX PyTree operations.
 """
 
 import ast
@@ -101,7 +101,7 @@ def _tb_reference_payload(
 class TestConftest:
     """Validate the shared pytest numerical and resource contracts.
 
-    Covers the x64 session invariant, stable node-derived random keys, and the
+    The class covers the x64 session invariant, stable node-derived random keys, and the
     RSS leak guard's failure behavior in an isolated pytest subprocess.
     """
 
@@ -112,13 +112,13 @@ class TestConftest:
     ) -> None:
         """Keep x64 precision and random keys stable across workers.
 
-        Confirms the default scalar dtype is float64 and independently derives
+        The test confirms the default scalar dtype is float64 and independently derives
         the expected SHA-256 seed for this node ID to verify the fixture key.
 
         Notes
         -----
-        Hashes the fully qualified pytest node ID, converts its first four
-        bytes to an integer, and compares the resulting typed JAX key exactly.
+        The test hashes the fully qualified pytest node ID. It converts the first
+        four bytes to an integer and compares the resulting typed JAX key exactly.
         """
         precision_probe: Float[Array, ""] = jnp.zeros(())
         digest: bytes = hashlib.sha256(request.node.nodeid.encode()).digest()
@@ -131,14 +131,14 @@ class TestConftest:
     def test_rss_leak_guard_trips(self, pytester: pytest.Pytester) -> None:
         """Reject a retained allocation larger than its marked RSS limit.
 
-        Confirms the real plugin reports a teardown error when a test retains
+        The test confirms the real plugin reports a teardown error when a test retains
         more than 100 MiB rather than merely simulating the guard arithmetic.
 
         Notes
         -----
-        Copies the repository conftest into an isolated pytest subprocess,
-        touches a retained 160 MiB byte array page-by-page, and requires the
-        guard's measured-RSS diagnostic and teardown error.
+        The test copies the repository conftest into an isolated pytest subprocess.
+        It touches a retained 160 MiB byte array page-by-page. The test then
+        requires the guard's measured-RSS diagnostic and teardown error.
         """
         conftest_path: Path = Path(__file__).with_name("conftest.py")
         pytester.makeconftest(conftest_path.read_text())
@@ -169,22 +169,22 @@ class TestConftest:
 class TestHelpers:
     """Validate deterministic shared factories and assertion wrappers.
 
-    Covers every WP3.2 factory's declared carrier, shape, finite leaves, and
+    The class covers every WP3.2 factory's declared carrier, shape, finite leaves, and
     fixed-seed reproducibility using the shared strict assertion functions.
     """
 
     def test_factories_and_assertions(self, rng_key: PRNGKeyArray) -> None:
         """Build finite, correctly shaped, reproducible toy carriers.
 
-        Confirms all seven factories return their declared production types,
-        random factories repeat bit-for-bit for one key, and analytic
+        The test confirms that all seven factories return their declared production
+        types. Random factories repeat bit-for-bit for one key. Analytic
         tight-binding paths expose the requested number of k-points.
 
         Notes
         -----
-        Builds reduced-size carriers, checks dimensions with Chex, verifies
-        every leaf is finite, and compares repeated random trees at zero
-        relative and absolute tolerance.
+        The test builds reduced-size carriers and checks their dimensions with Chex.
+        It verifies every leaf is finite. The test compares repeated random trees
+        at zero relative and absolute tolerance.
         """
         bands: BandStructure = toy_band_structure(rng_key, n_k=5, n_bands=3)
         repeated_bands: BandStructure = toy_band_structure(
@@ -252,20 +252,20 @@ class TestHelpers:
 class TestMetadata(chex.TestCase):
     """Validate the install, tooling, and Python metadata contract.
 
-    Covers standalone dependency purity, unconditional JAX installation,
+    The class covers standalone dependency purity, unconditional JAX installation,
     supported Python versions, uv-build ownership, and test-tooling scope.
     """
 
     def test_project_metadata(self) -> None:
         """Keep project metadata consistent with the standalone test floor.
 
-        Confirms that retired dependencies and configuration are absent, JAX
-        has one unconditional runtime constraint, Python 3.12 is supported,
-        and Ruff, pytest, and interrogate use the program-wide settings.
+        The test confirms that retired dependencies and configuration are absent.
+        JAX has one unconditional runtime constraint, and the project supports
+        Python 3.12. Ruff, pytest, and interrogate use the program-wide settings.
 
         Notes
         -----
-        Parses ``pyproject.toml`` with the standard-library TOML reader and
+        The test parses ``pyproject.toml`` with the standard-library TOML reader and
         compares its declarative values against the WP2.2 metadata contract.
         """
         project_file: Path = (
@@ -330,19 +330,19 @@ class TestMetadata(chex.TestCase):
 class TestCI(chex.TestCase):
     """Validate the continuous-integration workflow from WP5.1.
 
-    Covers workflow syntax, push and pull-request triggers, and the complete
+    The class covers workflow syntax, push and pull-request triggers, and the complete
     supported-Python matrix declared by the package metadata.
     """
 
     def test_workflow_matrix(self) -> None:
         """Exercise CI on every supported Python minor version.
 
-        Confirms the workflow exists, parses as YAML, runs for pushes and pull
-        requests, and tests Python 3.12, 3.13, and 3.14 exactly.
+        The test confirms the workflow exists and parses as YAML. The workflow runs
+        for pushes and pull requests. It tests Python 3.12, 3.13, and 3.14 exactly.
 
         Notes
         -----
-        Loads the checked-in workflow using PyYAML and compares its declarative
+        The test loads the checked-in workflow using PyYAML and compares its declarative
         triggers and test matrix with the WP5.1 external configuration truth.
         """
         repository_root: Path = Path(__file__).resolve().parents[1]
@@ -363,13 +363,14 @@ class TestCI(chex.TestCase):
     def test_pypi_release_workflow(self) -> None:
         """Publish matching version tags through trusted PyPI identity.
 
-        Confirms the dedicated release workflow is tag-only, uses the protected
-        ``pypi`` environment with job-scoped OIDC permission, smoke-tests both
-        distribution formats, and requires uv trusted publishing.
+        The test confirms the dedicated release workflow accepts only tags. The
+        workflow uses the protected ``pypi`` environment with job-scoped OIDC
+        permission. It smoke-tests both distribution formats and requires uv
+        trusted publishing.
 
         Notes
         -----
-        Parses the workflow as YAML and inspects its trigger, permissions, and
+        The test parses the workflow as YAML and inspects its trigger, permissions, and
         executable commands without contacting PyPI or minting credentials.
         """
         repository_root: Path = Path(__file__).resolve().parents[1]
@@ -399,7 +400,7 @@ class TestCI(chex.TestCase):
 class TestRegressionReferences(chex.TestCase):
     """Validate the pre-refactor forward baselines from WP6.1.
 
-    Covers fixed-seed novice and tight-binding radial spectra, the standing
+    The class covers fixed-seed novice and tight-binding radial spectra, the standing
     zeta-gradient regression, archive metadata, and manifest checksums.
     """
 
@@ -408,15 +409,15 @@ class TestRegressionReferences(chex.TestCase):
     def test_forward_replay_and_manifest(self) -> None:
         """Replay all reference artifacts within their pinned tolerances.
 
-        Confirms spectrum arrays reproduce at relative tolerance ``1e-12``,
-        the zeta gradients reproduce at least as strictly as their ``1e-9``
-        contract, and every committed archive matches its manifest SHA-256.
+        The test confirms spectrum arrays reproduce at relative tolerance
+        ``1e-12``. The zeta gradients satisfy their stricter ``1e-9`` contract.
+        Every committed archive matches its manifest SHA-256.
 
         Notes
         -----
-        Rebuilds all three CPU/x64 factory pipelines with seed 20260713,
-        compares their PyTree leaf order through the shared NPZ loader, then
-        checks declared shapes, float64 dtypes, and artifact digests.
+        The test rebuilds all three CPU/x64 factory pipelines with seed 20260713.
+        It compares their PyTree leaf order through the shared NPZ loader. The test
+        then checks the declared shapes, float64 dtypes, and artifact digests.
         """
         reference_directory: Path = (
             Path(__file__).parent / "test_diffpes" / "_reference_data"
@@ -496,7 +497,7 @@ class TestRegressionReferences(chex.TestCase):
 class TestRepositoryArchitecture(chex.TestCase):
     """Enforce the production architecture rules from CONTRIBUTING.
 
-    Covers carrier and factory ownership, import boundaries, public runtime
+    The class covers carrier and factory ownership, import boundaries, public runtime
     type checking, explicit returns, package listings, and zero-legacy exports.
     """
 
@@ -567,15 +568,536 @@ class TestRepositoryArchitecture(chex.TestCase):
             summaries[match.group(1)] = summary
         return summaries
 
+    @staticmethod
+    def _markdown_prose(path: Path) -> tuple[tuple[int, str], ...]:
+        """Return line-numbered prose blocks from one Markdown file."""
+        lines: list[str] = path.read_text(encoding="utf-8").splitlines()
+        paragraphs: list[tuple[int, str]] = []
+        current_lines: list[str] = []
+        current_start: int = 0
+        in_fence: bool = False
+        in_math: bool = False
+        in_front_matter: bool = bool(lines and lines[0].strip() == "---")
+        line_number: int
+        raw_line: str
+        for line_number, raw_line in enumerate(lines, start=1):
+            stripped: str = raw_line.strip()
+            starts_fence: bool = stripped.startswith(("```", "~~~"))
+            starts_math: bool = stripped == "$$"
+            ends_front_matter: bool = (
+                in_front_matter and line_number > 1 and stripped == "---"
+            )
+            boundary: bool = (
+                not stripped
+                or starts_fence
+                or starts_math
+                or in_fence
+                or in_math
+                or in_front_matter
+                or stripped.startswith(("#", "<!--", ":::", ":"))
+                or stripped in {"---", "***", "___"}
+            )
+            if boundary:
+                if current_lines:
+                    paragraphs.append((current_start, " ".join(current_lines)))
+                    current_lines = []
+                if starts_fence:
+                    in_fence = not in_fence
+                if starts_math:
+                    in_math = not in_math
+                if ends_front_matter:
+                    in_front_matter = False
+                continue
+
+            if stripped.startswith("|"):
+                if current_lines:
+                    paragraphs.append((current_start, " ".join(current_lines)))
+                    current_lines = []
+                table_cells: list[str] = [
+                    cell.strip()
+                    for cell in stripped.strip("|").split("|")
+                    if cell.strip()
+                    and re.fullmatch(r":?-{3,}:?", cell.strip()) is None
+                ]
+                paragraphs.extend((line_number, cell) for cell in table_cells)
+                continue
+
+            list_match: re.Match[str] | None = re.match(
+                r"^(?:[-*+] (?:\[[ xX]\] )?|\d+\. )(.*)",
+                stripped,
+            )
+            if list_match is not None:
+                if current_lines:
+                    paragraphs.append((current_start, " ".join(current_lines)))
+                current_start = line_number
+                current_lines = [list_match.group(1)]
+                continue
+
+            if stripped.startswith(">"):
+                stripped = stripped.removeprefix(">").strip()
+            if not current_lines:
+                current_start = line_number
+            current_lines.append(stripped)
+
+        if current_lines:
+            paragraphs.append((current_start, " ".join(current_lines)))
+        prose: tuple[tuple[int, str], ...] = tuple(paragraphs)
+        return prose
+
+    @staticmethod
+    def _markdown_sentences(paragraph: str) -> tuple[str, ...]:
+        """Return normalized sentences from one Markdown prose block."""
+        normalized: str = re.sub(
+            r"!\[[^\]]*\]\([^)]*\)",
+            " ",
+            paragraph,
+        )
+        normalized = re.sub(
+            r"\[([^\]]*)\]\([^)]*\)",
+            r"\1",
+            normalized,
+        )
+        normalized = re.sub(
+            r":[A-Za-z0-9_-]+:`[^`]+`",
+            " TECH ",
+            normalized,
+        )
+        normalized = re.sub(r"`+[^`]+`+", " TECH ", normalized)
+        normalized = re.sub(r"\$[^$]+\$", " TECH ", normalized)
+        normalized = re.sub(r"<[^>]+>", " ", normalized)
+        normalized = re.sub(r"[*_]", "", normalized)
+        normalized = normalized.replace("e.g.", "for example")
+        normalized = normalized.replace("i.e.", "that is")
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        sentences: tuple[str, ...] = tuple(
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", normalized)
+            if sentence.strip()
+        )
+        return sentences
+
+    @staticmethod
+    def _markdown_instruction(sentence: str) -> bool:
+        """Return whether one Markdown sentence gives an instruction."""
+        imperative_verbs: frozenset[str] = frozenset(
+            {
+                "accept",
+                "achieve",
+                "accumulate",
+                "add",
+                "align",
+                "allow",
+                "annotate",
+                "append",
+                "apply",
+                "assert",
+                "assemble",
+                "attach",
+                "avoid",
+                "batch",
+                "bind",
+                "build",
+                "calculate",
+                "carry",
+                "cast",
+                "certify",
+                "check",
+                "clear",
+                "clone",
+                "collect",
+                "compare",
+                "compile",
+                "compose",
+                "compute",
+                "consider",
+                "construct",
+                "contain",
+                "convolve",
+                "convert",
+                "create",
+                "decode",
+                "declare",
+                "decorate",
+                "define",
+                "delete",
+                "derive",
+                "detect",
+                "diagonalize",
+                "differentiate",
+                "discuss",
+                "dispatch",
+                "distinguish",
+                "divide",
+                "do",
+                "document",
+                "encode",
+                "ensure",
+                "enforce",
+                "estimate",
+                "evaluate",
+                "execute",
+                "exercise",
+                "exclude",
+                "expand",
+                "explain",
+                "expose",
+                "export",
+                "extract",
+                "fail",
+                "find",
+                "flatten",
+                "follow",
+                "forbid",
+                "format",
+                "generate",
+                "give",
+                "guard",
+                "identify",
+                "import",
+                "include",
+                "install",
+                "integrate",
+                "interpolate",
+                "keep",
+                "list",
+                "load",
+                "look",
+                "make",
+                "mark",
+                "match",
+                "materialize",
+                "measure",
+                "mirror",
+                "name",
+                "never",
+                "note",
+                "normalize",
+                "omit",
+                "open",
+                "pack",
+                "pair",
+                "parse",
+                "perform",
+                "persist",
+                "pin",
+                "place",
+                "plan",
+                "plant",
+                "plot",
+                "prefer",
+                "prepare",
+                "prevent",
+                "preserve",
+                "produce",
+                "promote",
+                "propagate",
+                "provide",
+                "publish",
+                "raise",
+                "ravel",
+                "read",
+                "recompute",
+                "record",
+                "recover",
+                "reduce",
+                "re-evaluate",
+                "refuse",
+                "register",
+                "reject",
+                "remove",
+                "render",
+                "report",
+                "replay",
+                "represent",
+                "reproduce",
+                "require",
+                "resolve",
+                "retain",
+                "return",
+                "round",
+                "round-trip",
+                "run",
+                "sanitize",
+                "save",
+                "select",
+                "serialize",
+                "set",
+                "show",
+                "simulate",
+                "stage",
+                "start",
+                "state",
+                "store",
+                "stream",
+                "subset",
+                "sum",
+                "synchronize",
+                "test",
+                "treat",
+                "trace",
+                "unpack",
+                "update",
+                "use",
+                "validate",
+                "vectorize",
+                "verify",
+                "visit",
+                "write",
+                "yield",
+            }
+        )
+        words: list[str] = re.findall(
+            r"[A-Za-z]+(?:-[A-Za-z]+)*",
+            sentence.lower(),
+        )
+        first_word: str = words[0] if words else ""
+        has_directive_modal: bool = (
+            re.search(
+                r"\b(?:must|shall|should|required)\b",
+                sentence,
+                flags=re.IGNORECASE,
+            )
+            is not None
+        )
+        is_instruction: bool = (
+            first_word in imperative_verbs
+            or first_word == "you"
+            or has_directive_modal
+        )
+        return is_instruction
+
+    @staticmethod
+    def _docstring_prose(docstring: str) -> tuple[str, ...]:
+        """Return prose blocks from one Python docstring."""
+        lines: list[str] = docstring.splitlines()
+        paragraphs: list[str] = []
+        current_lines: list[str] = []
+        current_section: str = ""
+        skip_indented_block: bool = False
+        structured_sections: frozenset[str] = frozenset(
+            {
+                "Attributes",
+                "Other Parameters",
+                "Parameters",
+                "Raises",
+                "Returns",
+                "See Also",
+                "Yields",
+            }
+        )
+        line_index: int
+        raw_line: str
+        for line_index, raw_line in enumerate(lines):
+            stripped: str = raw_line.strip()
+            next_line: str = (
+                lines[line_index + 1].strip()
+                if line_index + 1 < len(lines)
+                else ""
+            )
+            starts_section: bool = bool(
+                stripped and re.fullmatch(r"-{3,}", next_line)
+            )
+            is_section_rule: bool = bool(re.fullmatch(r"-{3,}", stripped))
+            if starts_section:
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                    current_lines = []
+                current_section = stripped
+                skip_indented_block = False
+                continue
+            if is_section_rule:
+                continue
+
+            starts_rst_directive: bool = stripped.startswith(".. ")
+            starts_sphinx_field: bool = (
+                re.match(r"^:[A-Za-z0-9_-]+:", stripped) is not None
+            )
+            starts_doctest: bool = stripped.startswith((">>>", "..."))
+            if starts_rst_directive or starts_sphinx_field or starts_doctest:
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                    current_lines = []
+                skip_indented_block = starts_rst_directive
+                continue
+
+            if skip_indented_block:
+                if not stripped or raw_line.startswith((" ", "\t")):
+                    continue
+                skip_indented_block = False
+
+            if not stripped:
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                    current_lines = []
+                continue
+
+            if (
+                current_section in structured_sections
+                and not raw_line.startswith((" ", "\t"))
+            ):
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                    current_lines = []
+                continue
+
+            list_match: re.Match[str] | None = re.match(
+                r"^(?:[-*+] |\d+\. )(.*)",
+                stripped,
+            )
+            if list_match is not None:
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                current_lines = [list_match.group(1)]
+            else:
+                current_lines.append(stripped)
+
+            if stripped.endswith("::"):
+                if current_lines:
+                    paragraphs.append(" ".join(current_lines))
+                    current_lines = []
+                skip_indented_block = True
+
+        if current_lines:
+            paragraphs.append(" ".join(current_lines))
+        prose: tuple[str, ...] = tuple(paragraphs)
+        return prose
+
+    def test_markdown_prose_obeys_ste_sentence_limits(self) -> None:
+        """Keep repository Markdown within the STE sentence limits.
+
+        The test confirms descriptions contain at most 25 words and instructions contain
+        at most 20 words across every repository-authored Markdown file.
+
+        Notes
+        -----
+        The test parses prose paragraphs and table cells. The parser excludes generated
+        files, code fences, math blocks, front matter, and technical literals.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[1]
+        excluded_roots: tuple[Path, ...] = (
+            repository_root / ".git",
+            repository_root / ".venv",
+            repository_root / ".pytest_cache",
+            repository_root / "docs/build",
+        )
+        markdown_paths: tuple[Path, ...] = tuple(
+            path
+            for path in sorted(repository_root.rglob("*.md"))
+            if path.is_file()
+            and not any(root in path.parents for root in excluded_roots)
+        )
+        violations: list[str] = []
+        path: Path
+        for path in markdown_paths:
+            line_number: int
+            paragraph: str
+            for line_number, paragraph in self._markdown_prose(path):
+                sentence: str
+                for sentence in self._markdown_sentences(paragraph):
+                    words: list[str] = re.findall(
+                        r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*",
+                        sentence,
+                    )
+                    limit: int = (
+                        20 if self._markdown_instruction(sentence) else 25
+                    )
+                    if len(words) > limit:
+                        relative_path: Path = path.relative_to(repository_root)
+                        violations.append(
+                            f"{relative_path}:{line_number}: "
+                            f"{len(words)} words (limit {limit}): {sentence}"
+                        )
+        self.assertEqual(violations, [])
+
+    def test_python_docstrings_obey_ste_prose_rules(self) -> None:
+        """Keep Python docstrings within the measurable STE prose rules.
+
+        The test confirms each docstring sentence meets its applicable word
+        limit. It also rejects passive voice and non-present tense candidates.
+
+        Notes
+        -----
+        The test parses all source and test docstrings through the AST. It
+        excludes structured signatures, directives, code blocks, and technical
+        literals before it checks the prose.
+        """
+        modules: tuple[tuple[Path, ast.Module], ...] = (
+            self._production_modules() + self._test_modules()
+        )
+        passive_pattern: re.Pattern[str] = re.compile(
+            r"\b(?:am|is|are|was|were|be|been|being)\s+"
+            r"(?:\w+ly\s+)?(?:\w+(?:ed|en)|built|done|found|given|kept|known|"
+            r"made|put|run|set|shown|told|written)\b",
+            flags=re.IGNORECASE,
+        )
+        tense_pattern: re.Pattern[str] = re.compile(
+            r"\b(?:will|would|was|were|had)\b",
+            flags=re.IGNORECASE,
+        )
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        for path, module in modules:
+            node: ast.AST
+            for node in ast.walk(module):
+                if not isinstance(
+                    node,
+                    (
+                        ast.Module,
+                        ast.ClassDef,
+                        ast.FunctionDef,
+                        ast.AsyncFunctionDef,
+                    ),
+                ):
+                    continue
+                docstring: str | None = ast.get_docstring(node)
+                if docstring is None:
+                    continue
+                summary: str = docstring.splitlines()[0]
+                symbol_name: str = getattr(node, "name", "<module>")
+                location: str = f"{path}:{getattr(node, 'lineno', 1)}"
+                if not self._markdown_instruction(summary):
+                    violations.append(
+                        f"{location}:{symbol_name}: non-imperative summary: "
+                        f"{summary}"
+                    )
+                paragraph: str
+                for paragraph in self._docstring_prose(docstring):
+                    sentence: str
+                    for sentence in self._markdown_sentences(paragraph):
+                        words: list[str] = re.findall(
+                            r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*",
+                            sentence,
+                        )
+                        limit: int = (
+                            20 if self._markdown_instruction(sentence) else 25
+                        )
+                        if len(words) > limit:
+                            violations.append(
+                                f"{location}:{symbol_name}: {len(words)} words "
+                                f"(limit {limit}): {sentence}"
+                            )
+                        if passive_pattern.search(sentence) is not None:
+                            violations.append(
+                                f"{location}:{symbol_name}: passive voice: "
+                                f"{sentence}"
+                            )
+                        if tense_pattern.search(sentence) is not None:
+                            violations.append(
+                                f"{location}:{symbol_name}: non-present tense: "
+                                f"{sentence}"
+                            )
+        self.assertEqual(violations, [])
+
     def test_legacy_pytree_carriers_are_forbidden(self) -> None:
         """Reject legacy PyTree carrier and registration machinery.
 
-        Confirms production carriers do not use ``NamedTuple`` or manual JAX
+        The test confirms production carriers do not use ``NamedTuple`` or manual JAX
         flattening hooks instead of the project Equinox carrier contract.
 
         Notes
         -----
-        Parses every production class and call expression, then reports the
+        The test parses every production class and call expression, then reports the
         source location of each forbidden base, method, or registration call.
         """
         violations: list[str] = []
@@ -607,12 +1129,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_all_production_carriers_are_types_equinox_modules(self) -> None:
         """Keep every public carrier under ``diffpes.types``.
 
-        Confirms public production classes are Equinox modules and have the
+        The test confirms public production classes are Equinox modules and have the
         types subpackage as their single architectural owner.
 
         Notes
         -----
-        Parses each public class declaration and compares its direct bases and
+        The test parses each public class declaration and compares its direct bases and
         source directory with the carrier ownership rule.
         """
         violations: list[str] = []
@@ -634,7 +1156,7 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_make_factories_are_types_owned(self) -> None:
         """Forbid ``make_*`` factories outside ``diffpes.types``.
 
-        Confirms consumers cannot create a second construction contract for a
+        The test confirms consumers cannot create a second construction contract for a
         public carrier in another production subpackage.
 
         Notes
@@ -658,12 +1180,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_declarative_constants_are_types_owned(self) -> None:
         """Keep declarative constants under ``diffpes.types``.
 
-        Confirms non-types modules contain only explicitly approved generated
+        The test confirms non-types modules contain only explicitly approved generated
         or runtime state in addition to their public export lists.
 
         Notes
         -----
-        Parses module-level assignments and compares them with the narrow
+        The test parses module-level assignments and compares them with the narrow
         allowlist for version, registry, generated table, and polynomial data.
         """
         allowed: dict[str, set[str]] = {
@@ -704,12 +1226,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_type_aliases_are_types_owned(self) -> None:
         """Keep every production type alias under ``diffpes.types``.
 
-        Confirms PEP 695 declarations and legacy ``TypeAlias`` annotations do
+        The test confirms PEP 695 declarations and legacy ``TypeAlias`` annotations do
         not create local type vocabularies in consuming subpackages.
 
         Notes
         -----
-        Parses module-level declarations and reports the exact source location
+        The test parses module-level declarations and reports the exact source location
         of each alias found outside the types subpackage.
         """
         violations: list[str] = []
@@ -733,12 +1255,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_public_functions_are_runtime_typechecked(self) -> None:
         """Require the project decorator on every public production function.
 
-        Confirms public module-level callables use the exact
+        The test confirms public module-level callables use the exact
         ``@jaxtyped(typechecker=beartype)`` stack required by CONTRIBUTING.
 
         Notes
         -----
-        Compares normalized decorator syntax through the AST and reports each
+        The test compares normalized decorator syntax through the AST and reports each
         missing function with its source line.
         """
         violations: list[str] = []
@@ -762,12 +1284,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_functions_assign_before_returning(self) -> None:
         """Require production functions to return annotated names.
 
-        Confirms each value-returning path binds its result before returning,
+        The test confirms each value-returning path binds its result before returning,
         including paths in private and nested helpers.
 
         Notes
         -----
-        Walks each public function while excluding nested function bodies and
+        The test walks each public function while excluding nested function bodies and
         reports non-name return expressions by source line.
         """
 
@@ -821,12 +1343,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_function_intermediates_are_annotated(self) -> None:
         """Require explicit types for production intermediate variables.
 
-        Confirms assignment, loop, context, walrus, and exception targets have
+        The test confirms assignment, loop, context, walrus, and exception targets have
         an annotation in that function scope while respecting ``nonlocal``.
 
         Notes
         -----
-        Walks one callable scope at a time, excludes nested callables and
+        The test walks one callable scope at a time, excludes nested callables and
         throwaway ``_`` bindings, and reports each unannotated local target.
         """
 
@@ -943,12 +1465,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_cross_subpackage_imports_use_public_surfaces(self) -> None:
         """Forbid deep imports across production subpackage boundaries.
 
-        Confirms consumers import through ``diffpes.<subpackage>`` instead of
+        The test confirms consumers import through ``diffpes.<subpackage>`` instead of
         reaching into another subpackage's implementation file.
 
         Notes
         -----
-        Compares each absolute DiffPES import with the importing file's owning
+        The test compares each absolute DiffPES import with the importing file's owning
         subpackage and reports cross-boundary modules deeper than one level.
         """
         violations: list[str] = []
@@ -978,12 +1500,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_diffpes_imports_are_not_renamed(self) -> None:
         """Forbid aliases for names imported from DiffPES surfaces.
 
-        Confirms each internal DiffPES name has one spelling at every consumer
+        The test confirms each internal DiffPES name has one spelling at every consumer
         and excludes reviewer-hostile private aliases for shared constants.
 
         Notes
         -----
-        Inspects absolute DiffPES imports and reports every ``as`` binding;
+        The test inspects absolute DiffPES imports and reports every ``as`` binding;
         canonical third-party aliases such as ``jnp`` are outside this scan.
         """
         violations: list[str] = []
@@ -1015,12 +1537,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_typing_constructs_use_beartype_typing(self) -> None:
         """Forbid production imports from the standard typing module.
 
-        Confirms runtime-visible typing constructs come from
+        The test confirms runtime-visible typing constructs come from
         ``beartype.typing`` as required by the package type-checking contract.
 
         Notes
         -----
-        Reports both ``import typing`` and ``from typing import ...`` at their
+        The test reports both ``import typing`` and ``from typing import ...`` at their
         production source locations.
         """
         violations: list[str] = []
@@ -1044,12 +1566,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_package_docstrings_list_every_submodule(self) -> None:
         """Keep package ``Extended Summary`` submodule lists exact.
 
-        Confirms each package docstring contains one ``- :mod:`` entry for
+        The test confirms each package docstring contains one ``- :mod:`` entry for
         every sibling module. Each entry repeats that module's summary line.
 
         Notes
         -----
-        Compares filenames and summary lines with the Sphinx module roles and
+        The test compares filenames and summary lines with the Sphinx module roles and
         descriptions parsed from each production ``__init__.py`` docstring.
         """
         violations: list[str] = []
@@ -1098,12 +1620,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_public_api_uses_three_place_documentation(self) -> None:
         """Keep exports and summaries synchronized in all three locations.
 
-        Confirms each public definition is exported and each module and
+        The test confirms each public definition has an export. Each module and
         subpackage surface lists exactly the same names and summary sentences.
 
         Notes
         -----
-        Parses literal export lists and Sphinx Routine Listings, then compares
+        The test parses literal export lists and Sphinx Routine Listings, then compares
         defining docstrings, module entries, and subpackage entries verbatim.
         """
         parsed_modules: tuple[tuple[Path, ast.Module], ...] = (
@@ -1196,13 +1718,13 @@ class TestRepositoryArchitecture(chex.TestCase):
 
         Extended Summary
         ----------------
-        Confirms functions and classes use untitled extended prose. Every
+        The test confirms functions and classes use untitled extended prose. Every
         public function must explain its process in Notes or literal steps.
 
         Notes
         -----
-        Parses source docstrings and checks each numbered bold logic step for
-        the required double-colon heading and an indented literal expression.
+        The test parses source docstrings and checks each numbered bold logic step.
+        Each step requires a double-colon heading and an indented literal expression.
         """
         violations: list[str] = []
         path: Path
@@ -1281,13 +1803,13 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_public_objects_have_symbol_owned_tests(self) -> None:
         """Require one reciprocal ``Test<Symbol>`` class per public object.
 
-        Confirms every public production function and class links to its exact
+        The test confirms every public production function and class links to its exact
         symbol-owned class in the mirrored test module and that class links back.
 
         Notes
         -----
-        Normalizes underscores and capitalization so scientific abbreviations
-        remain flexible while generic multi-symbol test classes are rejected.
+        The test normalizes underscores and capitalization to keep scientific
+        abbreviations flexible. The test rejects generic multi-symbol test classes.
         """
         repository_root: Path = Path(__file__).resolve().parents[1]
         source_root: Path = repository_root / "src/diffpes"
@@ -1362,12 +1884,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_test_docstrings_specify_what_and_how(self) -> None:
         """Require complete reader-facing specifications on every test.
 
-        Confirms each test module has an extended summary and every test
+        The test confirms each test module has an extended summary and every test
         callable has ``-> None``, extended what prose, and a how-focused Notes.
 
         Notes
         -----
-        Parses published test docstrings and reports missing structural parts;
+        The test parses published test docstrings and reports missing structural parts;
         semantic prose quality remains a review responsibility.
         """
         violations: list[str] = []
@@ -1424,12 +1946,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_test_intermediates_are_annotated(self) -> None:
         """Require explicit types for intermediate variables in tests.
 
-        Confirms assignment, loop, context, walrus, and exception targets in
+        The test confirms assignment, loop, context, walrus, and exception targets in
         test callables carry a type annotation in their own scope.
 
         Notes
         -----
-        Excludes nested callables, legal ``nonlocal`` reassignments, and the
+        The test excludes nested callables, legal ``nonlocal`` reassignments, and the
         throwaway ``_`` name while reporting every other local target.
         """
 
@@ -1546,12 +2068,12 @@ class TestRepositoryArchitecture(chex.TestCase):
     def test_public_symbols_have_one_owning_subpackage(self) -> None:
         """Forbid compatibility re-exports across subpackage surfaces.
 
-        Confirms a public name appears in exactly one non-root subpackage
+        The test confirms a public name appears in exactly one non-root subpackage
         ``__all__`` so moves cannot leave aliases or secondary import paths.
 
         Notes
         -----
-        Reads literal ``__all__`` entries from each first-level subpackage and
+        The test reads literal ``__all__`` entries from each first-level subpackage and
         reports names claimed by more than one owner.
         """
         owners: dict[str, list[str]] = {}
@@ -1592,22 +2114,22 @@ class TestRepositoryArchitecture(chex.TestCase):
 class TestStack(chex.TestCase):
     """Validate the differentiable runtime stack and its JAX contracts.
 
-    Covers import availability for Equinox, Optimistix, Lineax, and Optax,
+    The class covers import availability for Equinox, Optimistix, Lineax, and Optax,
     the package-wide float64 configuration, and Equinox PyTree reconstruction.
     """
 
     def test_stack_imports(self) -> None:
         """Preserve stack imports, x64 precision, and PyTree structure.
 
-        Confirms that every library selected for types and solvers imports in
-        the diffpes runtime, scalar JAX arrays default to float64, and a native
-        Equinox module round-trips through JAX tree flattening.
+        The test confirms that every selected solver and type library imports in the
+        diffpes runtime. Scalar JAX arrays default to float64. A native Equinox
+        module round-trips through JAX tree flattening.
 
         Notes
         -----
-        Imports the runtime packages at module collection after diffpes,
-        constructs a scalar Equinox linear layer with a fixed key, and checks
-        the reconstructed module type and leaves exactly.
+        The test imports the runtime packages at module collection after diffpes.
+        It constructs a scalar Equinox linear layer with a fixed key. The test
+        checks the reconstructed module type and leaves exactly.
         """
         runtime_modules: tuple[object, ...] = (
             eqx,

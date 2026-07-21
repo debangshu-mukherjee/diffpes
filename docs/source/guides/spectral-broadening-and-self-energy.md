@@ -1,12 +1,20 @@
 # Spectral Broadening and Self-Energy
 
-An ideal band structure is a set of infinitely sharp delta functions $\delta(E - E_b(\mathbf{k}))$. A measured ARPES spectrum is not: instrumental resolution, finite quasiparticle lifetime, thermal occupation, and finite angular acceptance all reshape the signal. diffpes models each of these with a dedicated, differentiable primitive in {mod}`diffpes.simul`. This guide derives the profiles, pins their width conventions, and shows how an energy-dependent self-energy changes the lineshape.
+An ideal band structure contains infinitely sharp delta functions
+$\delta(E - E_b(\mathbf{k}))$. Several effects reshape a measured ARPES
+spectrum. These effects include instrumental resolution, finite quasiparticle
+lifetime, thermal occupation, and finite angular acceptance. The
+{mod}`diffpes.simul` package provides a differentiable primitive for each
+effect. This guide derives the profiles and defines their width conventions.
+It also shows how an energy-dependent self-energy changes the lineshape.
 
-All broadening parameters are in eV (energies), $\text{Å}^{-1}$ (momenta), and Kelvin (temperature); everything runs in float64.
+Energy widths use eV, momentum widths use $\text{Å}^{-1}$, and temperature
+uses Kelvin. All calculations use float64.
 
 ## Gaussian Broadening: Instrumental Resolution
 
-The energy resolution of beamline plus analyzer is well approximated by a Gaussian. `gaussian(energy_range, center, sigma)` evaluates the unit-area profile
+A Gaussian approximates the combined resolution of the beamline and analyzer.
+`gaussian(energy_range, center, sigma)` evaluates the unit-area profile
 
 $$
 G(E; E_0, \sigma) = \frac{1}{\sqrt{2\pi}\,\sigma}
@@ -19,7 +27,7 @@ $$
 \mathrm{FWHM} = 2\sqrt{2\ln 2}\;\sigma \approx 2.355\,\sigma
 $$
 
-so a quoted "10 meV resolution" (FWHM) corresponds to `sigma = 0.00425`.
+Thus, a quoted 10 meV FWHM corresponds to `sigma = 0.00425` eV.
 
 ```python
 import jax.numpy as jnp
@@ -31,24 +39,33 @@ print(float(g.max()))                       # 19.947 = 1 / (sqrt(2 pi) * 0.02)
 print(float(jnp.trapezoid(g, energy_axis)))  # ~1.0 (unit area)
 ```
 
-Convolving each band's delta function with $G$ is exactly what the Gaussian-only simulation levels (`basic`, `basicplus`, `advanced`) do.
+The `basic`, `basicplus`, and `advanced` levels convolve each band delta
+function with $G$.
 
 ## Lorentzian Lifetime and the Pseudo-Voigt Profile
 
-A quasiparticle with finite lifetime $\tau$ has a Lorentzian spectral function of half-width $\gamma = \hbar / (2\tau)$. The physical lineshape is therefore a **Voigt profile** — the convolution of the intrinsic Lorentzian with the instrumental Gaussian. A true Voigt has no closed form, so `voigt(energy_range, center, sigma, gamma)` uses the pseudo-Voigt approximation of Thompson, Cox & Hastings (1987), accurate to better than 1%:
+A quasiparticle with finite lifetime $\tau$ has a Lorentzian spectral function.
+Its half-width is $\gamma = \hbar / (2\tau)$. The physical lineshape is a
+**Voigt profile**. It convolves the intrinsic Lorentzian with the instrumental
+Gaussian. A true Voigt has no closed form. Therefore,
+`voigt(energy_range, center, sigma, gamma)` uses the Thompson-Cox-Hastings
+(1987) pseudo-Voigt approximation. Its relative error is less than 1%:
 
 $$
 V(E) \approx \eta\, L(E; \gamma_V) + (1 - \eta)\, G(E; \sigma_V)
 $$
 
-where the effective Voigt FWHM $f_V$ is computed from the component FWHMs $f_G = 2\sqrt{2\ln 2}\,\sigma$ and $f_L = 2\gamma$ via the empirical quintic
+The empirical quintic computes the effective Voigt FWHM $f_V$. Its inputs are
+$f_G = 2\sqrt{2\ln 2}\,\sigma$ and $f_L = 2\gamma$:
 
 $$
 f_V = \left( f_G^5 + 2.69269 f_G^4 f_L + 2.42843 f_G^3 f_L^2
       + 4.47163 f_G^2 f_L^3 + 0.07842 f_G f_L^4 + f_L^5 \right)^{1/5}
 $$
 
-and the mixing ratio is $\eta = 1.36603\,\rho - 0.47719\,\rho^2 + 0.11116\,\rho^3$ with $\rho = f_L / f_V$, clipped to $[0, 1]$.
+The mixing ratio is
+$\eta = 1.36603\,\rho - 0.47719\,\rho^2 + 0.11116\,\rho^3$. Here,
+$\rho = f_L / f_V$, and the implementation clips $\rho$ to $[0, 1]$.
 
 **Width convention:** `gamma` is the Lorentzian **half**-width at half-maximum (HWHM).
 
@@ -59,11 +76,14 @@ v = voigt(energy_axis, center=0.0, sigma=0.02, gamma=0.05)
 print(float(v.max()))  # 5.646 - broader and lower than the pure Gaussian
 ```
 
-The Voigt levels of the ladder (`novice`, `expert`, `soc`) and the forward model `simulate_tb_radial` use this profile with constant `params.sigma` / `params.gamma`.
+The `novice`, `expert`, and `soc` levels use this profile. The
+`simulate_tb_radial` model also uses it with constant `params.sigma` and
+`params.gamma`.
 
 ## Fermi-Dirac Occupation
 
-Only occupied states photoemit. Each band contribution is multiplied by the Fermi-Dirac factor at electronic temperature $T$:
+Only occupied states photoemit. diffpes multiplies each band contribution by
+the Fermi-Dirac factor at electronic temperature $T$:
 
 $$
 f(E) = \frac{1}{1 + e^{(E - E_F)/k_B T}}, \qquad k_B = 8.617 \times 10^{-5}\ \mathrm{eV/K}
@@ -76,20 +96,30 @@ occ = fermi_dirac(energy=0.01, fermi_energy=0.0, temperature=20.0)
 print(float(occ))  # 0.003 - 10 meV above E_F at 20 K is essentially empty
 ```
 
-The thermal energy $k_B T$ is 1.3 meV at 15 K and 25 meV at room temperature — at low temperature the Fermi edge width you observe is dominated by `sigma`, not by $T$. The implementation clamps $k_B T$ to $10^{-10}$ eV so that `temperature=0.0` yields a numerically sharp step instead of a division by zero.
+The thermal energy $k_B T$ is 1.3 meV at 15 K. It is 25 meV at room
+temperature. At low temperature, `sigma` usually controls the observed Fermi
+edge width. The implementation clamps $k_B T$ to $10^{-10}$ eV. Therefore,
+`temperature=0.0` produces a sharp numerical step without division by zero.
 
-Note that diffpes applies $f$ at the **band center** $E_b(\mathbf{k})$, weighting each peak, rather than multiplying the final spectrum pointwise — a distinction that only matters for peaks within a few widths of $E_F$.
+diffpes applies $f$ at each **band center** $E_b(\mathbf{k})$. It does not
+multiply the final spectrum pointwise. This difference matters only for peaks
+within a few widths of $E_F$.
 
 ## Momentum Broadening
 
-Finite angular acceptance and photon spot size smear the spectrum along $k$. `apply_momentum_broadening(intensity, k_distances, dk)` convolves each energy column of a `(K, E)` intensity map with a Gaussian of standard deviation `dk` (in $\text{Å}^{-1}$), implemented as a row-normalized dense kernel:
+Finite angular acceptance and the photon spot size broaden the spectrum along
+$k$. `apply_momentum_broadening(intensity, k_distances, dk)` convolves each
+energy column with a Gaussian. The input intensity has shape `(K, E)`, and
+`dk` is the standard deviation in $\text{Å}^{-1}$. A row-normalized dense
+kernel performs the convolution:
 
 $$
 I'(k_i, E) = \frac{\sum_j e^{-(k_i - k_j)^2 / 2\,\delta k^2}\; I(k_j, E)}
                   {\sum_j e^{-(k_i - k_j)^2 / 2\,\delta k^2}}
 $$
 
-The row normalization conserves spectral weight even for non-uniform k-point spacing, because `k_distances` are cumulative path lengths along the k-path:
+Row normalization conserves spectral weight for nonuniform k-point spacing.
+The `k_distances` values contain cumulative distances along the k-path:
 
 ```python
 import jax.numpy as jnp
@@ -114,11 +144,15 @@ blurred = apply_momentum_broadening(spectrum.intensity, k_distances, dk=0.03)
 print(blurred.shape)  # (61, 2000)
 ```
 
-Typical experimental values of `dk` are 0.01-0.05 $\text{Å}^{-1}$. The kernel is fully traced by JAX, so `jax.grad` with respect to `dk` works — momentum resolution can be a fit parameter.
+Typical experimental `dk` values are 0.01-0.05 $\text{Å}^{-1}$. JAX
+traces the complete kernel. Therefore, `jax.grad` can differentiate with
+respect to `dk`. The fitting model can use momentum resolution as a parameter.
 
 ## Energy-Dependent Self-Energy $\Gamma(E)$
 
-A constant `gamma` is a crude model: in real materials the imaginary part of the electron self-energy — and hence the Lorentzian width — depends on energy,
+A constant `gamma` is an approximate model. In real materials, the imaginary
+electron self-energy depends on energy. Therefore, the Lorentzian width also
+depends on energy:
 
 $$
 \Gamma(E) = -\,\mathrm{Im}\,\Sigma(E), \qquad
@@ -126,7 +160,9 @@ A(\mathbf{k}, E) \sim \frac{1}{\pi}\,
 \frac{\Gamma(E)}{\left(E - E_b(\mathbf{k})\right)^2 + \Gamma(E)^2}
 $$
 
-`evaluate_self_energy(energy, config)` evaluates $\Gamma(E)$ from a {class}`~diffpes.types.SelfEnergyConfig` in one of three modes:
+`evaluate_self_energy(energy, config)` evaluates $\Gamma(E)$ from a
+{class}`~diffpes.types.SelfEnergyConfig`. The configuration selects one of
+three modes:
 
 | `mode` | Model | Typical use |
 |--------|-------|-------------|
@@ -159,13 +195,23 @@ se_tab = make_self_energy_config(
 
 ### What a self-energy does to the lineshape
 
-For an EDC (a cut at fixed $\mathbf{k}$), the Lorentzian FWHM of a quasiparticle peak at energy $E$ is $2\Gamma(E)$, convolved with the fixed Gaussian resolution. A Fermi-liquid $\Gamma \propto (E - E_F)^2$ therefore produces the classic ARPES signature: **peaks sharpen as they approach the Fermi level** and melt into broad humps at higher binding energy. Because `coefficients` is a JAX-traced array, `jax.grad` through the simulated spectrum gives the sensitivity of every pixel to the self-energy shape — the basis for fitting $\Gamma(E)$ to measured EDC widths.
+For an EDC at fixed $\mathbf{k}$, a quasiparticle peak has Lorentzian FWHM
+$2\Gamma(E)$. The fixed Gaussian resolution convolves this peak. A
+Fermi-liquid model uses $\Gamma \propto (E - E_F)^2$. Its peaks sharpen near
+the Fermi level and broaden at higher binding energy. JAX traces the
+`coefficients` array. Therefore, `jax.grad` gives each pixel's sensitivity to
+the self-energy shape. This sensitivity supports fitting $\Gamma(E)$ to
+measured EDC widths.
 
-(The real part $\mathrm{Re}\,\Sigma$, which shifts and renormalizes band positions — kinks, mass enhancement — is not currently modeled; diffpes broadens the bare input bands.)
+diffpes does not model the real part $\mathrm{Re}\,\Sigma$. That component
+shifts and renormalizes band positions, including kinks and mass enhancement.
+diffpes broadens the bare input bands.
 
 ## Putting It Together
 
-`simulate_tb_radial` accepts both an optional self-energy and optional momentum broadening; when `self_energy` is given, the Voigt Lorentzian width becomes $\Gamma(E)$ per energy-axis point instead of the constant `params.gamma`:
+`simulate_tb_radial` accepts an optional self-energy and optional momentum
+broadening. When `self_energy` is present, $\Gamma(E)$ replaces the constant
+`params.gamma` at each energy-axis point:
 
 ```python
 from diffpes.types import (
@@ -205,7 +251,10 @@ print(spec.intensity.shape)  # (61, 800)
 
 ## Further Reading
 
-- [Simulation Levels](simulation-levels.md) — which levels use Gaussian vs. Voigt broadening
-- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) — the $(E, k)$ axes being broadened
-- [Matrix Elements and Polarization](matrix-elements-and-polarization.md) — the weights applied before broadening
+- [Simulation Levels](simulation-levels.md) identifies the levels that use
+  Gaussian and Voigt broadening.
+- [ARPES Geometry and Kinematics](arpes-geometry-and-kinematics.md) defines the
+  $(E, k)$ axes for broadening.
+- [Matrix Elements and Polarization](matrix-elements-and-polarization.md)
+  describes the weights that precede broadening.
 - API reference: {doc}`../api/simul` (`gaussian`, `voigt`, `fermi_dirac`, `apply_momentum_broadening`, `evaluate_self_energy`), {doc}`../api/types` (`make_self_energy_config`, `make_simulation_params`)

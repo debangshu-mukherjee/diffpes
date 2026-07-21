@@ -1,10 +1,10 @@
-"""Static carriers for certified transformation contracts.
+"""Define static carriers for certified transformation contracts.
 
 Extended Summary
 ----------------
-Transformation contracts are declarative Equinox PyTrees.  They record the
-scientific semantics required, produced, preserved, introduced, or destroyed
-by a transformation without placing runtime bookkeeping in JAX kernels.
+Transformation contracts are declarative Equinox PyTrees. They record how a
+transformation requires, produces, preserves, introduces, or destroys
+scientific semantics. They keep runtime bookkeeping outside JAX kernels.
 
 Routine Listings
 ----------------
@@ -67,8 +67,8 @@ class TransformationContract(eqx.Module):
         Claim identifiers invalidated by the transformation (**static** --
         compile-time constants; changing them triggers retracing).
     jax_pure : bool
-        Whether the transformation is declared JAX-pure (**static** -- a
-        compile-time constant; changing it triggers retracing).
+        Whether the contract declares the transformation JAX-pure (**static**
+        -- a compile-time constant; changing it triggers retracing).
 
     Notes
     -----
@@ -123,8 +123,9 @@ class CompositionReport(eqx.Module):
 
     Notes
     -----
-    Every field is static metadata. Composition is evaluated outside numerical
-    kernels, so the report introduces no gradient path or reduction.
+    Every field is static metadata. Code outside numerical kernels evaluates
+    composition. Therefore, the report introduces no gradient path or
+    reduction.
 
     See Also
     --------
@@ -257,8 +258,9 @@ def make_transformation_contract(
 
     Notes
     -----
-    Validation is entirely static because all inputs become static fields; no
-    traced numerical value is converted to Python control flow.
+    The factory performs only static validation because all inputs become
+    static fields. It does not convert a traced numerical value to Python
+    control flow.
     """
     _validate_identity(transformation_id, transformation_version)
     normalized_requires: tuple[str, ...] = _normalize_terms(

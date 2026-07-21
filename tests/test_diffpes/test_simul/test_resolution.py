@@ -1,14 +1,10 @@
-"""Tests for momentum resolution broadening.
+"""Validate momentum resolution broadening.
 
 Extended Summary
 ----------------
-Validates :func:`diffpes.simul.resolution.apply_momentum_broadening`, which
-convolves a 2D ARPES intensity map along the k-axis with a Gaussian kernel
-to simulate the finite angular/momentum resolution of an electron analyser.
-Tests cover the identity limit (dk -> 0), the smoothing effect on a
-delta-like peak, approximate conservation of total intensity, output shape
-preservation, and differentiability of the broadening width parameter via
-``jax.grad``.
+Apply :func:`diffpes.simul.resolution.apply_momentum_broadening` to a 2D
+ARPES intensity map. Test the identity limit, smoothing, conservation,
+shape, and gradients.
 
 """
 
@@ -21,14 +17,10 @@ from diffpes.simul import apply_momentum_broadening
 
 
 class TestApplyMomentumBroadening:
-    """Tests for :func:`diffpes.simul.resolution.apply_momentum_broadening`.
+    """Validate :func:`diffpes.simul.resolution.apply_momentum_broadening`.
 
-    Validates the Gaussian momentum-broadening convolution applied along
-    the k-axis of a 2D intensity map. Tests verify limiting behaviour
-    (identity at dk -> 0), the physical smoothing effect, approximate
-    intensity conservation (since the Gaussian kernel is normalized),
-    shape preservation, and JAX differentiability with respect to the
-    broadening width dk.
+    Validate Gaussian momentum broadening along the k-axis. Verify the
+    identity limit, smoothing, conservation, shape, and JAX gradients.
 
     :see: :func:`~diffpes.simul.apply_momentum_broadening`
     """
@@ -36,16 +28,14 @@ class TestApplyMomentumBroadening:
     def test_identity_with_zero_dk(self) -> None:
         """Verify that vanishing dk returns approximately the original intensity.
 
-        This case establishes the identity with zero dk contract for apply momentum
+        The test establishes the identity with zero dk contract for apply momentum
         broadening with the concrete values and array shapes described below.
 
         Notes
         -----
         1. **Setup**: Create a uniform intensity map of shape (20, 50)
            and a linearly spaced k_distances array from 0 to 1. Set
-           dk = 1e-15 (effectively zero), so the Gaussian kernel
-           collapses to a delta function and the convolution should
-           be the identity operation.
+           dk = 1e-15 so that the kernel approaches a delta function.
         2. **Apply broadening**: Call ``apply_momentum_broadening`` with
            the near-zero dk.
         3. **Compare**: Assert the result is element-wise close to the
@@ -73,29 +63,25 @@ class TestApplyMomentumBroadening:
     def test_smoothing_effect(self) -> None:
         """Verify that finite dk smooths a delta-like peak along the k-axis.
 
-        This case establishes the smoothing effect contract for apply momentum
+        The test establishes the smoothing effect contract for apply momentum
         broadening with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Create a 2D intensity map (50 x 10) that is zero
-           everywhere except at k-index 25, where it is 1.0 across all
-           energy channels. This represents a delta-like feature in
-           k-space.
+        1. **Setup**: Create a zero intensity map of shape (50, 10).
+           Set k-index 25 to 1.0 across all energy channels.
         2. **Apply broadening**: Call ``apply_momentum_broadening`` with
            dk=0.1, which should spread the peak to neighbouring
            k-points via the Gaussian kernel.
-        3. **Check peak reduction**: Assert the peak value at index 25
-           is reduced below 1.0 (the original delta height).
-        4. **Check neighbour activation**: Assert that the immediately
-           adjacent k-points (indices 24 and 26) have positive
-           intensity, confirming the peak has been broadened.
+        3. **Check peak reduction**: Assert that the peak value at index
+           25 falls below 1.0.
+        4. **Check neighbour activation**: Assert that indices 24 and 26
+           have positive intensity.
 
         **Expected assertions**
 
-        The peak is reduced and neighbours are activated, confirming
-        that the Gaussian convolution physically smooths sharp
-        k-space features as expected from finite analyser resolution.
+        The peak decreases and its neighbours gain intensity. Thus, the
+        Gaussian convolution smooths sharp k-space features.
         """
         K: int
         E: int
@@ -117,9 +103,9 @@ class TestApplyMomentumBroadening:
         assert float(result[26, 0]) > 0.0
 
     def test_conservation(self) -> None:
-        """Verify that total intensity is approximately conserved under broadening.
+        """Verify approximate conservation of intensity under broadening.
 
-        This case establishes the conservation contract for apply momentum broadening
+        The test establishes the conservation contract for apply momentum broadening
         with the concrete values and array shapes described below.
 
         Notes
@@ -133,11 +119,8 @@ class TestApplyMomentumBroadening:
 
         **Expected assertions**
 
-        The total intensity is conserved to within 10% relative
-        tolerance. Perfect conservation is not expected due to
-        edge effects (truncation of the Gaussian kernel at the
-        boundaries of the k-grid), but approximate conservation
-        confirms the kernel normalization is correct.
+        The total intensity changes by less than 10%. Grid boundaries
+        truncate the Gaussian kernel and prevent exact conservation.
         """
         K: int
         E: int
@@ -158,7 +141,7 @@ class TestApplyMomentumBroadening:
     def test_output_shape(self) -> None:
         """Verify that the output shape matches the input shape.
 
-        This case establishes the output shape contract for apply momentum broadening
+        The test establishes the output shape contract for apply momentum broadening
         with the concrete values and array shapes described below.
 
         Notes
@@ -188,24 +171,21 @@ class TestApplyMomentumBroadening:
     def test_gradient_wrt_dk(self) -> None:
         """Verify that the gradient of total intensity w.r.t. dk is finite.
 
-        This case establishes the gradient wrt dk contract for apply momentum broadening
+        The test establishes the gradient wrt dk contract for apply momentum broadening
         with the concrete values and array shapes described below.
 
         Notes
         -----
-        1. **Setup**: Create a uniform intensity map (10 x 5) and define
-           a scalar loss function that applies momentum broadening with
-           a given dk value and returns the sum of all intensities.
+        1. **Setup**: Create a uniform intensity map of shape (10, 5).
+           Define a loss that sums the broadened intensity.
         2. **Differentiate**: Call ``jax.grad(loss)(0.1)`` to compute
            the gradient of the loss with respect to dk.
         3. **Check finiteness**: Assert the gradient is finite.
 
         **Expected assertions**
 
-        The gradient w.r.t. the momentum broadening width dk is finite,
-        confirming that ``apply_momentum_broadening`` is differentiable
-        through JAX. This is required for inverse fitting where dk is
-        treated as a learnable instrument parameter.
+        The gradient with respect to dk is finite. This result supports
+        inverse fitting with dk as a learnable instrument parameter.
         """
         K: int
         E: int

@@ -36,7 +36,7 @@ class TestDensityOfStates:
 
         Notes
         -----
-        Constructs the carrier through the public factory and checks shapes
+        The test constructs the carrier through the public factory and checks shapes
         and the independently specified scalar with Chex.
         """
         energy: Float[Array, "16"] = jnp.linspace(-10.0, 5.0, 16)
@@ -67,7 +67,7 @@ class TestFullDensityOfStates:
 
         Notes
         -----
-        Builds a spin-up-only full carrier, uses JAX tree utilities for the
+        The test builds a spin-up-only full carrier, uses JAX tree utilities for the
         round trip, and compares the restored values with Chex.
         """
         energy: Float[Array, "50"] = jnp.linspace(-3, 1, 50)
@@ -111,7 +111,7 @@ class TestMakeDensityOfStates(chex.TestCase):
 
         Notes
         -----
-        Wraps the public factory with ``self.variant``, supplies finite arrays,
+        The test wraps the public factory with ``self.variant``, supplies finite arrays,
         and compares the resulting shape and scalar with Chex.
         """
         factory: Callable[..., DensityOfStates] = self.variant(

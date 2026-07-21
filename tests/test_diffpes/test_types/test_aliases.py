@@ -3,6 +3,6 @@
 Extended Summary
 ----------------
 Maintains a source-mirroring test module for the annotation-only definitions
-in ``diffpes.types.aliases``. Runtime use of these aliases is exercised by
-the typed public APIs throughout the test suite.
+in ``diffpes.types.aliases``. The typed public APIs exercise these aliases
+at runtime throughout the test suite.
 """

@@ -1,9 +1,9 @@
-"""Atomic radial wavefunction models in JAX.
+"""Evaluate atomic radial wavefunction models in JAX.
 
 Extended Summary
 ----------------
-Provides normalized Slater-type and hydrogenic radial wavefunctions
-for use in differentiable ARPES matrix-element calculations.
+The module provides normalized Slater-type and hydrogenic radial
+wavefunctions for differentiable ARPES matrix element computations.
 
 Routine Listings
 ----------------
@@ -30,10 +30,10 @@ def _associated_laguerre(
 ) -> Float[Array, " ..."]:
     r"""Evaluate associated Laguerre polynomial.
 
-    Computes :math:`L_n^\alpha(x)`.
+    The function computes :math:`L_n^\alpha(x)`.
 
-    Computes the generalized Laguerre polynomial using the standard
-    three-term recurrence relation, which is numerically stable for
+    The function uses the standard three-term recurrence for the generalized
+    Laguerre polynomial. This recurrence remains numerically stable during
     upward iteration in the polynomial order.
 
     **Seed values:**
@@ -51,9 +51,9 @@ def _associated_laguerre(
         n \, L_n^\alpha(x) = (2n - 1 + \alpha - x) \, L_{n-1}^\alpha(x)
                             - (n - 1 + \alpha) \, L_{n-2}^\alpha(x)
 
-    This is implemented via ``jax.lax.fori_loop`` for JIT compatibility,
-    carrying the pair :math:`(L_{n-2}^\alpha, L_{n-1}^\alpha)` and
-    advancing one order per iteration from n=2 up to ``order``.
+    The function implements this recurrence with ``jax.lax.fori_loop``. The
+    loop carries :math:`(L_{n-2}^\alpha, L_{n-1}^\alpha)`. Each iteration
+    advances one order from n=2 through ``order``.
 
     The generalized Laguerre polynomials appear in the hydrogenic
     radial wavefunctions as :math:`L_{n-l-1}^{2l+1}(\rho)` where
@@ -147,13 +147,13 @@ def slater_radial(
 ) -> Float[Array, " ..."]:
     r"""Evaluate normalized Slater-type radial function.
 
-    Computes the Slater-type orbital (STO) radial function:
+    The function computes the Slater-type orbital (STO) radial function:
 
     .. math::
 
         R(r) = N \, r^{n-1} \, e^{-\zeta r}
 
-    where the normalization constant :math:`N` is chosen so that
+    The normalization constant :math:`N` satisfies
     :math:`\int_0^\infty |R(r)|^2 r^2 dr = 1`:
 
     .. math::
@@ -169,10 +169,9 @@ def slater_radial(
     chemistry. However, they do not possess radial nodes (except at
     r = 0 and r = infinity), unlike the exact hydrogenic solutions.
 
-    The Slater exponent :math:`\zeta` encodes the effective nuclear
-    charge and screening. It is typically fitted to reproduce
-    Hartree-Fock atomic orbitals (e.g., Clementi-Raimondi rules) or
-    optimized variationally.
+    The Slater exponent :math:`\zeta` represents the effective nuclear charge
+    and screening. A fit to Hartree-Fock atomic orbitals usually determines
+    this exponent. Variational optimization provides another method.
 
     **Normalization derivation:**
 
@@ -211,10 +210,9 @@ def slater_radial(
 
     Notes
     -----
-    The ``zeta`` parameter is a JAX array (not a Python float) so that
-    it can participate in automatic differentiation. This allows
-    gradient-based optimization of Slater exponents in inverse-fitting
-    workflows.
+    The ``zeta`` parameter is a JAX array, not a Python float. Therefore,
+    automatic differentiation can include this parameter. Inverse workflows
+    can use its gradient to optimize Slater exponents.
     """
     if n < 1:
         msg: str = "n must be >= 1"
@@ -243,17 +241,18 @@ def hydrogenic_radial(
 ) -> Float[Array, " ..."]:
     r"""Evaluate normalized hydrogenic radial function.
 
-    Computes the exact radial wavefunction for a hydrogenic
-    (one-electron) atom with effective nuclear charge :math:`Z_{\text{eff}}`:
+    The function computes the exact radial wavefunction for a hydrogenic atom.
+    The atom has one electron and an effective nuclear charge
+    :math:`Z_{\text{eff}}`:
 
     .. math::
 
         R_{n,l}(r) = N_{n,l} \, e^{-\rho/2} \, \rho^l \,
             L_{n-l-1}^{2l+1}(\rho)
 
-    where :math:`\rho = 2 Z_{\text{eff}} r / n` is the scaled radial
-    coordinate, and :math:`L_{n-l-1}^{2l+1}` is the generalized
-    Laguerre polynomial evaluated by `_associated_laguerre`.
+    Here, :math:`\rho = 2 Z_{\text{eff}} r / n` is the scaled radial
+    coordinate. The `_associated_laguerre` function computes the generalized
+    Laguerre polynomial :math:`L_{n-l-1}^{2l+1}`.
 
     **Normalization:**
 
@@ -265,9 +264,9 @@ def hydrogenic_radial(
             \sqrt{\frac{(n - l - 1)!}{2n \cdot (n + l)!}}
 
     This ensures :math:`\int_0^\infty |R_{n,l}(r)|^2 r^2 dr = 1`.
-    The factorial ratio is computed using Python's ``math.factorial``
-    for exact integer arithmetic, then converted to a JAX scalar
-    via ``jnp.sqrt``.
+    The function computes the factorial ratio with Python's ``math.factorial``.
+    This operation uses exact integer arithmetic. The function then converts
+    the ratio to a JAX scalar with ``jnp.sqrt``.
 
     **Hydrogenic vs. Slater model:**
 
@@ -279,11 +278,11 @@ def hydrogenic_radial(
 
     **Laguerre polynomial recurrence:**
 
-    The associated Laguerre polynomial :math:`L_{n-l-1}^{2l+1}(\rho)`
-    is computed by `_associated_laguerre` using upward three-term
-    recurrence from order 0 to :math:`n - l - 1`. The recurrence
-    is stable in the upward direction and is wrapped in
-    ``jax.lax.fori_loop`` for JIT compatibility.
+    The `_associated_laguerre` function computes
+    :math:`L_{n-l-1}^{2l+1}(\rho)` with an upward three-term recurrence.
+    The recurrence starts at order 0 and ends at :math:`n - l - 1`.
+    It remains stable in the upward direction. The implementation uses
+    ``jax.lax.fori_loop`` for JAX transformations.
 
     :see: :class:`~.test_wavefunctions.TestHydrogenicRadial`
 
@@ -311,10 +310,10 @@ def hydrogenic_radial(
 
     Notes
     -----
-    The ``z_eff`` parameter is a JAX array to support automatic
-    differentiation. The quantum numbers ``n`` and ``angular_momentum``
-    are Python integers that control the Laguerre polynomial order
-    and are baked into the traced computation graph.
+    The ``z_eff`` parameter is a JAX array that supports automatic
+    differentiation. The quantum numbers ``n`` and ``angular_momentum`` are
+    Python integers. They control the Laguerre polynomial order and remain
+    static in the traced computation graph.
     """
     if n < 1:
         msg: str = "n must be >= 1"

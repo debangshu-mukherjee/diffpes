@@ -1,4 +1,4 @@
-"""Tests for stable human-readable certificate inspection.
+"""Validate stable human-readable certificate inspection.
 
 The tests cover public behavior, differentiability, validation, and stable
 scientific identity in the supported certification regime.
@@ -31,7 +31,7 @@ class TestSummarizeCertificate:
 
         Notes
         -----
-        Builds the shared certificate fixture and searches its compact text.
+        The test builds the shared certificate fixture and searches its compact text.
         """
         summary: str = summarize_certificate(sample_certificate())
         assert "org.diffpes.model.arpes.test" in summary

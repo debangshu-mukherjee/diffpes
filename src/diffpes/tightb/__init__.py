@@ -2,9 +2,9 @@
 
 Extended Summary
 ----------------
-The native tight-binding layer of diffpes provides model construction,
-Slater-Koster coupling, spin-orbit coupling, slabs, and degeneracy-safe
-diagonalization as the plan series is implemented. It also consumes
+The native tight-binding layer provides model construction and Slater-Koster
+coupling. It adds spin-orbit coupling, slabs, and degeneracy-safe
+diagonalization as the plan series progresses. It also consumes
 ``DiagonalizedBands`` from other electronic-structure sources.
 
 This module retains:
@@ -16,14 +16,14 @@ This module retains:
   ``build_hamiltonian_k``, ``diagonalize_single_k``,
   ``diagonalize_tb``.
 
-The submodules are organized as follows:
+The following list describes the submodules:
 
 - :mod:`diagonalize`
-    Differentiable band diagonalization and VASP adapter.
+    Diagonalize bands and adapt VASP outputs.
 - :mod:`hamiltonian`
-    Tight-binding Hamiltonian builder in JAX.
+    Build tight-binding Hamiltonians in JAX.
 - :mod:`projections`
-    Eigenvector to orbital weight conversions.
+    Convert eigenvectors to orbital weights.
 
 Routine Listings
 ----------------
