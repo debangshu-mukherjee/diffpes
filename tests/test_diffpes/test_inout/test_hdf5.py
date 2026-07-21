@@ -12,35 +12,11 @@ Compression and dataset flags are tested where applicable. All test
 logic and assertions are documented in the docstrings of each test
 class and method.
 
-Routine Listings
-----------------
-:class:`TestArpesSpectrum`
-    Round-trip tests for ArpesSpectrum.
-:class:`TestBandStructure`
-    Round-trip tests for BandStructure.
-:class:`TestCrystalGeometry`
-    Round-trip tests for CrystalGeometry.
-:class:`TestDatasetFlags`
-    Tests for compression and dataset options.
-:class:`TestDensityOfStates`
-    Round-trip tests for DensityOfStates.
-:class:`TestErrorHandling`
-    Tests for load/save error conditions.
-:class:`TestKPathInfo`
-    Round-trip tests for KPathInfo.
-:class:`TestMultiPyTree`
-    Tests for saving and loading multiple PyTrees.
-:class:`TestOrbitalProjection`
-    Round-trip tests for OrbitalProjection (with/without spin/oam).
-:class:`TestPolarizationConfig`
-    Round-trip tests for PolarizationConfig.
-:class:`TestSimulationParams`
-    Round-trip tests for SimulationParams.
 """
 
 import json
 import tempfile
-from dataclasses import fields
+from dataclasses import Field, fields
 from pathlib import Path
 
 import chex
@@ -48,7 +24,10 @@ import h5py
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from beartype.typing import Any, Callable
+from jaxtyping import Array
 
+import diffpes
 from diffpes.inout import load_from_h5, save_to_h5
 from diffpes.inout.hdf5 import _decode_static, _encode_static
 from diffpes.types import (
@@ -69,22 +48,34 @@ class TestDensityOfStates(chex.TestCase):
     Verifies that energy, total DOS, and Fermi energy arrays
     survive a save-then-load cycle with exact numerical
     fidelity.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify DensityOfStates survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for density of states with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** a DensityOfStates with 100-point energy
            axis and uniform DOS.
         2. **Save** to a temporary HDF5 file.
         3. **Load** back by group name.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All three array fields match to within 1e-12.
         """
+        td: str
+
+        dos: diffpes.types.DensityOfStates
+        path: Path
+        loaded: Any
+
         dos = make_density_of_states(
             energy=jnp.linspace(-10.0, 5.0, 100),
             total_dos=jnp.ones(100),
@@ -112,20 +103,34 @@ class TestBandStructure(chex.TestCase):
 
     Verifies eigenvalues, kpoints, weights, and Fermi energy
     are preserved through save/load.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify BandStructure survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for band structure with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** a BandStructure with 10 k-points, 4 bands.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All four array fields match to within 1e-12.
         """
+        td: str
+
+        nk: int
+        nb: int
+        bands: diffpes.types.BandStructure
+        path: Path
+        loaded: Any
+
         nk, nb = 10, 4
         bands = make_band_structure(
             eigenvalues=jnp.linspace(-2.0, 0.5, nk * nb).reshape(nk, nb),
@@ -159,20 +164,32 @@ class TestArpesSpectrum(chex.TestCase):
 
     Verifies intensity map and energy axis survive the
     save/load cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify ArpesSpectrum survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for arpes spectrum with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** an ArpesSpectrum with shape (20, 100).
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Both array fields match to within 1e-12.
         """
+        td: str
+
+        spectrum: diffpes.types.ArpesSpectrum
+        path: Path
+        loaded: Any
+
         spectrum = make_arpes_spectrum(
             intensity=jnp.ones((20, 100)),
             energy_axis=jnp.linspace(-3.0, 1.0, 100),
@@ -198,21 +215,36 @@ class TestOrbitalProjection(chex.TestCase):
 
     Verifies projections array and Optional spin/oam fields
     (both None and non-None) survive the cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip_none_optionals(self):
+    def test_round_trip_none_optionals(self) -> None:
         """Verify OrbitalProjection with None spin/oam.
 
-        Test Logic
-        ----------
+        This case establishes the round trip none optionals contract for orbital
+        projection with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** with only projections (spin=None,
            oam=None).
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Projections match; spin and oam are None.
         """
+        td: str
+
+        nk: int
+        nb: int
+        na: int
+        orb: diffpes.types.OrbitalProjection
+        path: Path
+        loaded: Any
+
         nk, nb, na = 5, 3, 2
         orb = make_orbital_projection(
             projections=jnp.ones((nk, nb, na, 9)) * 0.1,
@@ -229,18 +261,30 @@ class TestOrbitalProjection(chex.TestCase):
         assert loaded.spin is None
         assert loaded.oam is None
 
-    def test_round_trip_with_spin(self):
+    def test_round_trip_with_spin(self) -> None:
         """Verify OrbitalProjection with non-None spin.
 
-        Test Logic
-        ----------
+        This case establishes the round trip with spin contract for orbital projection
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** with both projections and spin arrays.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Projections and spin match; oam is None.
         """
+        td: str
+
+        nk: int
+        nb: int
+        na: int
+        orb: diffpes.types.OrbitalProjection
+        path: Path
+        loaded: Any
+
         nk, nb, na = 5, 3, 2
         orb = make_orbital_projection(
             projections=jnp.ones((nk, nb, na, 9)) * 0.1,
@@ -258,18 +302,30 @@ class TestOrbitalProjection(chex.TestCase):
         chex.assert_trees_all_close(loaded.spin, orb.spin, atol=1e-12)
         assert loaded.oam is None
 
-    def test_round_trip_with_all(self):
+    def test_round_trip_with_all(self) -> None:
         """Verify OrbitalProjection with spin and oam.
 
-        Test Logic
-        ----------
+        This case establishes the round trip with all contract for orbital projection
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** with projections, spin, and oam.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All three array fields match.
         """
+        td: str
+
+        nk: int
+        nb: int
+        na: int
+        orb: diffpes.types.OrbitalProjection
+        path: Path
+        loaded: Any
+
         nk, nb, na = 5, 3, 2
         orb = make_orbital_projection(
             projections=jnp.ones((nk, nb, na, 9)) * 0.1,
@@ -294,20 +350,32 @@ class TestSimulationParams(chex.TestCase):
 
     Verifies that all six float children and the integer
     ``fidelity`` aux_data survive the cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify SimulationParams survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for simulation params with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** with non-default values for all fields.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All float fields match; fidelity int is preserved.
         """
+        td: str
+
+        params: diffpes.types.SimulationParams
+        path: Path
+        loaded: Any
+
         params = make_simulation_params(
             energy_min=-5.0,
             energy_max=2.0,
@@ -340,20 +408,32 @@ class TestPolarizationConfig(chex.TestCase):
 
     Verifies that float angles and the string
     ``polarization_type`` aux_data survive the cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify PolarizationConfig survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for polarization config with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** an LHP config with custom angles.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Float angles match; polarization_type string preserved.
         """
+        td: str
+
+        pol: diffpes.types.PolarizationConfig
+        path: Path
+        loaded: Any
+
         pol = make_polarization_config(
             theta=0.5,
             phi=1.2,
@@ -374,20 +454,32 @@ class TestKPathInfo(chex.TestCase):
 
     Verifies that integer arrays and the ``(mode, labels)``
     tuple aux_data survive the cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify KPathInfo survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for k path info with the concrete
+        values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** with 3 symmetry labels.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Integer arrays match; mode and labels strings preserved.
         """
+        td: str
+
+        kpath: diffpes.types.KPathInfo
+        path: Path
+        loaded: Any
+
         kpath = make_kpath_info(
             num_kpoints=100,
             label_indices=[0, 49, 99],
@@ -413,7 +505,22 @@ class TestKPathInfo(chex.TestCase):
         assert loaded.labels == ("G", "M", "K")
 
     def test_loads_pre_migration_aux_format(self) -> None:
-        """Load K-path metadata written by the NamedTuple-era codec."""
+        """Load K-path metadata written by the NamedTuple-era codec.
+
+        This case establishes the loads pre migration aux format contract for k path
+        info with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        temporary_directory: str
+        h5_file: h5py.File
+        field: Field[Any]
+
+        kpath: diffpes.types.KPathInfo
+        value: Array
+        loaded: Any
+
         kpath = make_kpath_info(
             num_kpoints=100,
             label_indices=[0, 49, 99],
@@ -460,20 +567,34 @@ class TestCrystalGeometry(chex.TestCase):
     Verifies that lattice, reciprocal lattice, coords,
     atom_counts arrays and the ``symbols`` tuple aux_data
     survive the cycle.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         """Verify CrystalGeometry survives HDF5 round-trip.
 
-        Test Logic
-        ----------
+        This case establishes the round trip contract for crystal geometry with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** a cubic Si structure with 2 atoms.
         2. **Save** and **load** via HDF5.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All four arrays match; symbols tuple preserved.
         """
+        td: str
+
+        lattice: Array
+        coords: Array
+        geo: diffpes.types.CrystalGeometry
+        path: Path
+        loaded: Any
+
         lattice = jnp.eye(3) * 5.43
         coords = jnp.array([[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]])
         geo = make_crystal_geometry(
@@ -501,26 +622,42 @@ class TestCrystalGeometry(chex.TestCase):
         assert loaded.symbols == ("Si",)
 
 
-class TestMultiPyTree(chex.TestCase):
+class TestSaveToH5(chex.TestCase):
     """Tests for saving/loading multiple PyTrees in one file.
 
     Verifies multi-group HDF5 files and both loading modes
     (by name, load all).
+
+    :see: :func:`~diffpes.inout.save_to_h5`
     """
 
-    def test_save_load_multiple(self):
+    def test_save_load_multiple(self) -> None:
         """Verify two PyTrees coexist in one HDF5 file.
 
-        Test Logic
-        ----------
+        This case establishes the save load multiple contract for multi py tree with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** a BandStructure and an OrbitalProjection.
         2. **Save** both to one file under different names.
         3. **Load** each by name.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Both round-trip correctly and independently.
         """
+        td: str
+
+        nk: int
+        nb: int
+        na: int
+        bands: diffpes.types.BandStructure
+        orb: diffpes.types.OrbitalProjection
+        path: Path
+        loaded_bands: Any
+        loaded_orb: Any
+
         nk, nb, na = 8, 3, 2
         bands = make_band_structure(
             eigenvalues=jnp.linspace(-2.0, 0.5, nk * nb).reshape(nk, nb),
@@ -545,18 +682,30 @@ class TestMultiPyTree(chex.TestCase):
             atol=1e-12,
         )
 
-    def test_load_all_returns_dict(self):
+    def test_load_all_returns_dict(self) -> None:
         """Verify load_from_h5 without name returns dict.
 
-        Test Logic
-        ----------
+        This case establishes the load all returns dict contract for multi py tree with
+        the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Save** two PyTrees to one file.
         2. **Load** without specifying a name.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         Result is a dict with both group names as keys.
         """
+        td: str
+
+        nk: int
+        nb: int
+        bands: diffpes.types.BandStructure
+        spectrum: diffpes.types.ArpesSpectrum
+        path: Path
+        loaded: Any
+
         nk, nb = 8, 3
         bands = make_band_structure(
             eigenvalues=jnp.linspace(-2.0, 0.5, nk * nb).reshape(nk, nb),
@@ -575,58 +724,121 @@ class TestMultiPyTree(chex.TestCase):
         assert "spectrum" in loaded
 
 
+class TestLoadFromH5(chex.TestCase):
+    """Validate :func:`~diffpes.inout.load_from_h5`.
+
+    Covers named-group recovery of a concrete Equinox carrier from a file
+    produced by the public HDF5 writer.
+
+    :see: :func:`~diffpes.inout.load_from_h5`
+    """
+
+    def test_load_named_band_structure(self) -> None:
+        """Recover a named band structure without changing its arrays.
+
+        The loaded carrier must preserve the eigenvalue and k-point arrays at
+        exact float64 precision for this deterministic fixture.
+
+        Notes
+        -----
+        Saves one two-k-point ``BandStructure``, loads the ``bands`` group by
+        name, narrows its runtime type, and compares both array fields exactly.
+        """
+        temporary_directory: str
+        expected: diffpes.types.BandStructure
+        path: Path
+        loaded: Any
+
+        expected = make_band_structure(
+            eigenvalues=jnp.array([[-1.0], [0.5]], dtype=jnp.float64),
+            kpoints=jnp.zeros((2, 3), dtype=jnp.float64),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "named.h5"
+            save_to_h5(path, bands=expected)
+            loaded = load_from_h5(path, name="bands")
+        assert isinstance(loaded, diffpes.types.BandStructure)
+        chex.assert_trees_all_equal(loaded.eigenvalues, expected.eigenvalues)
+        chex.assert_trees_all_equal(loaded.kpoints, expected.kpoints)
+
+
 class TestErrorHandling(chex.TestCase):
     """Tests for error conditions in save/load functions.
 
     Verifies that appropriate exceptions are raised for
     invalid inputs and missing data.
+
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
     """
 
-    def test_no_pytrees_raises(self):
+    def test_no_pytrees_raises(self) -> None:
         """Verify save_to_h5 with no kwargs raises ValueError.
 
-        Test Logic
-        ----------
+        This case establishes the no pytrees raises contract for error handling with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Call** save_to_h5 with only a path, no PyTrees.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         ValueError is raised.
         """
+        td: str
+
+        path: Path
+
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "empty.h5"
             with pytest.raises(ValueError, match="At least"):
                 save_to_h5(path)
 
-    def test_unsupported_type_raises(self):
+    def test_unsupported_type_raises(self) -> None:
         """Verify unregistered type raises TypeError.
 
-        Test Logic
-        ----------
+        This case establishes the unsupported type raises contract for error handling
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Call** save_to_h5 with a plain tuple (not a
            registered PyTree).
 
-        Asserts
-        -------
+        **Expected assertions**
+
         TypeError is raised.
         """
+        td: str
+
+        path: Path
+
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "bad.h5"
             with pytest.raises(TypeError, match="Unsupported"):
                 save_to_h5(path, bad=(1, 2, 3))
 
-    def test_missing_group_raises(self):
+    def test_missing_group_raises(self) -> None:
         """Verify load with nonexistent name raises KeyError.
 
-        Test Logic
-        ----------
+        This case establishes the missing group raises contract for error handling with
+        the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Save** a PyTree under name ``"a"``.
         2. **Load** with name ``"b"``.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         KeyError is raised.
         """
+        td: str
+
+        dos: diffpes.types.DensityOfStates
+        path: Path
+
         dos = make_density_of_states(
             energy=jnp.linspace(-5.0, 5.0, 50),
             total_dos=jnp.ones(50),
@@ -637,19 +849,28 @@ class TestErrorHandling(chex.TestCase):
             with pytest.raises(KeyError, match="not found"):
                 load_from_h5(path, name="b")
 
-    def test_load_unknown_pytree_type_raises(self):
+    def test_load_unknown_pytree_type_raises(self) -> None:
         """Verify loading a group with unknown _pytree_type raises TypeError.
 
-        Test Logic
-        ----------
+        This case establishes the load unknown pytree type raises contract for error
+        handling with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** an HDF5 file with a group that has
            _pytree_type = "UnknownType" (not in _PYTREE_REGISTRY).
         2. **Load** that group with load_from_h5(path, name="bad").
 
-        Asserts
-        -------
+        **Expected assertions**
+
         TypeError is raised with message referring to unknown type.
         """
+        td: str
+        f: h5py.File
+
+        path: Path
+        grp: h5py.Group
+
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "unknown_type.h5"
             with h5py.File(path, "w") as f:
@@ -662,25 +883,41 @@ class TestErrorHandling(chex.TestCase):
 
 
 class TestDatasetFlags(chex.TestCase):
-    """Tests for HDF5 dataset storage flags in save_to_h5."""
+    """Tests for HDF5 dataset storage flags in save_to_h5.
 
-    def test_compression_flags_applied_to_arrays(self):
+    :see: :func:`~diffpes.inout.save_to_h5`
+    """
+
+    def test_compression_flags_applied_to_arrays(self) -> None:
         """Verify storage flags are applied to non-scalar datasets.
 
-        Test Logic
-        ----------
+        This case establishes the compression flags applied to arrays contract for
+        dataset flags with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** an ArpesSpectrum (array datasets) and
            SimulationParams (scalar datasets).
         2. **Save** both with compression/chunk/checksum flags.
         3. **Inspect** HDF5 dataset properties directly.
         4. **Round-trip load** to verify numerical integrity.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         - Array dataset has requested filter/chunk settings.
         - Scalar dataset remains uncompressed (safe handling).
         - Loaded spectrum matches original data.
         """
+        td: str
+        f: h5py.File
+
+        spectrum: diffpes.types.ArpesSpectrum
+        params: diffpes.types.SimulationParams
+        path: Path
+        ds: h5py.Dataset
+        scalar_ds: h5py.Dataset
+        loaded: Any
+
         spectrum = make_arpes_spectrum(
             intensity=jnp.ones((12, 30)),
             energy_axis=jnp.linspace(-2.0, 1.0, 30),
@@ -720,18 +957,26 @@ class TestDatasetFlags(chex.TestCase):
             atol=1e-12,
         )
 
-    def test_compression_opts_without_compression_raises(self):
+    def test_compression_opts_without_compression_raises(self) -> None:
         """Verify invalid compression flag combination raises ValueError.
 
-        Test Logic
-        ----------
+        This case establishes the compression opts without compression raises contract
+        for dataset flags with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Create** a simple DensityOfStates PyTree.
         2. **Call** ``save_to_h5`` with ``compression_opts`` only.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         ValueError is raised with explanatory message.
         """
+        td: str
+
+        dos: diffpes.types.DensityOfStates
+        path: Path
+
         dos = make_density_of_states(
             energy=jnp.linspace(-5.0, 5.0, 50),
             total_dos=jnp.ones(50),
@@ -747,17 +992,42 @@ class TestDatasetFlags(chex.TestCase):
 
 
 class TestStaticMetadataEncoding:
-    """Tests for generic static Equinox metadata encoding."""
+    """Tests for generic static Equinox metadata encoding.
 
-    def test_encode_and_decode_round_trip(self):
-        """Preserve nested tuple types through the generic JSON codec."""
+    :see: :func:`~diffpes.inout.save_to_h5`
+    :see: :func:`~diffpes.inout.load_from_h5`
+    """
+
+    def test_encode_and_decode_round_trip(self) -> None:
+        """Preserve nested tuple types through the generic JSON codec.
+
+        This case establishes the encode and decode round trip contract for static
+        metadata encoding with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        aux: tuple[tuple[int, int, int], tuple[str, str]]
+        encoded: Any
+        decoded: Any
+
         aux = ((8, 8, 8), ("Fe", "Co"))
         encoded = _encode_static(aux)
         decoded = _decode_static(json.loads(json.dumps(encoded)))
         assert decoded == aux
 
-    def test_encode_returns_tagged_json_mapping(self):
-        """Encode tuples as JSON-compatible tagged mappings."""
+    def test_encode_returns_tagged_json_mapping(self) -> None:
+        """Encode tuples as JSON-compatible tagged mappings.
+
+        This case establishes the encode returns tagged json mapping contract for static
+        metadata encoding with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        aux: tuple[tuple[int, int, int], tuple[str, str]]
+        encoded: Any
+
         aux = ((4, 6, 8), ("H", "O"))
         encoded = _encode_static(aux)
         assert isinstance(encoded, dict)

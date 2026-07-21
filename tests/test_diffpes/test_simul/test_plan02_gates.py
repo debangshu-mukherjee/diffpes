@@ -11,8 +11,10 @@ import chex
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+from beartype.typing import Any, Callable
 from jaxtyping import Array, Float
 
+import diffpes
 from diffpes.simul import simulate_novice
 from diffpes.types import (
     ArpesSpectrum,
@@ -77,6 +79,10 @@ class TestNoviceCarrierGradients:
         Uses a sixteen-point energy grid to keep the full leafwise FD census
         small while retaining both occupied and underflowed unoccupied bands.
         """
+        bands: diffpes.types.BandStructure
+        projections: Array
+        params: diffpes.types.SimulationParams
+
         bands, projections, params = _novice_fixture()
 
         def bands_loss(candidate: BandStructure) -> Float[Array, ""]:
@@ -134,6 +140,11 @@ class TestNoviceScalability:
         it with :func:`equinox.filter_jit`; completed outputs are blocked so
         asynchronous dispatch cannot hide retraces.
         """
+        bands: diffpes.types.BandStructure
+        projections: Array
+        params: diffpes.types.SimulationParams
+        compiled: Callable[..., Any]
+
         bands, projections, params = _novice_fixture()
         trace_count: list[int] = [0]
 
@@ -184,6 +195,10 @@ class TestNoviceScalability:
         Builds each mapped parameter carrier with :func:`equinox.tree_at` and
         evaluates the production forward function under :func:`jax.vmap`.
         """
+        bands: diffpes.types.BandStructure
+        projections: Array
+        params: diffpes.types.SimulationParams
+
         bands, projections, params = _novice_fixture()
         sigmas: Float[Array, " 3"] = jnp.array([0.04, 0.08, 0.16])
 

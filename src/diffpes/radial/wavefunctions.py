@@ -32,8 +32,6 @@ def _associated_laguerre(
 
     Computes :math:`L_n^\alpha(x)`.
 
-    Extended Summary
-    ----------------
     Computes the generalized Laguerre polynomial using the standard
     three-term recurrence relation, which is numerically stable for
     upward iteration in the polynomial order.
@@ -123,15 +121,21 @@ def _associated_laguerre(
         laguerre_curr: Float[Array, " ..."] = (
             prefactor * laguerre_prev - correction
         )
-        return laguerre_prev, laguerre_curr
+        recurrence_state: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+            laguerre_prev,
+            laguerre_curr,
+        )
+        return recurrence_state
 
-    laguerre_final: Float[Array, " ..."]
-    _, laguerre_final = jax.lax.fori_loop(
-        2,
-        order + 1,
-        _recurrence_step,
-        (laguerre_zero, laguerre_one),
+    recurrence_result: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+        jax.lax.fori_loop(
+            2,
+            order + 1,
+            _recurrence_step,
+            (laguerre_zero, laguerre_one),
+        )
     )
+    laguerre_final: Float[Array, " ..."] = recurrence_result[1]
     return laguerre_final
 
 
@@ -143,8 +147,6 @@ def slater_radial(
 ) -> Float[Array, " ..."]:
     r"""Evaluate normalized Slater-type radial function.
 
-    Extended Summary
-    ----------------
     Computes the Slater-type orbital (STO) radial function:
 
     .. math::
@@ -185,13 +187,15 @@ def slater_radial(
     Setting :math:`N^2 \cdot (2n)! / (2\zeta)^{2n+1} = 1` gives the
     formula above.
 
+    :see: :class:`~.test_wavefunctions.TestSlaterRadial`
+
     Parameters
     ----------
     r : Float[Array, " ..."]
         Radial coordinate in atomic units.
     n : int
         Principal quantum number (``n >= 1``).
-    zeta : Float[Array, " "]
+    zeta : ScalarFloat
         Slater exponent.
 
     Returns
@@ -199,6 +203,11 @@ def slater_radial(
     values : Float[Array, " ..."]
         Normalized radial function
         ``R(r) = N r^(n-1) exp(-zeta * r)``.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is less than one.
 
     Notes
     -----
@@ -234,8 +243,6 @@ def hydrogenic_radial(
 ) -> Float[Array, " ..."]:
     r"""Evaluate normalized hydrogenic radial function.
 
-    Extended Summary
-    ----------------
     Computes the exact radial wavefunction for a hydrogenic
     (one-electron) atom with effective nuclear charge :math:`Z_{\text{eff}}`:
 
@@ -278,6 +285,8 @@ def hydrogenic_radial(
     is stable in the upward direction and is wrapped in
     ``jax.lax.fori_loop`` for JIT compatibility.
 
+    :see: :class:`~.test_wavefunctions.TestHydrogenicRadial`
+
     Parameters
     ----------
     r : Float[Array, " ..."]
@@ -286,13 +295,19 @@ def hydrogenic_radial(
         Principal quantum number.
     angular_momentum : int
         Angular momentum quantum number (``0 <= angular_momentum < n``).
-    z_eff : Float[Array, " "]
+    z_eff : ScalarFloat
         Effective nuclear charge.
 
     Returns
     -------
     values : Float[Array, " ..."]
         ``R_{n,l}(r)`` for hydrogenic orbitals.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is less than one or ``angular_momentum`` lies outside
+        ``[0, n)``.
 
     Notes
     -----

@@ -20,6 +20,9 @@ named assurance policy in the same differentiable PyTree as its observable.
 The numerical certification path compiles and batches with JAX; portable
 serialization stays at the filesystem boundary.
 
+Certification here means bounded scientific evidence, not a security
+credential. Storage consistency markers detect accidental mismatches only.
+
 ## Expanded-input workflows
 
 The package includes expanded-input wrappers that let you call the

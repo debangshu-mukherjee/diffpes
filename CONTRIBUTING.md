@@ -83,8 +83,10 @@ principle.
 ```
 diffpes/
 ├── src/diffpes/           # Main source code
+│   ├── certify/           # JAX-native forward certification, evidence,
+│   │                      #   provenance, policies, and information flow
 │   ├── inout/             # Data I/O (POSCAR, EIGENVAL, KPOINTS, DOSCAR,
-│   │                      #   PROCAR, CHGCAR, HDF5) and plotting
+│   │                      #   PROCAR, CHGCAR, HDF5, certificates) and plotting
 │   ├── maths/             # Dipole selection rules, spherical harmonics, Gaunt
 │   ├── radial/            # Radial primitives (Bessel, wavefunctions, integrals)
 │   ├── simul/             # ARPES forward model (matrix elements, polarization,
@@ -188,7 +190,7 @@ def simulate_spectrum(
     """..."""
 ```
 
-**Type Hinting Rules:**
+#### Type Hinting Rules:
 - All parameters and return values are annotated; multiple returns use
   `beartype.typing.Tuple[...]`.
 - Annotate intermediate variables inside function bodies too — e.g.
@@ -322,16 +324,50 @@ def make_band_structure(
 
 Docstrings follow the **NumPy / numpydoc convention** (enforced by Ruff's
 `pydocstyle` rules and `pydoclint`, configured in `pyproject.toml`). Coverage
-is checked by `interrogate` (`fail-under = 90`). Do **not** use ad-hoc section
-headers — stick to the numpydoc sections below.
+is checked by `interrogate` (`fail-under = 90`). Do **not** invent section
+headers — the allowed set is the numpydoc sections plus exactly three house
+extensions: `Extended Summary` and `Routine Listings` (modules and
+`__init__.py`, above) and `Implementation Logic` (functions, below).
 
-`pydoclint` currently sets `check-return-types = true`; jaxtyping shape
-strings (e.g. `Float[Array, "nkpt nband"]`) are core signature syntax that
-pydoclint cannot always parse for return-type comparison, so if it fights a
-correct jaxtyping return annotation, relax that comparison in `pyproject.toml`
-(rheedium's configuration is the precedent) rather than degrading the
-annotation — argument order and required `Returns`/`Yields` sections stay
-enforced either way.
+`pydoclint` sets `check-return-types = false` because jaxtyping shape strings
+(e.g. `Float[Array, "nkpt nband"]`) are core signature syntax that pydoclint
+cannot reliably parse for return-type comparison. Do not degrade a correct
+jaxtyping annotation to satisfy that comparison. Argument types and order,
+plus required `Returns`/`Yields` sections, remain enforced.
+
+#### Prose Style: Simplified Technical English (ASD-STE100)
+
+All prose in this repository conforms to
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/):
+every docstring, every markdown file (`README.md`, `docs/` guides,
+`CHANGELOG.md`), and every tutorial markdown cell. STE exists to make
+technical text impossible to misread. The rules that do the most work here:
+
+- **Keep sentences short.** Maximum 20 words for an instruction, 25 for a
+  description. One topic per sentence. One instruction per sentence.
+- **Use the active voice and name the agent.** "The function computes the
+  spectrum", not "the spectrum is computed".
+- **Use the present tense for descriptions** and the imperative for
+  instructions ("Compute the weights", "Do not tape the recursion").
+- **One term, one meaning.** Use the same word for the same concept
+  everywhere; do not rotate synonyms (pick "compute" and stay with it —
+  do not alternate "calculate" and "evaluate" for the same operation).
+  The verbatim summary-line rule already enforces this for API
+  descriptions.
+- **Keep the articles.** Write "the eigenvalues of the Hamiltonian", not
+  telegraph-style "eigenvalues of Hamiltonian".
+- **No noun clusters longer than three nouns** — break them up with
+  prepositions ("the width of the Voigt profile", not "Voigt profile
+  width parameter value").
+- **No idioms or figures of speech.** They do not survive translation, and
+  they do not survive a tired reader at a beamline at 3 a.m.
+- **Technical names are exempt.** Domain terms (ARPES, PyTree, Kramers
+  doublet, Gaunt coefficient, `jnp.where`) are STE technical names and
+  are always permitted — used consistently, with one spelling.
+
+Full STE dictionary compliance is a review-time discipline, not a tooling
+gate; the specification is free on registration from asd-ste100.org. When
+a reviewer flags a sentence as non-STE, simplify it — do not defend it.
 
 #### Module Docstrings
 
@@ -404,6 +440,13 @@ no alias, no `DeprecationWarning`. The only migration record is a
 
 #### Function and Class Docstrings
 
+Every function docstring answers three questions, in Simplified Technical
+English: what the function **ingests** (`Parameters`), what it **outputs**
+(`Returns`), and **how the process happens inside** (`Implementation
+Logic`, or `Notes` for one-formula functions). A docstring that leaves any
+of the three unanswered is incomplete, independent of what pydoclint
+accepts.
+
 ```python
 @jaxtyped(typechecker=beartype)
 def free_electron_kz(
@@ -451,24 +494,180 @@ Note how the `Returns` entry is named `kz_values` — the type-annotated
 variable the body actually returns (assign-before-returning), so the
 docstring, the body, and the signature agree.
 
-**Docstring conventions:**
-- Open with a single imperative summary line.
-- Add a `:see:` Sphinx cross-reference linking the object to its test class
-  (e.g. `:see: :class:`~.test_bessel.TestSphericalBessel``); the test class
-  carries the matching back-reference, so source ↔ test links are
-  bidirectional in the rendered docs.
-- `Parameters` and `Returns` repeat the type and describe each item, with
-  units. Name return values (numpydoc `name : type` form) after the
-  **type-annotated variable actually returned** (see "Assign before
-  returning"), so the docstring, the body, and the signature agree.
-- **Mark static (non-traced) parameters** explicitly — arguments passed via
-  `static_argnames`, Python `int`/`str`/`bool` flags that drive shape or
-  control flow, and values in `eqx.field(static=True)`: e.g. *"(**static** — a
-  compile-time constant; changing it triggers retracing)"*.
-- Use `Notes` (often a numbered list) for the algorithm; `See Also` for
-  related functions; `Attributes` for `eqx.Module` fields; `Raises` where a
-  function raises.
-- Use a raw string (`r"""`) when the docstring contains LaTeX/backslashes —
+##### Section order
+
+A function docstring uses these sections, in this order, omitting any that
+do not apply:
+
+1. Summary line
+2. Extended summary (untitled prose, directly after the summary)
+3. `:see:` test cross-reference
+4. `Implementation Logic`
+5. `Parameters`
+6. `Returns` (or `Yields` for generators)
+7. `Raises`
+8. `Notes`
+9. `References`
+10. `See Also`
+11. `Examples`
+
+##### Summary line
+
+- A **single imperative sentence** ending in a period, fitting on one line:
+  "Compute normalized Gaussian broadening profile." — never "This function
+  computes…", never a restatement of the parameter list.
+- This exact sentence is copied **verbatim** into the module's
+  `Routine Listings` and the subpackage `__init__.py`'s `Routine Listings`
+  (the three-places rule). Changing it means changing all three.
+
+##### Extended summary
+
+- One or two short paragraphs of *what and in which regime*: the physics
+  quantity computed, the approximation used, and its domain of validity
+  (e.g. "using the pseudo-Voigt method of Thompson, Cox & Hastings (1987),
+  accurate to better than 1% relative error"). Equations inline via
+  `:math:`. The *how* does not belong here — it goes in
+  `Implementation Logic`.
+
+##### `:see:` cross-reference
+
+- Every public object carries `:see: :class:`~.test_<module>.Test<Symbol>``
+  pointing to its test class; the test class carries the matching
+  back-reference. The pair is maintained together — renaming either side
+  updates both.
+
+##### `Implementation Logic` (house section)
+
+- Required for any function whose body is more than a one-formula
+  transcription; short functions may fold the algorithm into `Notes`
+  instead.
+- Format: **numbered bold steps**, each opening with a `::` literal block
+  quoting the actual expressions, followed by indented prose explaining
+  *why* that step exists:
+
+  ```
+  1. **Compute normalization factor**::
+
+         norm_factor = sqrt(2 * pi) * sigma
+
+     This prefactor ensures the profile integrates to unity.
+  ```
+- The steps must stay in sync with the body — a reviewer reads them
+  side-by-side with the code. Stale Implementation Logic is a defect on the
+  same footing as a stale listing.
+
+##### `Parameters`
+
+- One entry per signature parameter, **in signature order**, numpydoc
+  `name : type` form where the type is spelled exactly as annotated
+  (`Float[Array, "nkpt nband"]`, `ScalarFloat`).
+- **Units on every physical quantity** ("Photon energy in eV", "In-plane
+  momentum in 1/Angstrom"), and degrees vs radians stated explicitly for
+  every angle.
+- State defaults in prose: "Default 15.0."
+- **Mark static (non-traced) parameters** — anything passed via
+  `static_argnames`, Python `int`/`str`/`bool` values that drive shapes or
+  control flow, and values landing in `eqx.field(static=True)`:
+  *"(**static** — a compile-time constant; changing it triggers
+  retracing)"*.
+- PyTree arguments name their type with a `:class:` reference; do **not**
+  re-document the PyTree's fields — that documentation lives once, on the
+  type.
+
+##### `Returns` / `Yields`
+
+- Name each return value after the **type-annotated variable actually
+  returned** (assign-before-returning), so the docstring, the body, and the
+  signature agree; `name : type` with units. A `Tuple[...]` return gets one
+  named entry per element, in order.
+
+##### `Raises`
+
+- Document **every explicit raise**: `ValueError` for static validation
+  (with the violated condition), and `EquinoxRuntimeError` for traced
+  `eqx.error_if` checks (with the runtime condition, e.g. "If ``sigma`` and
+  ``gamma`` are simultaneously zero"). Do not document beartype/jaxtyping
+  rejections — the typing machinery is implicit.
+
+##### `Notes`
+
+- Physics caveats and approximation limits that a *user* needs (validity
+  ranges, convention pins by reference to the physics canon — never re-pin
+  a convention locally).
+- **Differentiability notes are mandatory where relevant**: which
+  parameters carry gradients, how `safe_*` guards behave at boundary rays,
+  and any known zero-gradient plateau (e.g. constant extrapolation outside
+  a tabulation grid). A *documented* zero gradient is a stated limitation;
+  an undocumented one is a bug.
+
+##### `References`
+
+- Numpydoc footnotes (`.. [1] Author, "Title", Journal Vol, pages
+  (year).`), cited in the text as `[1]_`.
+- **Footnote labels must be unique across the whole module**, not just the
+  docstring: `automodule` renders every docstring of a module on one page,
+  and two functions both using `.. [1]` collide. Continue numbering across
+  the module (`voigt` uses `[1]`, `yeh_lindau_weights` uses `[2]`).
+
+##### `See Also`
+
+- Related public functions as `name : one-line description` — use the
+  target's verbatim summary line where it fits.
+
+##### `Examples`
+
+- Doctest format, deterministic, cheap (CPU, small arrays). Ruff formats
+  doctest code (`docstring-code-format`), and the rendered docs display it.
+
+##### Class docstrings (`eqx.Module` PyTrees)
+
+```python
+class SelfEnergyConfig(eqx.Module):
+    """Configure energy-dependent lifetime broadening.
+
+    Carries the parameters of the imaginary self-energy
+    :math:`\\Gamma(E)` used to build Lorentzian linewidths.
+
+    :see: :class:`~.test_self_energy.TestSelfEnergyConfig`
+
+    Attributes
+    ----------
+    gamma_0 : Float[Array, ""]
+        Constant offset of :math:`\\Gamma(E)` in eV.
+    mode : str
+        Evaluation mode selector (**static** — stored via
+        ``eqx.field(static=True)``; changing it triggers retracing).
+
+    See Also
+    --------
+    make_self_energy_config : Validated factory for this type.
+    """
+```
+
+- Summary line and extended summary follow the same rules as functions;
+  `:see:` points at the type's test class.
+- **`Attributes` documents every field** in declaration order —
+  `name : type` with units — and flags every `eqx.field(static=True)` field
+  as **static**.
+- No `__init__` docstring: Equinox generates the constructor, and the
+  construction contract is documented once, on the `make_*` factory.
+  `See Also` names that factory.
+- `Methods` section only if the class exposes public methods.
+
+##### Factory (`make_*`) docstrings
+
+- The factory's docstring **is the validation contract**: state which
+  checks are static (`raise ValueError`, resolved at trace time) and which
+  are traced (`eqx.error_if`, raised at runtime under `jit`), and mirror
+  both in `Raises`. `Returns` names the constructed instance variable.
+
+##### Private objects and raw strings
+
+- `_`-prefixed helpers need at least a summary line; helpers doing real
+  numerics (recurrences, quadratures, Taylor seeds) carry full `Parameters`
+  / `Returns` / `Notes` — private code is exempt from the three-places
+  rule, not from being understandable.
+- Use a raw string (`r"""`) the moment a docstring contains a backslash —
   matrix-element and self-energy docstrings usually do.
 
 ### Code Style
@@ -480,8 +679,15 @@ S, A, C4, PIE, PT, RET, SIM, ARG, ERA, PL`. Key conventions:
 - **Variable Names**: descriptive `snake_case`; long names over abbreviations
   (`photoemission_intensity`, not `pi`). Scientific single-letter symbols
   (`G`, `L`, `S`) are permitted where they mirror the physics.
-- **No inline comments for explanation**: explanations belong in docstrings.
-  Comments are reserved for non-obvious rationale (the *why*, not the *what*).
+- **No inline comments in `src/` unless absolutely necessary.** All
+  explanation lives in the docstring, which states — in Simplified
+  Technical English — what the function ingests (`Parameters`), what it
+  outputs (`Returns`), and how the process happens inside
+  (`Implementation Logic`). The only sanctioned comments are tooling
+  directives (`# noqa: <rule>`, `# type: ignore[<rule>]`) and a one-line
+  *why* that cannot live in the docstring (e.g. a workaround pinned to an
+  upstream issue). A comment that narrates *what* the next line does is a
+  defect — delete it or move the content into the docstring.
 - **Pure functions**: no side effects; return new data.
 - **Imports**: sorted by isort (`I`); imports inside functions only to guard
   optional dependencies or platform branches.
@@ -501,7 +707,12 @@ Tests mirror the source layout under `tests/test_diffpes/`:
 ```
 tests/
 └── test_diffpes/
-    ├── test_inout/test_vasp_readers.py
+    ├── test_inout/test_chgcar.py
+    ├── test_inout/test_doscar.py
+    ├── test_inout/test_eigenval.py
+    ├── test_inout/test_kpoints.py
+    ├── test_inout/test_poscar.py
+    ├── test_inout/test_procar.py
     ├── test_maths/test_gaunt.py
     ├── test_radial/test_bessel.py
     ├── test_simul/...
@@ -625,7 +836,7 @@ pytest
 
 # Run a single module / class / test
 pytest tests/test_diffpes/test_radial/test_bessel.py
-pytest tests/test_diffpes/test_radial/test_bessel.py::TestSphericalBessel
+pytest tests/test_diffpes/test_radial/test_bessel.py::TestSphericalBesselJl
 
 # Coverage
 pytest tests/ --cov=src/diffpes --cov-report=term-missing
@@ -637,7 +848,8 @@ Tutorials live in `tutorials/` as Jupyter notebooks paired with Jupytext
 percent scripts (`.ipynb` plus `.py`) so they can be edited while keeping
 reviewable source diffs. **Explanation lives in markdown cells, not code
 comments** — narrative, motivation, and physics belong in markdown blocks;
-keep code cells comment-free. After editing a paired notebook, sync and strip
+keep code cells comment-free. Markdown cells follow the same ASD-STE100
+prose rules as all other prose in the repository. After editing a paired notebook, sync and strip
 outputs before committing (the pre-commit hooks do this for you).
 
 ## Pull Request Process
@@ -665,6 +877,12 @@ pytest
 `ty` is the project's type checker; `pre-commit` runs ruff (check + format)
 and the other hooks. If a hook modifies files, the commit aborts — re-stage
 and commit again.
+
+Two files are **generated by pre-commit hooks — do not edit them by hand**:
+`.github/badges/loc.json` (the lines-of-code badge) and `requirements.txt`
+(exported from `uv.lock` so the GitHub dependency graph, which does not
+read `uv.lock` yet, sees a supported manifest). Both regenerate locally at
+commit time; no CI job writes to the repository.
 
 ### PR Guidelines
 

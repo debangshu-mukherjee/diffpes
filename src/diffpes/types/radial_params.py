@@ -9,9 +9,9 @@ matrix element pipeline.
 Routine Listings
 ----------------
 :class:`OrbitalBasis`
-    PyTree for orbital quantum number metadata.
+    Store orbital quantum-number metadata in a JAX PyTree.
 :class:`SlaterParams`
-    PyTree for Slater radial wavefunction parameters.
+    Store Slater radial-wavefunction parameters in a JAX PyTree.
 :func:`make_orbital_basis`
     Create a validated ``OrbitalBasis`` instance.
 :func:`make_slater_params`
@@ -34,10 +34,8 @@ from jaxtyping import Array, Float, jaxtyped
 
 
 class OrbitalBasis(eqx.Module):
-    """PyTree for orbital quantum number metadata.
+    """Store orbital quantum-number metadata in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Describes the orbital basis set used in dipole matrix element
     calculations for the differentiable Chinook pipeline. The quantum
     numbers (n, l, m) parameterize the radial wavefunctions (via
@@ -51,24 +49,30 @@ class OrbitalBasis(eqx.Module):
     number alters the computational graph structure, so JAX must
     recompile when these values change.
 
+
+    :see: :class:`~.test_radial_params.TestOrbitalBasis`
+
     Attributes
     ----------
     n_values : tuple[int, ...]
         Principal quantum numbers, one per orbital. Determines the
         radial node count and the power of *r* in the Slater-type
-        radial function R_nl(r) ~ r^{n-1} exp(-zeta*r). Static
-        (auxiliary data, not JAX-traced).
+        radial function R_nl(r) ~ r^{n-1} exp(-zeta*r) (**static** --
+        compile-time constants; changing them triggers retracing).
     l_values : tuple[int, ...]
         Angular momentum quantum numbers, one per orbital (0=s, 1=p,
         2=d, 3=f). Determines the spherical harmonic Y_l^m used in
-        the matrix element integral. Static (auxiliary data).
+        the matrix element integral (**static** -- compile-time constants;
+        changing them triggers retracing).
     m_values : tuple[int, ...]
         Magnetic quantum numbers, one per orbital. Ranges from -l to
         +l for each orbital. Selects the specific spherical harmonic
-        component. Static (auxiliary data).
+        component (**static** -- compile-time constants; changing them
+        triggers retracing).
     labels : tuple[str, ...]
         Human-readable orbital labels (e.g. ``("2s", "2px", ...)``).
-        Used for plotting and debugging. Static (auxiliary data).
+        Used for plotting and debugging (**static** -- compile-time constants;
+        changing them triggers retracing).
 
     Notes
     -----
@@ -92,10 +96,8 @@ class OrbitalBasis(eqx.Module):
 
 
 class SlaterParams(eqx.Module):
-    """PyTree for Slater radial wavefunction parameters.
+    """Store Slater radial-wavefunction parameters in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Wraps differentiable Slater exponents and linear combination
     coefficients alongside the static orbital basis metadata.
     The Slater exponents (zeta) are the primary quantities to be
@@ -108,6 +110,9 @@ class SlaterParams(eqx.Module):
     with different exponents, weighted by the ``coefficients``
     matrix. For single-zeta (C=1), each orbital has exactly one
     exponent and a coefficient of 1.0.
+
+
+    :see: :class:`~.test_radial_params.TestSlaterParams`
 
     Attributes
     ----------
@@ -124,8 +129,7 @@ class SlaterParams(eqx.Module):
         all coefficients are 1.0. JAX-traced (differentiable).
     orbital_basis : OrbitalBasis
         Quantum numbers (n, l, m) and labels for each orbital.
-        Static (auxiliary data) -- changing quantum numbers
-        triggers JIT recompilation.
+        **Static** -- a compile-time constant; changing it triggers retracing.
 
     Notes
     -----
@@ -158,8 +162,6 @@ def make_orbital_basis(
 ) -> OrbitalBasis:
     """Create a validated ``OrbitalBasis`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates quantum number tuples and
     constructs an ``OrbitalBasis`` PyTree. The three quantum number
     tuples must all have the same length (one entry per orbital).
@@ -169,28 +171,45 @@ def make_orbital_basis(
     Use this factory instead of the raw ``OrbitalBasis`` constructor
     to get automatic length validation and default label generation.
 
+    :see: :class:`~.test_radial_params.TestMakeOrbitalBasis`
+
     Implementation Logic
     --------------------
-    1. **Infer orbital count** from ``len(n_values)``.
-    2. **Validate lengths**: raise ``ValueError`` if ``l_values`` or
-       ``m_values`` differ in length from ``n_values``.
-    3. **Default labels**: if ``labels`` is ``None``, generate
-       ``("orb_0", "orb_1", ...)`` with length matching the orbital
-       count.
-    4. **Validate label length**: raise ``ValueError`` if ``labels``
-       has a different length from the quantum number tuples.
-    5. **Construct** the ``OrbitalBasis`` Equinox module and return it.
+    1. **Prepare the normalized values**::
+
+           n_orbitals = len(n_values)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           len(l_values) != n_orbitals or len(m_values) != n_orbitals
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Return the named instance**::
+
+           return basis
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
     n_values : tuple[int, ...]
-        Principal quantum numbers, one per orbital.
+        Principal quantum numbers (**static** -- compile-time constants;
+        changing them triggers retracing), one per orbital.
     l_values : tuple[int, ...]
-        Angular momentum quantum numbers, one per orbital.
+        Angular momentum quantum numbers (**static** -- compile-time
+        constants; changing them triggers retracing), one per orbital.
     m_values : tuple[int, ...]
-        Magnetic quantum numbers, one per orbital.
-    labels : tuple[str, ...], optional
-        Human-readable orbital labels. Defaults to
+        Magnetic quantum numbers (**static** -- compile-time constants;
+        changing them triggers retracing), one per orbital.
+    labels : Optional[tuple[str, ...]], optional
+        Human-readable orbital labels (**static** -- compile-time constants;
+        changing them triggers retracing). Defaults to
         ``("orb_0", "orb_1", ...)``.
 
     Returns
@@ -207,6 +226,12 @@ def make_orbital_basis(
         any angular quantum number is outside ``0 <= l < n``; or if
         any magnetic quantum number is outside ``-l <= m <= l``.
 
+    Notes
+    -----
+    All validation is static because every ``OrbitalBasis`` field is stored
+    with ``eqx.field(static=True)``. Invalid tuple lengths or quantum numbers
+    raise ``ValueError`` before tracing; no ``eqx.error_if`` checks apply.
+
     See Also
     --------
     OrbitalBasis : The PyTree class constructed by this factory.
@@ -215,9 +240,12 @@ def make_orbital_basis(
     if len(l_values) != n_orbitals or len(m_values) != n_orbitals:
         msg: str = "n_values, l_values, m_values must have the same length"
         raise ValueError(msg)
-    if labels is None:
-        labels = tuple(f"orb_{i}" for i in range(n_orbitals))
-    if len(labels) != n_orbitals:
+    resolved_labels: tuple[str, ...] = (
+        tuple(f"orb_{i}" for i in range(n_orbitals))
+        if labels is None
+        else labels
+    )
+    if len(resolved_labels) != n_orbitals:
         msg: str = "labels must have the same length as quantum numbers"
         raise ValueError(msg)
     if any(n < 1 for n in n_values):
@@ -239,21 +267,19 @@ def make_orbital_basis(
         n_values=n_values,
         l_values=l_values,
         m_values=m_values,
-        labels=labels,
+        labels=resolved_labels,
     )
     return basis
 
 
 @jaxtyped(typechecker=beartype)
-def make_slater_params(
+def make_slater_params(  # noqa: DOC503
     zeta: Float[Array, " Oz"],
     orbital_basis: OrbitalBasis,
     coefficients: Optional[Float[Array, "Oc C"]] = None,
 ) -> SlaterParams:
     """Create a validated ``SlaterParams`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates Slater radial wavefunction
     parameters and constructs a ``SlaterParams`` PyTree. The ``zeta``
     array length must match the number of orbitals in the provided
@@ -265,27 +291,46 @@ def make_slater_params(
     to get automatic size validation, default coefficient generation,
     and guaranteed ``float64`` dtypes.
 
+    :see: :class:`~.test_radial_params.TestMakeSlaterParams`
+
     Implementation Logic
     --------------------
-    1. **Cast zeta** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Infer orbital count** from ``zeta_arr.shape[0]``.
-    3. **Validate consistency**: raise ``ValueError`` if the orbital
-       count from ``zeta`` does not match
-       ``len(orbital_basis.n_values)``.
-    4. **Default coefficients**: if ``coefficients`` is ``None``,
-       create ``jnp.ones((O, 1), dtype=jnp.float64)`` for a
-       single-zeta expansion. Otherwise cast the provided array to
-       ``jnp.float64``.
-    5. **Construct** the ``SlaterParams`` Equinox module and return it.
+    1. **Prepare the normalized values**::
+
+           zeta_arr = jnp.asarray(zeta, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           len(orbital_basis.n_values) != n_orbitals
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(zeta_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return params
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    zeta : Float[Array, " O"]
+    zeta : Float[Array, " Oz"]
         Slater exponents (inverse Bohr), one per orbital.
     orbital_basis : OrbitalBasis
-        Orbital quantum number metadata. Must have the same number
+        Orbital quantum number metadata (**static** -- a compile-time
+        constant; changing it triggers retracing). Must have the same number
         of orbitals as the length of ``zeta``.
-    coefficients : Float[Array, "O C"], optional
+    coefficients : Optional[Float[Array, "Oc C"]], optional
         Multi-zeta linear combination coefficients. Shape ``(O, C)``
         where C is the contraction length. Defaults to ones with
         C=1 (single-zeta basis).
@@ -304,6 +349,13 @@ def make_slater_params(
     EquinoxRuntimeError
         If ``zeta`` is non-finite or non-positive, or if
         ``coefficients`` contains a non-finite value.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the orbital count differs from either leading array dimension. Traced
+    validation uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when
+    an exponent is non-finite or non-positive, or a coefficient is non-finite.
 
     See Also
     --------
@@ -342,11 +394,12 @@ def make_slater_params(
             ~(jnp.all(jnp.isfinite(coeff_arr))),
             "make_slater_params: coefficients finite",
         )
-        return SlaterParams(
+        validated_params: SlaterParams = SlaterParams(
             zeta=zeta_arr,
             coefficients=coeff_arr_checked,
             orbital_basis=orbital_basis,
         )
+        return validated_params
 
     params: SlaterParams = validate_and_create()
     return params

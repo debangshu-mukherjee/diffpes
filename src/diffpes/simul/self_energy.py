@@ -51,8 +51,6 @@ def evaluate_self_energy(
     lifetime effects are important (e.g., near the Fermi level or in
     correlated materials).
 
-    Extended Summary
-    ----------------
     The imaginary part of the electron self-energy determines the
     quasiparticle lifetime and thus the Lorentzian component of the
     spectral linewidth. Three parametric models are supported:
@@ -68,23 +66,29 @@ def evaluate_self_energy(
       Suitable for self-energies obtained from many-body calculations
       (e.g., GW or DMFT).
 
+    :see: :class:`~.test_self_energy.TestEvaluateSelfEnergy`
+
     Implementation Logic
     --------------------
-    1. **Read mode** from ``config.mode`` (a Python string, not
-       traced).
-    2. **Dispatch on mode**:
+    1. **Read the static mode**::
 
-       - ``"constant"``: Broadcast ``coefficients[0]`` to the shape
-         of ``energy``.
-       - ``"polynomial"``: Evaluate ``jnp.polyval(coefficients,
-         energy)`` for a polynomial of degree
-         ``len(coefficients) - 1``.
-       - ``"tabulated"``: Interpolate ``jnp.interp(energy,
-         config.energy_nodes, config.coefficients)`` using the
-         tabulated energy-gamma pairs.
+           mode = config.mode
 
-    3. **Error on unknown mode**: Raises ``ValueError`` with the
-       unrecognized mode string.
+       The Python string selects one computation while JAX traces its arrays.
+    2. **Compute the selected self-energy**::
+
+           result = jnp.broadcast_to(config.coefficients[0], energy.shape)
+           result = jnp.polyval(config.coefficients, energy)
+           result = jnp.interp(
+               energy, config.energy_nodes, config.coefficients
+           )
+
+       Each branch returns a width array with the same shape as ``energy``.
+    3. **Reject an unknown mode**::
+
+           raise ValueError(msg)
+
+       This static error prevents an unsupported model from entering a trace.
 
     Parameters
     ----------
@@ -104,7 +108,7 @@ def evaluate_self_energy(
 
     Returns
     -------
-    gamma : Float[Array, " ..."]
+    result : Float[Array, " ..."]
         Energy-dependent Lorentzian broadening in eV, same shape
         as ``energy``.
 

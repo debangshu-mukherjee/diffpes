@@ -10,7 +10,7 @@ symbols, and atom counts per species.
 Routine Listings
 ----------------
 :class:`CrystalGeometry`
-    PyTree for crystal geometry from VASP POSCAR.
+    Store VASP POSCAR crystal geometry in a JAX PyTree.
 :func:`make_crystal_geometry`
     Create a validated CrystalGeometry instance.
 
@@ -35,7 +35,7 @@ _MIN_SCALED_SINGULAR_VALUE: float = 1e-12
 
 
 class CrystalGeometry(eqx.Module):
-    """PyTree for crystal geometry from VASP POSCAR.
+    """Store VASP POSCAR crystal geometry in a JAX PyTree.
 
     Encapsulates the full crystal structure information parsed from a
     VASP POSCAR file: real-space lattice vectors, the corresponding
@@ -49,6 +49,9 @@ class CrystalGeometry(eqx.Module):
     strings is stored as auxiliary data because JAX cannot trace
     Python strings.
 
+
+    :see: :class:`~.test_geometry.TestCrystalGeometry`
+
     Attributes
     ----------
     lattice : Float[Array, "3 3"]
@@ -58,8 +61,8 @@ class CrystalGeometry(eqx.Module):
     coords : Float[Array, "N 3"]
         Fractional atomic coordinates.
     symbols : tuple[str, ...]
-        Element symbols for each species. **Static** metadata; changing
-        them triggers retracing.
+        Element symbols for each species (**static** -- compile-time
+        constants; changing them triggers retracing).
     atom_counts : Int[Array, " S"]
         Number of atoms per species.
 
@@ -137,7 +140,7 @@ def _compute_reciprocal_lattice(
 
 
 @jaxtyped(typechecker=beartype)
-def make_crystal_geometry(
+def make_crystal_geometry(  # noqa: DOC503
     lattice: Union[Float[Array, "3 3"], "list[list[ScalarNumeric]]"],
     coords: Float[Array, "N 3"],
     symbols: tuple[str, ...],
@@ -151,30 +154,47 @@ def make_crystal_geometry(
     appropriate JAX dtypes (float64 for real-valued fields, int32
     for atom counts).
 
+    :see: :class:`~.test_geometry.TestMakeCrystalGeometry`
+
     Implementation Logic
     --------------------
-    1. **Cast lattice** to ``jnp.float64`` via ``jnp.asarray``.
-       Accepts both JAX arrays and nested Python lists.
-    2. **Cast coords** to ``jnp.float64`` via ``jnp.asarray``.
-    3. **Cast atom_counts** to ``jnp.int32`` via ``jnp.asarray``.
-       Accepts both JAX integer arrays and Python ``list[int]``.
-    4. **Auto-compute reciprocal lattice** by calling
-       ``_compute_reciprocal_lattice(lattice_arr)``. This derives
-       ``b_i = 2 pi (a_j x a_k) / V`` from the validated
-       real-space lattice.
-    5. **Construct** the ``CrystalGeometry`` Equinox module from all
-       five fields (including the computed reciprocal lattice) and
-       return it.
+    1. **Prepare the normalized values**::
+
+           lattice_arr = jnp.asarray(lattice, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           symbols and len(symbols) != counts_arr.shape[0]
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           jnp.sum(counts_arr) != coords_arr.shape[0]
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return geometry
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    lattice : Union[Float[Array, "3 3"], list]
+    lattice : Union[Float[Array, "3 3"], "list[list[ScalarNumeric]]"]
         Real-space lattice vectors as rows (angstroms).
     coords : Float[Array, "N 3"]
         Fractional atomic coordinates.
     symbols : tuple[str, ...]
-        Element symbols for each species.
-    atom_counts : Union[Int[Array, " S"], list[int]]
+        Element symbols for each species (**static** -- a compile-time
+        constant; changing them triggers retracing).
+    atom_counts : Union[Int[Array, " S"], "list[int]"]
         Number of atoms per species.
 
     Returns
@@ -195,6 +215,14 @@ def make_crystal_geometry(
         singular value or condition number violates the named
         numerical stability limits.
 
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    species counts disagree or concrete atom counts do not sum to positions.
+    Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for inconsistent traced counts, non-finite data,
+    or a lattice that fails the orientation and conditioning limits.
+
     See Also
     --------
     CrystalGeometry : The PyTree class constructed by this factory.
@@ -206,13 +234,13 @@ def make_crystal_geometry(
     counts_arr: Int[Array, " S"] = jnp.asarray(atom_counts, dtype=jnp.int32)
 
     if symbols and len(symbols) != counts_arr.shape[0]:
-        msg = "make_crystal_geometry: symbols and atom_counts must agree"
+        msg: str = "make_crystal_geometry: symbols and atom_counts must agree"
         raise ValueError(msg)
     if (
         not isinstance(counts_arr, Tracer)
         and int(jnp.sum(counts_arr)) != coords_arr.shape[0]
     ):
-        msg = "make_crystal_geometry: atom_counts must sum to positions"
+        msg: str = "make_crystal_geometry: atom_counts must sum to positions"
         raise ValueError(msg)
 
     def validate_and_create() -> CrystalGeometry:
@@ -256,13 +284,14 @@ def make_crystal_geometry(
         reciprocal: Float[Array, "3 3"] = _compute_reciprocal_lattice(
             lattice_arr
         )
-        return CrystalGeometry(
+        validated_geometry: CrystalGeometry = CrystalGeometry(
             lattice=lattice_arr,
             reciprocal_lattice=reciprocal,
             coords=coords_arr,
             symbols=symbols,
             atom_counts=counts_arr,
         )
+        return validated_geometry
 
     geometry: CrystalGeometry = validate_and_create()
     return geometry

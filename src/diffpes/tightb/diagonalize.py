@@ -17,6 +17,8 @@ Routine Listings
     Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
 """
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 from beartype import beartype
@@ -43,8 +45,6 @@ def diagonalize_single_k(
 ) -> tuple[Float[Array, " O"], Complex[Array, "O O"]]:
     """Diagonalize H(k) at a single k-point.
 
-    Extended Summary
-    ----------------
     Delegates to ``jnp.linalg.eigh``, which is the standard LAPACK-style
     Hermitian eigensolver.  ``eigh`` is used (not ``eig``) because the
     Hamiltonian is guaranteed Hermitian by construction, which ensures
@@ -61,6 +61,8 @@ def diagonalize_single_k(
     This function is intentionally thin -- a one-liner around ``eigh``
     -- so that it can be individually tested, mocked, or replaced with
     a custom differentiable eigensolver if needed.
+
+    :see: :class:`~.test_diagonalize.TestDiagonalizeSingleK`
 
     Parameters
     ----------
@@ -103,8 +105,6 @@ def diagonalize_tb(
     ``jnp.linalg.eigh``. Both operations are vmapped and
     fully differentiable with respect to ``tb_model.hopping_params``.
 
-    Extended Summary
-    ----------------
     Internally a closure ``_build_and_diag`` is defined that captures
     the model parameters (hopping amplitudes, indices, lattice vectors)
     and maps a single k-point to its ``(eigenvalues, eigenvectors)``
@@ -124,6 +124,8 @@ def diagonalize_tb(
 
     The Fermi energy is set to 0.0 by default because bare
     tight-binding models have no absolute energy reference.
+
+    :see: :class:`~.test_diagonalize.TestDiagonalizeTB`
 
     Parameters
     ----------
@@ -157,14 +159,15 @@ def diagonalize_tb(
         evals: Float[Array, " O"]
         evecs: Complex[Array, "O O"]
         evals, evecs = diagonalize_single_k(H)
-        return evals, evecs
+        eigensystem: tuple[Float[Array, " O"], Complex[Array, "O O"]] = (
+            evals,
+            evecs,
+        )
+        return eigensystem
 
     eigenvalues: Float[Array, "K O"]
     eigenvectors: Complex[Array, "K O O"]
     eigenvalues, eigenvectors = jax.vmap(_build_and_diag)(kpoints)
-    # eigenvectors from eigh: shape (K, O, O) where evecs[:, :, i] is i-th
-    # We want (K, B, O) where B=O (number of bands = number of orbitals)
-    # Transpose so evecs[k, b, o] = coefficient of orbital o in band b
     eigenvectors = jnp.transpose(eigenvectors, (0, 2, 1))
 
     bands: DiagonalizedBands = make_diagonalized_bands(
@@ -192,8 +195,6 @@ def vasp_to_diagonalized(
     The orbital projections are summed over atoms and mapped to
     the orbital basis ordering.
 
-    Extended Summary
-    ----------------
     VASP's PROCAR file provides site- and orbital-projected squared
     moduli ``|c_{k,b,atom,orb}|^2`` for each eigenstate.  Because
     the complex phase of each coefficient is discarded during the VASP
@@ -230,6 +231,8 @@ def vasp_to_diagonalized(
     ``sum_orb |c_{k,b,orb}|^2 = 1``.  A safe-division guard
     selects a zero vector with a zero gradient when all projections are
     zero (e.g. core states with no s/p/d weight).
+
+    :see: :class:`~.test_diagonalize.TestVaspToDiagonalized`
 
     Parameters
     ----------
@@ -269,6 +272,8 @@ def vasp_to_diagonalized(
     compatibility with the ``DiagonalizedBands`` type even though they
     are purely real (zero imaginary part).
     """
+    i: int
+
     if phase_loss not in ("warn", "ignore", "error"):  # pragma: no cover
         msg: str = (
             "phase_loss must be one of {'warn', 'ignore', 'error'}, "
@@ -279,25 +284,20 @@ def vasp_to_diagonalized(
     if phase_loss == "error":
         raise ValueError(PHASE_LOSS_MESSAGE)
     if phase_loss == "warn":
-        import warnings  # noqa: PLC0415
-
         warnings.warn(PHASE_LOSS_MESSAGE, RuntimeWarning, stacklevel=2)
 
-    # Sum projections over atoms: (K, B, A, 9) -> (K, B, 9)
     proj_summed: Float[Array, "K B 9"] = jnp.sum(orb_proj.projections, axis=2)
 
-    # Map orbital basis to VASP orbital indices
-    # VASP ordering: [s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2]
     vasp_lm_to_idx: dict[tuple[int, int], int] = {
-        (0, 0): 0,  # s
-        (1, -1): 1,  # py
-        (1, 0): 2,  # pz
-        (1, 1): 3,  # px
-        (2, -2): 4,  # dxy
-        (2, -1): 5,  # dyz
-        (2, 0): 6,  # dz2
-        (2, 1): 7,  # dxz
-        (2, 2): 8,  # dx2-y2
+        (0, 0): 0,
+        (1, -1): 1,
+        (1, 0): 2,
+        (1, 1): 3,
+        (2, -2): 4,
+        (2, -1): 5,
+        (2, 0): 6,
+        (2, 1): 7,
+        (2, 2): 8,
     }
 
     n_orbs: int = len(orbital_basis.l_values)
@@ -311,13 +311,10 @@ def vasp_to_diagonalized(
             raise ValueError(msg)
         orbital_indices.append(idx)
 
-    # Extract and take sqrt as approximate coefficients
-    # proj_summed shape: (K, B, 9), select columns -> (K, B, n_orbs)
     idx_arr: Int[Array, " N"] = jnp.array(orbital_indices)
     approx_c2: Float[Array, "K B N"] = proj_summed[:, :, idx_arr]
     approx_c: Float[Array, "K B N"] = safe_sqrt(approx_c2)
 
-    # Normalize eigenvectors per (k, band) so they sum to 1
     norm: Float[Array, "K B 1"] = safe_norm(approx_c, axis=-1, keepdims=True)
     normalized: Float[Array, "K B N"] = safe_divide(approx_c, norm)
     eigenvectors: Complex[Array, "K B N"] = normalized.astype(jnp.complex128)

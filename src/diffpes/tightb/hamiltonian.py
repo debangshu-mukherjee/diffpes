@@ -37,8 +37,6 @@ def build_hamiltonian_k(
     hopping indices. The result is Hermitianized:
     ``H = (H_raw + H_raw^dag) / 2``.
 
-    Extended Summary
-    ----------------
     The Bloch sum is evaluated entirely in **fractional coordinates**.
     Because ``k`` is given in units of the reciprocal lattice vectors
     and ``R`` (encoded in each hopping triple) is given in units of the
@@ -61,6 +59,8 @@ def build_hamiltonian_k(
     (e.g. only A -> B hops); the Hermitianization symmetrically fills
     the lower triangle and also corrects floating-point round-off that
     would otherwise break ``jnp.linalg.eigh``.
+
+    :see: :class:`~.test_hamiltonian.TestBuildHamiltonianK`
 
     Parameters
     ----------
@@ -90,6 +90,11 @@ def build_hamiltonian_k(
     ``@beartype``, shape and dtype errors are caught at call time
     rather than deep inside the JAX trace.
     """
+    h_idx: int
+    orb_i: int
+    orb_j: int
+    R_ijk: Array
+
     H: Complex[Array, "O O"] = jnp.zeros(
         (n_orbitals, n_orbitals), dtype=jnp.complex128
     )
@@ -97,12 +102,9 @@ def build_hamiltonian_k(
     for h_idx, (orb_i, orb_j, R_ijk) in enumerate(hopping_indices):
         t: Float[Array, " "] = hopping_params[h_idx]
         R_frac: Float[Array, " 3"] = jnp.array(R_ijk, dtype=jnp.float64)
-        # Bloch phase with fractional coordinates:
-        # exp(2πi k_frac · R_frac), since k·R = 2π k_frac·R_frac
         phase: Complex[Array, " "] = jnp.exp(2j * jnp.pi * jnp.dot(k, R_frac))
         H = H.at[orb_i, orb_j].add(t * phase)
 
-    # Hermitianize
     H = (H + H.conj().T) / 2.0
     H_k: Complex[Array, "O O"] = H
     return H_k

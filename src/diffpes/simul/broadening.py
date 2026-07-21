@@ -43,6 +43,8 @@ def gaussian(
     deviation ``sigma``, normalized so that the integral over all energies
     equals unity.
 
+    :see: :class:`~.test_broadening.TestGaussian`
+
     Implementation Logic
     --------------------
     The function evaluates the analytic Gaussian probability density::
@@ -93,7 +95,7 @@ def gaussian(
 
 
 @jaxtyped(typechecker=beartype)
-def voigt(
+def voigt(  # noqa: DOC502 -- eqx.error_if raises under JAX execution.
     energy_range: Float[Array, " E"],
     center: ScalarFloat,
     sigma: ScalarFloat,
@@ -103,8 +105,8 @@ def voigt(
 
     Evaluates a Voigt lineshape using the pseudo-Voigt method of
     Thompson, Cox & Hastings (1987) [1]_, which expresses the Voigt
-    profile
-    as a linear combination of Gaussian and Lorentzian components:
+    profile as a linear combination of Gaussian and Lorentzian
+    components:
 
         V(E) = eta * L(E) + (1 - eta) * G(E)
 

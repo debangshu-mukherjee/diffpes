@@ -1,113 +1,143 @@
-"""Test self-energy configuration construction and validation.
+"""Validate self-energy configuration carriers and factory modes.
 
-Extended Summary
-----------------
-Covers configuration modes, defaults, PyTree round trips, and tabulated-node rejection for the carrier defined in ``diffpes.types.self_energy``.
+The cases cover differentiable leaf reconstruction, default and polynomial
+configuration, and the static and traced validation rules for tabulated data.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
 
-from diffpes.types import make_self_energy_config
+from diffpes.types import SelfEnergyConfig, make_self_energy_config
 from tests._assertions import assert_rejects
 
 
 class TestSelfEnergyConfig:
-    """Tests for :func:`diffpes.types.make_self_energy_config`.
+    """Validate :class:`~diffpes.types.SelfEnergyConfig` as a JAX PyTree.
 
-    Validates construction of ``SelfEnergyConfig`` PyTrees that
-    parameterize the imaginary part of the electron self-energy for
-    ARPES spectral function broadening. Covers the default constant
-    mode, polynomial mode, validation errors for tabulated mode
-    without energy nodes and for invalid mode strings, and JAX PyTree
-    flatten/unflatten round-trip fidelity.
+    The static mode and differentiable coefficient leaves must survive JAX
+    flattening and reconstruction together.
+
+    :see: :class:`~diffpes.types.SelfEnergyConfig`
     """
 
-    def test_constant_default(self) -> None:
-        """Verify default SelfEnergyConfig uses constant mode with gamma=0.1.
+    def test_pytree_round_trip(self) -> None:
+        """Preserve self-energy mode and coefficients through reconstruction.
 
-        Calls ``make_self_energy_config()`` with no arguments. Asserts
-        ``mode`` is ``"constant"``, ``coefficients`` shape is (1,),
-        and the single coefficient value is approximately 0.1 (the
-        default gamma broadening), verified via ``pytest.approx``.
-        This confirms the factory's default initialization path.
+        The check compares a constant 0.2 eV broadening before and after a JAX
+        PyTree round trip.
+
+        Notes
+        -----
+        Constructs the carrier through its factory, flattens and unflattens it
+        with JAX, then compares the static and array fields independently.
         """
-        config = make_self_energy_config()
+        config: SelfEnergyConfig = make_self_energy_config(gamma=0.2)
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(config)
+        restored: SelfEnergyConfig = jax.tree_util.tree_unflatten(tree, leaves)
+
+        assert restored.mode == config.mode
+        chex.assert_trees_all_close(restored.coefficients, config.coefficients)
+
+
+class TestMakeSelfEnergyConfig:
+    """Validate :func:`~diffpes.types.make_self_energy_config`.
+
+    The factory must construct supported constant and polynomial modes while
+    rejecting invalid selectors and malformed tabulated coordinates.
+
+    :see: :func:`~diffpes.types.make_self_energy_config`
+    """
+
+    def test_constructs_constant_default(self) -> None:
+        """Construct the documented constant 0.1 eV default broadening.
+
+        The check verifies the static mode, one-element coefficient shape, and
+        scalar value to ``pytest.approx`` precision.
+
+        Notes
+        -----
+        Calls the factory without arguments and compares every field defining
+        the default constant configuration.
+        """
+        config: SelfEnergyConfig = make_self_energy_config()
+
         assert config.mode == "constant"
-        assert config.coefficients.shape == (1,)
+        chex.assert_shape(config.coefficients, (1,))
         assert float(config.coefficients[0]) == pytest.approx(0.1)
 
-    def test_polynomial(self) -> None:
-        """Verify polynomial mode accepts explicit coefficients and stores mode string.
+    def test_constructs_polynomial_mode(self) -> None:
+        """Preserve two explicit polynomial coefficients.
 
-        Constructs a SelfEnergyConfig with ``mode="polynomial"`` and
-        two coefficients [0.01, 0.1] (representing a linear polynomial
-        in energy). Asserts ``mode`` is ``"polynomial"``, confirming
-        the factory accepts this mode and stores the mode string as
-        auxiliary data without error.
+        The check verifies the static polynomial selector and coefficients
+        ``[0.01, 0.1]`` used for energy-dependent broadening.
+
+        Notes
+        -----
+        Constructs the polynomial configuration with a JAX array and compares
+        the stored mode and coefficients directly.
         """
-        config = make_self_energy_config(
-            mode="polynomial",
-            coefficients=jnp.array([0.01, 0.1]),
+        coefficients: jax.Array = jnp.array([0.01, 0.1])
+        config: SelfEnergyConfig = make_self_energy_config(
+            mode="polynomial", coefficients=coefficients
         )
+
         assert config.mode == "polynomial"
+        chex.assert_trees_all_close(config.coefficients, coefficients)
 
-    def test_tabulated_requires_nodes(self) -> None:
-        """Verify tabulated mode raises ValueError when energy_nodes are not provided.
+    def test_rejects_missing_tabulated_nodes(self) -> None:
+        """Reject tabulated broadening without interpolation nodes.
 
-        Calls ``make_self_energy_config(mode="tabulated")`` without
-        supplying ``energy_nodes``. Asserts ``ValueError`` is raised
-        with a message matching ``"energy_nodes required"``, confirming
-        the factory enforces that tabulated interpolation mode requires
-        an explicit set of energy grid nodes.
+        The check enforces the required coordinate set for a tabulated
+        self-energy configuration.
+
+        Notes
+        -----
+        Selects tabulated mode without ``energy_nodes`` and matches the static
+        factory diagnostic.
         """
         with pytest.raises(ValueError, match="energy_nodes required"):
             make_self_energy_config(mode="tabulated")
 
-    def test_invalid_mode_raises(self) -> None:
-        """Verify an unrecognized mode string raises ValueError.
+    def test_rejects_invalid_mode(self) -> None:
+        """Reject a self-energy mode outside the supported static set.
 
-        Calls ``make_self_energy_config(mode="invalid")``. Asserts
-        ``ValueError`` is raised with a message matching
-        ``"mode must be"``, confirming the factory validates the mode
-        string against the allowed set (``"constant"``,
-        ``"polynomial"``, ``"tabulated"``) and rejects unknown values.
+        The check isolates selector validation from all numerical parameter
+        checks.
+
+        Notes
+        -----
+        Supplies ``mode="invalid"`` and matches the factory's allowed-mode
+        diagnostic.
         """
         with pytest.raises(ValueError, match="mode must be"):
             make_self_energy_config(mode="invalid")
 
-    def test_pytree_round_trip(self) -> None:
-        """Verify SelfEnergyConfig survives a JAX PyTree flatten/unflatten round-trip.
+    def test_rejects_unsorted_or_mismatched_nodes(self) -> None:
+        """Reject repeated nodes and unequal node and coefficient lengths.
 
-        Constructs a constant-mode SelfEnergyConfig with ``gamma=0.2``.
-        Flattens via ``jax.tree_util.tree_flatten`` and reconstructs
-        via ``jax.tree_util.tree_unflatten``. Asserts that the restored
-        ``mode`` string matches the original and the ``coefficients``
-        array matches via ``jnp.allclose``, confirming that both the
-        auxiliary string data and the differentiable leaf arrays survive
-        the round-trip.
+        The check covers both tabulated-axis invariants with otherwise finite
+        numerical inputs.
+
+        Notes
+        -----
+        Uses the shared eager-and-JIT rejection helper for repeated nodes and
+        then for a three-node, two-coefficient length mismatch.
         """
-        config = make_self_energy_config(gamma=0.2)
-        leaves, treedef = jax.tree_util.tree_flatten(config)
-        config2 = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert config2.mode == config.mode
-        assert jnp.allclose(config2.coefficients, config.coefficients)
-
-
-def test_self_energy_rejects_unsorted_nodes() -> None:
-    """Reject non-increasing and length-mismatched tabulated nodes."""
-    assert_rejects(
-        make_self_energy_config,
-        mode="tabulated",
-        coefficients=jnp.ones(2),
-        energy_nodes=jnp.array([0.0, 0.0]),
-        match="energy nodes strictly increasing",
-    )
-    assert_rejects(
-        make_self_energy_config,
-        mode="tabulated",
-        coefficients=jnp.ones(2),
-        energy_nodes=jnp.arange(3.0),
-        match="energy_nodes and coefficients must have the same length",
-    )
+        assert_rejects(
+            make_self_energy_config,
+            mode="tabulated",
+            coefficients=jnp.ones(2),
+            energy_nodes=jnp.array([0.0, 0.0]),
+            match="energy nodes strictly increasing",
+        )
+        assert_rejects(
+            make_self_energy_config,
+            mode="tabulated",
+            coefficients=jnp.ones(2),
+            energy_nodes=jnp.arange(3.0),
+            match="energy_nodes and coefficients must have the same length",
+        )

@@ -45,44 +45,54 @@ def compute_oam(
     projection coefficient. Contributions from p- and d-orbitals
     are computed separately and then summed.
 
+    :see: :class:`~.test_oam.TestComputeOam`
+
     Implementation Logic
     --------------------
-    1. **Extract p-orbital projections**
-       (``slice(1, 4)``, indices 1 through 3)::
+    1. **Extract the p-orbital projections**::
 
-           p_proj = projections[..., slice(1, 4)]
+           p_proj: Float[Array, "K B A 3"] = projections[
+               ..., P_ORBITAL_SLICE
+           ]
 
        Selects the three p-orbital coefficients [py, pz, px]
        corresponding to magnetic quantum numbers m = {+1, 0, -1}.
 
-    2. **Compute p-orbital OAM**::
+    2. **Compute the p-orbital OAM**::
 
-           p_oam = sum(m_p * |p_proj|^2, axis=-1)
+           p_oam: Float[Array, "K B A"] = jnp.sum(
+               M_P * p_proj**2, axis=-1
+           )
 
        Weights each squared projection by its magnetic quantum
        number m_p = [+1, 0, -1] and sums over the p-orbital
        subspace.
 
-    3. **Extract d-orbital projections**
-       (``slice(4, 9)``, indices 4 through 8)::
+    3. **Extract the d-orbital projections**::
 
-           d_proj = projections[..., slice(4, 9)]
+           d_proj: Float[Array, "K B A 5"] = projections[
+               ..., D_ORBITAL_SLICE
+           ]
 
        Selects the five d-orbital coefficients [dxy, dyz, dz2,
        dxz, dx2-y2] corresponding to m = {-2, -1, 0, +1, +2}.
 
-    4. **Compute d-orbital OAM**::
+    4. **Compute the d-orbital OAM**::
 
-           d_oam = sum(m_d * |d_proj|^2, axis=-1)
+           d_oam: Float[Array, "K B A"] = jnp.sum(
+               M_D * d_proj**2, axis=-1
+           )
 
        Weights each squared projection by its magnetic quantum
        number m_d = [-2, -1, 0, +1, +2] and sums over the
        d-orbital subspace.
 
-    5. **Stack results as [p, d, total]**::
+    5. **Stack the p, d, and total results**::
 
-           total_oam = p_oam + d_oam
-           oam = stack([p_oam, d_oam, total_oam], axis=-1)
+           total_oam: Float[Array, "K B A"] = p_oam + d_oam
+           oam: Float[Array, "K B A 3"] = jnp.stack(
+               [p_oam, d_oam, total_oam], axis=-1
+           )
 
        Returns all three components so that downstream analysis
        can inspect orbital-resolved or total OAM.

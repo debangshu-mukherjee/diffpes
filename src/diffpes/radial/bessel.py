@@ -75,8 +75,6 @@ def spherical_bessel_jl(
 ) -> Float[Array, " ..."]:
     r"""Evaluate spherical Bessel function :math:`j_l(x)`.
 
-    Extended Summary
-    ----------------
     Computes the spherical Bessel function of the first kind
     :math:`j_l(x)` using closed-form seeds for l=0 and l=1, followed
     by upward recurrence for l >= 2.
@@ -127,6 +125,8 @@ def spherical_bessel_jl(
     - The ``jnp.where``-based masking ensures that gradients are
       well-defined everywhere, including at x = 0.
 
+    :see: :class:`~.test_bessel.TestSphericalBesselJl`
+
     Parameters
     ----------
     order : int
@@ -149,7 +149,8 @@ def spherical_bessel_jl(
     The ``order`` parameter is a Python-level integer (not a JAX
     tracer), so changing it requires re-tracing. This is by design
     because the loop bounds and the double-factorial constant depend
-    on ``order`` statically.
+    on ``order`` statically. The series branch preserves the nonzero
+    analytic limiting gradient near zero.
     """
     if order < 0:
         msg: str = "order must be non-negative"
@@ -157,25 +158,21 @@ def spherical_bessel_jl(
 
     x_arr: Float[Array, " ..."] = jnp.asarray(x, dtype=jnp.float64)
     small_mask: Float[Array, " ..."] = jnp.abs(x_arr) < SMALL_ARGUMENT
-    # The series branch carries the nonzero analytic limiting gradient.
     x_safe: Float[Array, " ..."] = jnp.where(small_mask, 1.0, x_arr)
 
     j0_nonzero: Float[Array, " ..."] = jnp.sin(x_safe) / x_safe
+    values: Float[Array, " ..."]
     if order == 0:
-        j0_result: Float[Array, " ..."] = jnp.where(
-            small_mask, 1.0, j0_nonzero
-        )
-        return j0_result
+        values = jnp.where(small_mask, 1.0, j0_nonzero)
+        return values
 
     j1_nonzero: Float[Array, " ..."] = (
         jnp.sin(x_safe) / (x_safe * x_safe) - jnp.cos(x_safe) / x_safe
     )
     if order == 1:
         j1_limit: Float[Array, " ..."] = x_arr / 3.0
-        j1_result: Float[Array, " ..."] = jnp.where(
-            small_mask, j1_limit, j1_nonzero
-        )
-        return j1_result
+        values = jnp.where(small_mask, j1_limit, j1_nonzero)
+        return values
 
     def _recurrence_step(
         index: Integer[Array, ""],
@@ -188,20 +185,25 @@ def spherical_bessel_jl(
         next_value: Float[Array, " ..."] = (
             (2.0 * index_arr + 1.0) / x_safe
         ) * current - previous
-        return current, next_value
+        recurrence_state: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+            current,
+            next_value,
+        )
+        return recurrence_state
 
     jl_nonzero: Float[Array, " ..."]
-    _, jl_nonzero = jax.lax.fori_loop(
-        1,
-        order,
-        _recurrence_step,
-        (j0_nonzero, j1_nonzero),
+    loop_state: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+        jax.lax.fori_loop(
+            1,
+            order,
+            _recurrence_step,
+            (j0_nonzero, j1_nonzero),
+        )
     )
+    jl_nonzero = loop_state[1]
     double_factorial: float = _odd_double_factorial(2 * order + 1)
     small_limit: Float[Array, " ..."] = (x_arr**order) / double_factorial
-    values: Float[Array, " ..."] = jnp.where(
-        small_mask, small_limit, jl_nonzero
-    )
+    values = jnp.where(small_mask, small_limit, jl_nonzero)
     return values
 
 

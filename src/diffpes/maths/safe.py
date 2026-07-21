@@ -19,7 +19,7 @@ Routine Listings
 :func:`safe_log`
     Evaluate log with a finite floor and zero gradients below it.
 :func:`safe_norm`
-    Calculate a Euclidean norm with a zero gradient at zero vectors.
+    Compute a Euclidean norm with a zero gradient at zero vectors.
 :func:`safe_power`
     Raise positive inputs to a power and return zero otherwise.
 :func:`safe_sqrt`
@@ -46,6 +46,9 @@ def safe_divide(
     fallback: ScalarFloat = 0.0,
 ) -> Float[Array, " ..."]:
     """Divide with a fallback and zero quotient gradients at zero denominators.
+
+    Applies elementwise guarded division to broadcast-compatible real arrays.
+    The fallback defines the value on the zero-denominator boundary.
 
     :see: :class:`~.test_safe.TestSafeDivide`
 
@@ -83,6 +86,9 @@ def safe_divide(
 def safe_sqrt(x: Float[Array, " ..."]) -> Float[Array, " ..."]:
     """Evaluate sqrt on positive inputs and return zero otherwise.
 
+    Applies the principal real square root only on its positive domain. The
+    guarded branch defines a finite value outside that domain.
+
     :see: :class:`~.test_safe.TestSafeSqrt`
 
     Parameters
@@ -114,7 +120,10 @@ def safe_norm(
     axis: int = -1,
     keepdims: bool = False,
 ) -> Float[Array, " ..."]:
-    """Calculate a Euclidean norm with a zero gradient at zero vectors.
+    """Compute a Euclidean norm with a zero gradient at zero vectors.
+
+    Reduces the selected vector axis with a guarded square root. The operation
+    supports batched vectors and an optional retained axis.
 
     :see: :class:`~.test_safe.TestSafeNorm`
 
@@ -150,6 +159,9 @@ def safe_norm(
 def safe_arccos(x: Float[Array, " ..."]) -> Float[Array, " ..."]:
     """Evaluate arccos with saturated values and zero boundary gradients.
 
+    Computes real angles on the closed cosine range. Values outside the range
+    use the nearest physical endpoint.
+
     :see: :class:`~.test_safe.TestSafeArccos`
 
     Parameters
@@ -183,6 +195,9 @@ def safe_arctan2(
     y: Float[Array, " ..."], x: Float[Array, " ..."]
 ) -> Float[Array, " ..."]:
     """Evaluate arctan2 with a zero value and gradient at the origin.
+
+    Computes four-quadrant angles for broadcast-compatible Cartesian
+    coordinates. The origin uses an explicit boundary convention.
 
     :see: :class:`~.test_safe.TestSafeArctan2`
 
@@ -222,6 +237,9 @@ def safe_log(
 ) -> Float[Array, " ..."]:
     """Evaluate log with a finite floor and zero gradients below it.
 
+    Computes the natural logarithm on a positive guarded domain. The floor
+    keeps the returned values finite for small or nonpositive inputs.
+
     :see: :class:`~.test_safe.TestSafeLog`
 
     Parameters
@@ -252,6 +270,9 @@ def safe_power(
     x: Float[Array, " ..."], exponent: ScalarFloat
 ) -> Float[Array, " ..."]:
     """Raise positive inputs to a power and return zero otherwise.
+
+    Computes real powers on positive bases for arbitrary real exponents. A
+    guarded branch keeps fractional powers outside that domain finite.
 
     :see: :class:`~.test_safe.TestSafePower`
 

@@ -1,115 +1,204 @@
-"""Test scalar and spin-orbit volumetric carriers.
+"""Validate scalar and spin-orbit volumetric carriers and factories.
 
-Extended Summary
-----------------
-Covers defaults, PyTree round trips, and static grid-shape validation for the carriers defined in ``diffpes.types.volumetric``.
+The cases cover PyTree reconstruction, default atom counts, and consistency
+between static grid metadata and scalar or vector-valued volumetric arrays.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 
-from diffpes.types import make_soc_volumetric_data, make_volumetric_data
+from diffpes.types import (
+    SOCVolumetricData,
+    VolumetricData,
+    make_soc_volumetric_data,
+    make_volumetric_data,
+)
 from tests._assertions import assert_rejects
 
 
-class TestVolumetricPyTree:
-    """PyTree round-trip tests for VolumetricData and SOCVolumetricData.
+class TestVolumetricData:
+    """Validate :class:`~diffpes.types.VolumetricData` as a JAX PyTree.
 
-    Exercises the ``tree_flatten`` / ``tree_unflatten`` methods and
-    the ``atom_counts=None`` default path in both factories.
+    Charge-density leaves and static grid and species metadata must survive
+    flattening and reconstruction together.
+
+    :see: :class:`~diffpes.types.VolumetricData`
     """
 
-    def test_volumetric_data_pytree_round_trip(self) -> None:
-        """Verify VolumetricData survives a JAX PyTree flatten/unflatten round-trip.
+    def test_pytree_round_trip(self) -> None:
+        """Preserve charge values and static metadata through reconstruction.
 
-        Constructs a minimal VolumetricData, flattens and unflattens it,
-        then asserts the ``charge`` array is preserved.
+        The check compares a ``4 x 4 x 4`` unit charge grid, its grid shape,
+        and two species labels after a JAX PyTree round trip.
+
+        Notes
+        -----
+        Constructs the scalar carrier through its factory, uses JAX tree
+        utilities for reconstruction, and compares numerical and static fields.
         """
-        lattice = jnp.eye(3, dtype=jnp.float64)
-        coords = jnp.zeros((2, 3), dtype=jnp.float64)
-        charge = jnp.ones((4, 4, 4), dtype=jnp.float64)
-        vol = make_volumetric_data(
-            lattice=lattice,
-            coords=coords,
-            charge=charge,
+        volume: VolumetricData = make_volumetric_data(
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((2, 3)),
+            charge=jnp.ones((4, 4, 4)),
             grid_shape=(4, 4, 4),
             symbols=("Fe", "Co"),
         )
-        leaves, treedef = jax.tree_util.tree_flatten(vol)
-        vol2 = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert jnp.allclose(vol2.charge, vol.charge)
-        assert vol2.grid_shape == vol.grid_shape
-        assert vol2.symbols == vol.symbols
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(volume)
+        restored: VolumetricData = jax.tree_util.tree_unflatten(tree, leaves)
 
-    def test_volumetric_data_atom_counts_none_default(self) -> None:
-        """Verify that atom_counts=None creates a zero-length int32 array.
+        chex.assert_trees_all_close(restored.charge, volume.charge)
+        chex.assert_equal(restored.grid_shape, volume.grid_shape)
+        chex.assert_equal(restored.symbols, volume.symbols)
 
-        When ``atom_counts`` is omitted, the factory should default to
-        ``jnp.zeros(0, dtype=jnp.int32)`` so the field is always an array.
+
+class TestSOCVolumetricData:
+    """Validate :class:`~diffpes.types.SOCVolumetricData` as a JAX PyTree.
+
+    Scalar and vector magnetization leaves must remain associated with their
+    common spin-orbit grid through JAX transformations.
+
+    :see: :class:`~diffpes.types.SOCVolumetricData`
+    """
+
+    def test_pytree_round_trip(self) -> None:
+        """Preserve charge and magnetization grids through reconstruction.
+
+        The check uses a ``2 x 2 x 2`` scalar grid and a final vector axis of
+        length three for the spin-orbit magnetization components.
+
+        Notes
+        -----
+        Constructs the SOC carrier, applies a JAX flatten and unflatten round
+        trip, and compares all numerical grid leaves with Chex.
         """
-        vol = make_volumetric_data(
-            lattice=jnp.eye(3, dtype=jnp.float64),
-            coords=jnp.zeros((1, 3), dtype=jnp.float64),
-            charge=jnp.ones((2, 2, 2), dtype=jnp.float64),
+        volume: SOCVolumetricData = make_soc_volumetric_data(
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((1, 3)),
+            charge=jnp.ones((2, 2, 2)),
+            magnetization=jnp.zeros((2, 2, 2)),
+            magnetization_vector=jnp.zeros((2, 2, 2, 3)),
             grid_shape=(2, 2, 2),
             symbols=("Fe",),
         )
-        assert vol.atom_counts.dtype == jnp.int32
-        assert vol.atom_counts.shape == (0,)
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(volume)
+        restored: SOCVolumetricData = jax.tree_util.tree_unflatten(
+            tree, leaves
+        )
 
-    def test_soc_volumetric_data_pytree_round_trip(self) -> None:
-        """Verify SOCVolumetricData survives a JAX PyTree flatten/unflatten round-trip."""
-        lattice = jnp.eye(3, dtype=jnp.float64)
-        coords = jnp.zeros((1, 3), dtype=jnp.float64)
-        charge = jnp.ones((2, 2, 2), dtype=jnp.float64)
-        mag = jnp.zeros((2, 2, 2), dtype=jnp.float64)
-        mag_vec = jnp.zeros((2, 2, 2, 3), dtype=jnp.float64)
-        vol = make_soc_volumetric_data(
-            lattice=lattice,
-            coords=coords,
-            charge=charge,
-            magnetization=mag,
-            magnetization_vector=mag_vec,
+        chex.assert_trees_all_close(restored.charge, volume.charge)
+        chex.assert_trees_all_close(
+            restored.magnetization_vector, volume.magnetization_vector
+        )
+
+
+class TestMakeVolumetricData:
+    """Validate :func:`~diffpes.types.make_volumetric_data`.
+
+    The scalar factory must supply an empty integer atom-count array and reject
+    charge grids inconsistent with static shape metadata.
+
+    :see: :func:`~diffpes.types.make_volumetric_data`
+    """
+
+    def test_supplies_empty_atom_counts(self) -> None:
+        """Create a zero-length int32 atom-count array when omitted.
+
+        The check verifies both dtype and shape of the stable array sentinel
+        used instead of ``None``.
+
+        Notes
+        -----
+        Constructs a one-species volume without ``atom_counts`` and uses Chex
+        to compare the resulting array shape and dtype.
+        """
+        volume: VolumetricData = make_volumetric_data(
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((1, 3)),
+            charge=jnp.ones((2, 2, 2)),
             grid_shape=(2, 2, 2),
             symbols=("Fe",),
         )
-        leaves, treedef = jax.tree_util.tree_flatten(vol)
-        vol2 = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert jnp.allclose(vol2.charge, vol.charge)
-        assert vol2.grid_shape == vol.grid_shape
 
-    def test_soc_volumetric_data_atom_counts_none_default(self) -> None:
-        """Verify that atom_counts=None creates a zero-length int32 array in SOCVolumetricData."""
-        vol = make_soc_volumetric_data(
-            lattice=jnp.eye(3, dtype=jnp.float64),
-            coords=jnp.zeros((1, 3), dtype=jnp.float64),
-            charge=jnp.ones((2, 2, 2), dtype=jnp.float64),
-            magnetization=jnp.zeros((2, 2, 2), dtype=jnp.float64),
-            magnetization_vector=jnp.zeros((2, 2, 2, 3), dtype=jnp.float64),
-            grid_shape=(2, 2, 2),
+        chex.assert_shape(volume.atom_counts, (0,))
+        assert volume.atom_counts.dtype == jnp.int32
+
+    def test_rejects_grid_shape_mismatch(self) -> None:
+        """Reject charge data inconsistent with the declared grid shape.
+
+        The check verifies that a ``2 x 2 x 2`` charge array cannot be labeled
+        as a ``1 x 1 x 1`` grid.
+
+        Notes
+        -----
+        Supplies otherwise compatible geometry and matches the factory's
+        static charge-shape diagnostic.
+        """
+        assert_rejects(
+            make_volumetric_data,
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((1, 3)),
+            charge=jnp.zeros((2, 2, 2)),
+            grid_shape=(1, 1, 1),
+            match="grid_shape must match charge shape",
+        )
+
+
+class TestMakeSOCVolumetricData:
+    """Validate :func:`~diffpes.types.make_soc_volumetric_data`.
+
+    The SOC factory must provide the same atom-count sentinel and require the
+    vector magnetization spatial dimensions to match the static grid.
+
+    :see: :func:`~diffpes.types.make_soc_volumetric_data`
+    """
+
+    def test_supplies_empty_atom_counts(self) -> None:
+        """Create a zero-length int32 atom-count array when omitted.
+
+        The check verifies the stable array sentinel for a minimal SOC volume
+        with all four required grid blocks.
+
+        Notes
+        -----
+        Constructs a one-point SOC volume without ``atom_counts`` and checks
+        the resulting array dtype and shape.
+        """
+        volume: SOCVolumetricData = make_soc_volumetric_data(
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((1, 3)),
+            charge=jnp.ones((1, 1, 1)),
+            magnetization=jnp.zeros((1, 1, 1)),
+            magnetization_vector=jnp.zeros((1, 1, 1, 3)),
+            grid_shape=(1, 1, 1),
             symbols=("Fe",),
         )
-        assert vol.atom_counts.dtype == jnp.int32
-        assert vol.atom_counts.shape == (0,)
 
+        chex.assert_shape(volume.atom_counts, (0,))
+        assert volume.atom_counts.dtype == jnp.int32
 
-def test_volumetric_factories_reject_grid_mismatches() -> None:
-    """Reject scalar and SOC grids inconsistent with static metadata."""
-    assert_rejects(
-        make_volumetric_data,
-        lattice=jnp.eye(3),
-        coords=jnp.zeros((1, 3)),
-        charge=jnp.zeros((2, 2, 2)),
-        grid_shape=(1, 1, 1),
-        match="grid_shape must match charge shape",
-    )
-    assert_rejects(
-        make_soc_volumetric_data,
-        lattice=jnp.eye(3),
-        coords=jnp.zeros((1, 3)),
-        charge=jnp.zeros((1, 1, 1)),
-        magnetization=jnp.zeros((1, 1, 1)),
-        magnetization_vector=jnp.zeros((2, 1, 1, 3)),
-        grid_shape=(1, 1, 1),
-        match="grid_shape must match magnetization_vector spatial shape",
-    )
+    def test_rejects_vector_grid_shape_mismatch(self) -> None:
+        """Reject vector magnetization with incompatible spatial dimensions.
+
+        The check verifies all three spatial dimensions against the declared
+        grid independently of the final three-component axis.
+
+        Notes
+        -----
+        Supplies a vector grid with a doubled first dimension and matches the
+        factory's static spatial-shape diagnostic.
+        """
+        assert_rejects(
+            make_soc_volumetric_data,
+            lattice=jnp.eye(3),
+            coords=jnp.zeros((1, 3)),
+            charge=jnp.zeros((1, 1, 1)),
+            magnetization=jnp.zeros((1, 1, 1)),
+            magnetization_vector=jnp.zeros((2, 1, 1, 3)),
+            grid_shape=(1, 1, 1),
+            match="grid_shape must match magnetization_vector spatial shape",
+        )

@@ -1,12 +1,17 @@
-"""Tests for cumulative scientific-certification policies."""
+"""Tests for cumulative scientific-certification policies.
+
+The tests cover public behavior, differentiability, validation, and stable
+scientific identity in the supported certification regime.
+"""
 
 import jax.numpy as jnp
+from beartype.typing import Any
 
-from diffpes.certify.evidence import evaluate_claim
-from diffpes.certify.policy import achieved_levels, evaluate_policy
+from diffpes.certify import achieved_levels, evaluate_claim, evaluate_policy
 
 
-def _claim(name, predicate, passed=True):
+def _claim(name: Any, predicate: Any, passed: Any = True) -> Any:
+    measured: Any
     measured = jnp.zeros(1) if passed else jnp.ones(1)
     return evaluate_claim(
         name,
@@ -18,11 +23,25 @@ def _claim(name, predicate, passed=True):
     )
 
 
-class TestPolicy:
-    """Verify level accumulation and policy downgrade behavior."""
+class TestAchievedLevels:
+    """Verify :func:`~diffpes.certify.achieved_levels`.
 
-    def test_exploratory_reaches_identified_and_validated(self):
-        """Achieve the two exploratory levels from required claims."""
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.achieved_levels`
+    """
+
+    def test_exploratory_reaches_identified_and_validated(self) -> None:
+        """Achieve the two exploratory levels from required claims.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        report: Any
         report = evaluate_policy(
             (
                 _claim("identity", "identity.model"),
@@ -32,8 +51,26 @@ class TestPolicy:
         )
         assert achieved_levels(report) == ("identified", "validated")
 
-    def test_failed_lower_level_blocks_higher_levels(self):
-        """Make cumulative outcomes false above a failed identity claim."""
+
+class TestEvaluatePolicy:
+    """Verify :func:`~diffpes.certify.evaluate_policy`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.evaluate_policy`
+    """
+
+    def test_failed_lower_level_blocks_higher_levels(self) -> None:
+        """Make cumulative outcomes false above a failed identity claim.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        report: Any
         report = evaluate_policy(
             (
                 _claim("identity", "identity.model", passed=False),

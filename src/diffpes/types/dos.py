@@ -9,9 +9,9 @@ VASP DOSCAR files.
 Routine Listings
 ----------------
 :class:`DensityOfStates`
-    PyTree for density of states.
+    Store density-of-states data in a JAX PyTree.
 :class:`FullDensityOfStates`
-    PyTree for complete density of states with spin and PDOS.
+    Store spin-resolved total and projected DOS data in a JAX PyTree.
 :func:`make_density_of_states`
     Create a validated DensityOfStates instance.
 :func:`make_full_density_of_states`
@@ -32,7 +32,7 @@ from .aliases import ScalarNumeric
 
 
 class DensityOfStates(eqx.Module):
-    """PyTree for density of states.
+    """Store density-of-states data in a JAX PyTree.
 
     Stores total density of states (DOS) data parsed from VASP DOSCAR
     files. The DOS is represented as a pair of 1-D arrays sharing the
@@ -42,6 +42,9 @@ class DensityOfStates(eqx.Module):
     through ``jax.jit``, ``jax.grad``, ``jax.vmap``, and other JAX
     transformations. All fields are JAX arrays (no auxiliary data),
     so every field participates in autodiff tracing.
+
+
+    :see: :class:`~.test_dos.TestDensityOfStates`
 
     Attributes
     ----------
@@ -70,7 +73,7 @@ class DensityOfStates(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_density_of_states(
+def make_density_of_states(  # noqa: DOC503
     energy: Float[Array, " Ee"],
     total_dos: Float[Array, " Ed"],
     fermi_energy: ScalarNumeric = 0.0,
@@ -82,19 +85,42 @@ def make_density_of_states(
     JAX arrays so that downstream JAX transformations operate at
     double precision without silent dtype promotion surprises.
 
+    :see: :class:`~.test_dos.TestMakeDensityOfStates`
+
     Implementation Logic
     --------------------
-    1. **Cast energy** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast total_dos** to ``jnp.float64`` via ``jnp.asarray``.
-    3. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    4. **Construct** the ``DensityOfStates`` Equinox module from the
-       three validated arrays and return it.
+    1. **Prepare the normalized values**::
+
+           energy_arr = jnp.asarray(energy, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           energy_arr.shape[0] != dos_arr.shape[0]
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.diff(energy_arr) > 0.0)
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return dos
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    energy : Float[Array, " E"]
+    energy : Float[Array, " Ee"]
         Energy axis in eV.
-    total_dos : Float[Array, " E"]
+    total_dos : Float[Array, " Ed"]
         Total density of states.
     fermi_energy : ScalarNumeric, optional
         Fermi level in eV. Default is 0.0.
@@ -111,6 +137,13 @@ def make_density_of_states(
     EquinoxRuntimeError
         If the energy axis is not strictly increasing or DOS values are
         non-finite.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the energy and DOS lengths differ. Traced validation uses
+    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when the energy axis
+    is not increasing or the DOS contains a non-finite value.
 
     See Also
     --------
@@ -137,21 +170,20 @@ def make_density_of_states(
             ~(jnp.all(jnp.isfinite(dos_arr))),
             "make_density_of_states: dos finite",
         )
-        return DensityOfStates(
+        validated_dos: DensityOfStates = DensityOfStates(
             energy=energy_arr,
             total_dos=dos_arr,
             fermi_energy=fermi_arr,
         )
+        return validated_dos
 
     dos: DensityOfStates = validate_and_create()
     return dos
 
 
 class FullDensityOfStates(eqx.Module):
-    """PyTree for complete density of states with spin and PDOS.
+    """Store spin-resolved total and projected DOS data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores the full DOS data from a VASP DOSCAR file including
     spin-resolved total DOS, integrated DOS, and per-atom
     site-projected DOS. Returned by ``read_doscar`` when
@@ -164,6 +196,9 @@ class FullDensityOfStates(eqx.Module):
     tracing, while ``natoms`` is a plain Python ``int`` stored as
     auxiliary data because it is a structural constant that JAX
     cannot trace.
+
+
+    :see: :class:`~.test_dos.TestFullDensityOfStates`
 
     Attributes
     ----------
@@ -194,8 +229,8 @@ class FullDensityOfStates(eqx.Module):
         Fermi level energy in eV. A 0-D scalar array.
         JAX-traced (differentiable).
     natoms : int
-        Number of atoms in the unit cell. **Static** structural metadata;
-        changing it triggers retracing.
+        Number of atoms in the unit cell (**static** -- a compile-time
+        constant; changing it triggers retracing).
 
     Notes
     -----
@@ -227,7 +262,7 @@ class FullDensityOfStates(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_full_density_of_states(
+def make_full_density_of_states(  # noqa: DOC503
     energy: Float[Array, " Ee"],
     total_dos_up: Float[Array, " Eu"],
     integrated_dos_up: Float[Array, " Eiu"],
@@ -239,8 +274,6 @@ def make_full_density_of_states(
 ) -> FullDensityOfStates:
     """Create a validated ``FullDensityOfStates`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises full density of
     states data before constructing a ``FullDensityOfStates`` PyTree.
     All non-None numeric arrays are cast to ``float64`` for numerical
@@ -258,39 +291,57 @@ def make_full_density_of_states(
     simpler case of a single total-DOS channel, prefer
     :func:`make_density_of_states` instead.
 
+    :see: :class:`~.test_dos.TestMakeFullDensityOfStates`
+
     Implementation Logic
     --------------------
-    1. **Cast energy** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast total_dos_up** to ``jnp.float64``.
-    3. **Cast integrated_dos_up** to ``jnp.float64``.
-    4. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    5. **Cast optional fields** (``total_dos_down``,
-       ``integrated_dos_down``, ``pdos``) to ``jnp.float64`` when
-       not ``None``; otherwise leave as ``None``.
-    6. **Keep natoms** as a Python ``int`` (not cast). It is stored
-       as auxiliary data in the resulting PyTree.
-    7. **Construct** the ``FullDensityOfStates`` Equinox module from all
-       fields and return it.
+    1. **Prepare the normalized values**::
+
+           energy_arr = jnp.asarray(energy, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           up_arr.shape[0] != nenergy
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.diff(energy_arr) > 0.0)
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return dos
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    energy : Float[Array, " E"]
+    energy : Float[Array, " Ee"]
         Energy axis in eV.
-    total_dos_up : Float[Array, " E"]
+    total_dos_up : Float[Array, " Eu"]
         Spin-up total DOS (states/eV).
-    integrated_dos_up : Float[Array, " E"]
+    integrated_dos_up : Float[Array, " Eiu"]
         Spin-up integrated (cumulative) DOS.
     fermi_energy : ScalarNumeric, optional
         Fermi level in eV. Default is 0.0.
-    total_dos_down : Optional[Float[Array, " E"]], optional
+    total_dos_down : Optional[Float[Array, " Ed"]], optional
         Spin-down total DOS. Default is None (ISPIN=1).
-    integrated_dos_down : Optional[Float[Array, " E"]], optional
+    integrated_dos_down : Optional[Float[Array, " Eid"]], optional
         Spin-down integrated DOS. Default is None.
-    pdos : Optional[Float[Array, "A E C"]], optional
+    pdos : Optional[Float[Array, "A Ep C"]], optional
         Per-atom site-projected DOS with C orbital columns.
         Default is None.
     natoms : int, optional
-        Number of atoms in the unit cell. Default is 0.
+        Number of atoms in the unit cell (**static** -- a compile-time
+        constant; changing it triggers retracing). Default is 0.
 
     Returns
     -------
@@ -306,6 +357,13 @@ def make_full_density_of_states(
     EquinoxRuntimeError
         If the energy axis is not strictly increasing or any DOS channel
         contains non-finite values.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    any present DOS channel disagrees with the energy-axis length. Traced
+    validation uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when
+    the energy axis is not increasing or a present DOS channel is non-finite.
 
     See Also
     --------
@@ -396,7 +454,7 @@ def make_full_density_of_states(
                 ~(jnp.all(jnp.isfinite(pdos_arr))),
                 "make_full_density_of_states: pdos finite",
             )
-        return FullDensityOfStates(
+        validated_dos: FullDensityOfStates = FullDensityOfStates(
             energy=energy_arr,
             total_dos_up=up_arr,
             total_dos_down=down_arr,
@@ -406,6 +464,7 @@ def make_full_density_of_states(
             fermi_energy=fermi_arr,
             natoms=natoms,
         )
+        return validated_dos
 
     dos: FullDensityOfStates = validate_and_create()
     return dos

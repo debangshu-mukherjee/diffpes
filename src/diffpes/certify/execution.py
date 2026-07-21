@@ -11,11 +11,11 @@ JVP, and VJP transformations.
 Routine Listings
 ----------------
 :func:`certify_forward`
-    Execute a prepared model and produce a JAX-native certified result.
+    Execute a prepared model and produce a certified JAX PyTree.
 :func:`prepare_certification`
-    Resolve static model and policy records before compiled execution.
+    Resolve static scientific records before compiled execution.
 :func:`verify_certificate`
-    Re-evaluate internal numerical claim and policy consistency.
+    Re-evaluate numerical claim and policy consistency without a rerun.
 """
 
 import equinox as eqx
@@ -26,15 +26,22 @@ from beartype.typing import Any, Optional
 from jax.flatten_util import ravel_pytree
 from jaxtyping import Array, Float, PyTree, jaxtyped
 
-from diffpes.types.certification import (
+from diffpes.types import (
     ArtifactRef,
     CertificationClaim,
     CertificationContext,
     CertifiedResult,
+    CheckFunction,
+    DependencyMap,
+    DerivativeEvidence,
     DomainResult,
     EvidenceRef,
     ExecutionManifest,
     ForwardCertificate,
+    InformationSpectrum,
+    PolicyReport,
+    RegisteredModel,
+    SensitivityMap,
     TransformationRecord,
     VerificationReport,
     make_certification_claim,
@@ -44,16 +51,19 @@ from diffpes.types.certification import (
     make_verification_report,
 )
 
-from .checks import CheckFunction, get_check
+from .checks import get_check
 from .dependencies import dependency_map, information_spectrum, sensitivity_map
 from .evidence import derivative_evidence, evaluate_claim
 from .policy import evaluate_policy
-from .registry import RegisteredModel, get_model
+from .registry import get_model
 
 
 def _path_names(tree: PyTree) -> tuple[str, ...]:
     """Return stable real-coordinate paths for numerical input leaves."""
-    path_leaves, _ = jax.tree_util.tree_flatten_with_path(tree)
+    path: Any
+    leaf: Any
+    flattened: Any = jax.tree_util.tree_flatten_with_path(tree)
+    path_leaves: Any = flattened[0]
     paths: list[str] = []
     for path, leaf in path_leaves:
         name: str = jax.tree_util.keystr(path) or "$"
@@ -61,12 +71,16 @@ def _path_names(tree: PyTree) -> tuple[str, ...]:
             paths.extend((f"{name}.real", f"{name}.imag"))
         else:
             paths.append(name)
-    return tuple(paths)
+    result: tuple[str, ...] = tuple(paths)
+    return result
 
 
 def _probe_directions(inputs: PyTree) -> PyTree:
     """Construct one all-ones directional probe per input leaf."""
-    leaves, treedef = jax.tree_util.tree_flatten(inputs)
+    array: Any
+    flattened: tuple[list[Any], Any] = jax.tree_util.tree_flatten(inputs)
+    leaves: list[Any] = flattened[0]
+    treedef: Any = flattened[1]
     arrays: list[Array] = [jnp.asarray(leaf) for leaf in leaves]
     n_leaves: int = sum(
         2 if jnp.iscomplexobj(array) else 1 for array in arrays
@@ -86,7 +100,7 @@ def _probe_directions(inputs: PyTree) -> PyTree:
     return directions
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def prepare_certification(
     model_id: str,
     model_version: str,
@@ -99,7 +113,49 @@ def prepare_certification(
     check_ids: tuple[str, ...] = (),
     input_checksums: tuple[str, ...] = (),
 ) -> CertificationContext:
-    """Resolve static scientific records before compiled execution."""
+    """Resolve static scientific records before compiled execution.
+
+    The operation binds a registered forward model to explicit evidence and
+    policy records. Numerical outputs and assurance leaves remain
+    differentiable.
+
+    :see: :class:`~.test_execution.TestPrepareCertification`
+
+    Implementation Logic
+    --------------------
+    1. **Resolve the registered model**::
+
+           registered: RegisteredModel = get_model(model_id, model_version)
+
+       Exact lookup binds the context to one stable scientific model identity
+       before the function collects evidence and domain checks.
+
+    Parameters
+    ----------
+    model_id : str
+        Permanent model identifier (**static** -- changing it retraces).
+    model_version : str
+        Exact semantic model version (**static** -- changing it retraces).
+    manifest : ExecutionManifest
+        Prepared execution identity and numerical environment.
+    policy_id : str
+        Certification policy identity (**static** -- changing it retraces).
+    artifacts : tuple[ArtifactRef, ...]
+        Input and derived artifact references.
+    transformations : tuple[TransformationRecord, ...]
+        Ordered information-flow records.
+    evidence : tuple[EvidenceRef, ...]
+        Independent numerical evidence records.
+    check_ids : tuple[str, ...]
+        Domain checks to run (**static** -- changing them retraces).
+    input_checksums : tuple[str, ...]
+        Bookkeeping identities for inputs (**static** -- a change retraces).
+
+    Returns
+    -------
+    context : CertificationContext
+        Cross-validated static selections for compiled execution.
+    """
     registered: RegisteredModel = get_model(model_id, model_version)
     context: CertificationContext = make_certification_context(
         manifest=manifest,
@@ -122,6 +178,7 @@ def _evidence_claims(
     model_id: str, evidence: tuple[EvidenceRef, ...]
 ) -> tuple[CertificationClaim, ...]:
     """Convert registered numerical evidence into verification claims."""
+    item: Any
     claims: list[CertificationClaim] = []
     for item in evidence:
         claim: CertificationClaim = evaluate_claim(
@@ -134,7 +191,8 @@ def _evidence_claims(
             evidence_ids=(item.evidence_id,),
         )
         claims.append(claim)
-    return tuple(claims)
+    result: tuple[CertificationClaim, ...] = tuple(claims)
+    return result
 
 
 @eqx.filter_jit
@@ -152,11 +210,13 @@ def _certify_kernel(
 
     def forward_vector(candidate: PyTree) -> Array:
         value: PyTree = executor(candidate)
-        flat, _ = ravel_pytree(value)
-        return jnp.real(flat)
+        flattened: tuple[Array, Any] = ravel_pytree(value)
+        result: Array = jnp.real(flattened[0])
+        return result
 
     value: PyTree = executor(inputs)
-    flat_value, _ = ravel_pytree(value)
+    flattened_value: tuple[Array, Any] = ravel_pytree(value)
+    flat_value: Array = flattened_value[0]
     output_size: int = flat_value.size
     input_paths: tuple[str, ...] = _path_names(inputs)
     n_probes: int = len(input_paths)
@@ -167,7 +227,7 @@ def _certify_kernel(
     output_ids: tuple[str, ...] = tuple(
         f"output[{index}]" for index in range(output_size)
     )
-    derivatives = derivative_evidence(
+    derivatives: DerivativeEvidence = derivative_evidence(
         forward_vector,
         inputs,
         directions,
@@ -177,12 +237,12 @@ def _certify_kernel(
         scales=scales,
         spectrum_rank=spectrum_rank,
     )
-    dependencies = dependency_map(
+    dependencies: DependencyMap = dependency_map(
         context.model.model_id,
         executor,
         inputs,
     )
-    sensitivities = sensitivity_map(
+    sensitivities: SensitivityMap = sensitivity_map(
         input_paths,
         output_ids,
         forward_vector,
@@ -190,7 +250,7 @@ def _certify_kernel(
         directions,
         scales,
     )
-    information = information_spectrum(
+    information: InformationSpectrum = information_spectrum(
         forward_vector,
         inputs,
         input_paths=input_paths,
@@ -258,7 +318,7 @@ def _certify_kernel(
         *domain_claims,
         *external_claims,
     )
-    policy_report = evaluate_policy(claims, context.policy_id)
+    policy_report: PolicyReport = evaluate_policy(claims, context.policy_id)
     certificate: ForwardCertificate = make_forward_certificate(
         manifest=context.manifest,
         model=context.model,
@@ -292,7 +352,38 @@ def certify_forward(
     scales: Optional[Float[Array, " n_probe"]] = None,
     spectrum_rank: int = 8,
 ) -> CertifiedResult:
-    """Execute a prepared model and produce a certified JAX PyTree."""
+    """Execute a prepared model and produce a certified JAX PyTree.
+
+    The operation binds a registered forward model to explicit evidence and
+    policy records. Numerical outputs and assurance leaves remain
+    differentiable.
+
+    :see: :class:`~.test_execution.TestCertifyForward`
+
+    Parameters
+    ----------
+    context : CertificationContext
+        Prepared model, policy, evidence, and domain-check selections.
+    inputs : PyTree
+        Numerical model inputs in the model's declared physical units.
+    directions : Optional[PyTree]
+        Batched tangent probes. By default one probe is built per real input
+        coordinate.
+    scales : Optional[Float[Array, " n_probe"]]
+        Positive physical scale for every tangent probe.
+    spectrum_rank : int
+        Requested information-spectrum rank (**static** -- a change retraces).
+
+    Returns
+    -------
+    result : CertifiedResult
+        Forward value paired with differentiable evidence and policy outcome.
+
+    Notes
+    -----
+    The result value, residuals, margins, sensitivities, and information
+    spectrum remain differentiable with respect to numerical input leaves.
+    """
     registered: RegisteredModel = get_model(
         context.model.model_id,
         context.model.model_version,
@@ -321,10 +412,35 @@ def certify_forward(
     return result
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def verify_certificate(certificate: ForwardCertificate) -> VerificationReport:
-    """Re-evaluate numerical claim and policy consistency without a rerun."""
-    recomputed = evaluate_policy(certificate.claims, certificate.policy_id)
+    """Re-evaluate numerical claim and policy consistency without a rerun.
+
+    The operation binds a registered forward model to explicit evidence and
+    policy records. Numerical outputs and assurance leaves remain
+    differentiable.
+
+    :see: :class:`~.test_execution.TestVerifyCertificate`
+
+    Parameters
+    ----------
+    certificate : ForwardCertificate
+        Concrete certificate whose internal numerical relations are checked.
+
+    Returns
+    -------
+    report : VerificationReport
+        Structural and policy consistency outcome.
+
+    Notes
+    -----
+    Verification recomputes recorded relations only. It does not rerun the
+    forward model or convert bookkeeping checksums into scientific evidence.
+    """
+    recomputed: PolicyReport = evaluate_policy(
+        certificate.claims,
+        certificate.policy_id,
+    )
     claims_consistent: bool = all(
         bool(
             jnp.array_equal(

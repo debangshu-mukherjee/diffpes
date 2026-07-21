@@ -52,8 +52,6 @@ Routine Listings
     Compute heuristic orbital weights based on photon energy.
 :func:`load_vasp_context`
     Load a simulation-ready context from VASP output files.
-:obj:`ORBITAL_DIRS_NORMALIZED`
-    Unit-normalized orbital direction vectors in VASP ordering.
 :func:`photon_wavevector`
     Build the unit photon wavevector from incidence angles.
 :func:`prepare_projection`
@@ -77,11 +75,11 @@ Routine Listings
 :func:`simulate_expanded`
     Dispatch an expanded-input simulation by complexity level.
 :func:`simulate_expert`
-    Simulate ARPES with pseudo-Voigt broadening and dipole matrix elements.
+    Simulate ARPES with Voigt broadening and dipole matrix elements.
 :func:`simulate_expert_expanded`
     Run expert-level ARPES simulation from plain arrays.
 :func:`simulate_novice`
-    Simulate ARPES spectrum with pseudo-Voigt broadening and uniform weights.
+    Simulate ARPES spectrum with Voigt broadening and uniform weights.
 :func:`simulate_novice_expanded`
     Run novice-level ARPES simulation from plain arrays.
 :func:`simulate_soc`
@@ -115,7 +113,6 @@ from .expanded import (
 from .forward import simulate_tb_radial
 from .oam import compute_oam
 from .polarization import (
-    ORBITAL_DIRS_NORMALIZED,
     build_efield,
     build_polarization_vectors,
     dipole_matrix_elements,
@@ -149,7 +146,6 @@ __all__: list[str] = [
     "gaussian",
     "heuristic_weights",
     "load_vasp_context",
-    "ORBITAL_DIRS_NORMALIZED",
     "photon_wavevector",
     "prepare_projection",
     "run_vasp_workflow",

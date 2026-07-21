@@ -24,7 +24,7 @@ from pathlib import Path
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Literal, Optional, cast
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, jaxtyped
 
 from diffpes.inout import (
     check_consistency,
@@ -55,7 +55,7 @@ from .oam import compute_oam
 from .resolution import apply_momentum_broadening
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def load_vasp_context(
     directory: str = ".",
     eigenval_file: str = "EIGENVAL",
@@ -69,14 +69,45 @@ def load_vasp_context(
 ) -> WorkflowContext:
     """Load a simulation-ready context from VASP output files.
 
+    Parses the required band and projection files. It also loads optional
+    density-of-states and k-path data when those files are available.
+
+    :see: :class:`~.test_workflow.TestLoadVaspContext`
+
     Implementation Logic
     --------------------
-    1. Resolve the root directory and optional DOSCAR/KPOINTS paths.
-    2. Determine Fermi energy from explicit input or DOSCAR.
-    3. Parse EIGENVAL in legacy mode into a ``BandStructure``.
-    4. Parse PROCAR (legacy or full) into an orbital projection object.
-    5. Parse optional KPOINTS metadata when the file exists.
-    6. Optionally validate dimensional consistency across parsed files.
+    1. **Resolve the input directory**::
+
+           root = Path(directory)
+
+       All requested VASP filenames are relative to this path.
+
+    2. **Resolve the Fermi energy**::
+
+           resolved_fermi = dos.fermi_energy
+           resolved_fermi = fermi_energy
+
+       An explicit value takes priority. Otherwise, DOSCAR supplies the value.
+
+    3. **Parse the required carriers**::
+
+           bands = read_eigenval(...)
+           orb_proj = read_procar(...)
+
+       EIGENVAL and PROCAR provide the arrays required by every workflow.
+
+    4. **Load optional path metadata**::
+
+           kpath = read_kpoints(str(kpoints_path))
+
+       The parser runs only when the optional KPOINTS file exists.
+
+    5. **Validate and construct the context**::
+
+           check_consistency(bands, orb_proj, kpath)
+           context = make_workflow_context(...)
+
+       The check rejects incompatible files before the factory builds a PyTree.
 
     Parameters
     ----------
@@ -95,16 +126,16 @@ def load_vasp_context(
     fermi_energy : Optional[ScalarFloat], optional
         Manual Fermi energy in eV. If ``None``, DOSCAR is used when
         available, otherwise 0.0.
-    procar_mode : {"legacy", "full"}, optional
+    procar_mode : Literal["legacy", "full"], optional
         PROCAR return mode. ``"full"`` preserves spin data when present.
-    doscar_mode : {"legacy", "full"}, optional
+    doscar_mode : Literal["legacy", "full"], optional
         DOSCAR return mode when DOSCAR is read.
     check_dimensions : bool, optional
         If True, run cross-file consistency checks.
 
     Returns
     -------
-    WorkflowContext
+    context : WorkflowContext
         Loaded VASP data bundled for downstream workflow calls.
 
     Raises
@@ -166,7 +197,7 @@ def load_vasp_context(
     return context
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def prepare_projection(
     orb_proj: ProjectionType,
     atom_indices: Optional[list[int]] = None,
@@ -178,9 +209,25 @@ def prepare_projection(
     selecting atom subsets and attaching OAM channels derived from
     orbital projections.
 
+    :see: :class:`~.test_workflow.TestPrepareProjection`
+
+    Implementation Logic
+    --------------------
+    1. **Select atoms**::
+
+           prepared = select_atoms(prepared, atom_indices)
+
+       The optional selection keeps only the requested zero-based atom axes.
+    2. **Attach OAM channels**::
+
+           oam = compute_oam(prepared.projections)
+
+       The function computes missing channels and rebuilds the same projection
+       carrier type with the new data.
+
     Parameters
     ----------
-    orb_proj : OrbitalProjection or SpinOrbitalProjection
+    orb_proj : ProjectionType
         Input projection object.
     atom_indices : Optional[list[int]], optional
         Optional 0-based atom indices to keep.
@@ -189,7 +236,7 @@ def prepare_projection(
 
     Returns
     -------
-    OrbitalProjection or SpinOrbitalProjection
+    prepared : ProjectionType
         Prepared projection object, preserving spin-aware type.
     """
     prepared: ProjectionType = orb_proj
@@ -226,7 +273,7 @@ def _kpath_distances(
     return distances
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def simulate_context(  # noqa: PLR0913
     context: WorkflowContext,
     level: str = "advanced",
@@ -246,6 +293,39 @@ def simulate_context(  # noqa: PLR0913
     ls_scale: ScalarFloat = 0.01,
 ) -> ArpesSpectrum:
     """Run a level-dispatched simulation from a loaded workflow context.
+
+    Uses a parsed workflow context as the single input carrier. Optional
+    post-processing preserves its energy axis and returns a new spectrum.
+
+    :see: :class:`~.test_workflow.TestSimulateContext`
+
+    Implementation Logic
+    --------------------
+    1. **Prepare the projection carrier**::
+
+           prepared = prepare_projection(...)
+
+       This step applies the requested atom selection and OAM construction.
+
+    2. **Run the selected simulation**::
+
+           spectrum = simulate_expanded(...)
+
+       The level selects the forward model while JAX traces continuous inputs.
+
+    3. **Apply optional post-processing**::
+
+           intensity = apply_momentum_broadening(intensity, k_dist, dk)
+           intensity = zscore_normalize(intensity)
+
+       Each enabled operation transforms the intensity without changing the
+       energy axis.
+
+    4. **Construct the result**::
+
+           result = make_arpes_spectrum(...)
+
+       The factory validates the final spectrum carrier.
 
     Parameters
     ----------
@@ -284,7 +364,7 @@ def simulate_context(  # noqa: PLR0913
 
     Returns
     -------
-    ArpesSpectrum
+    result : ArpesSpectrum
         Simulated ARPES spectrum after optional post-processing.
     """
     prepared: ProjectionType = prepare_projection(
@@ -327,7 +407,7 @@ def simulate_context(  # noqa: PLR0913
     return result
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def run_vasp_workflow(  # noqa: PLR0913
     level: str = "advanced",
     directory: str = ".",
@@ -359,9 +439,75 @@ def run_vasp_workflow(  # noqa: PLR0913
     This helper loads VASP files into a :class:`WorkflowContext` and
     immediately delegates to :func:`simulate_context`.
 
+    :see: :class:`~.test_workflow.TestRunVaspWorkflow`
+
+    Implementation Logic
+    --------------------
+    1. **Load the workflow context**::
+
+           context = load_vasp_context(...)
+
+       The loader parses the files and checks their shared dimensions.
+    2. **Run the configured simulation**::
+
+           spectrum = simulate_context(...)
+
+       The dispatcher applies the requested physics and post-processing steps.
+
+    Parameters
+    ----------
+    level : str, optional
+        Simulation complexity level (**static**; changing it retraces).
+    directory : str, optional
+        Directory containing the VASP files.
+    eigenval_file : str, optional
+        EIGENVAL filename relative to ``directory``.
+    procar_file : str, optional
+        PROCAR filename relative to ``directory``.
+    doscar_file : Optional[str], optional
+        Optional DOSCAR filename used to infer the Fermi energy.
+    kpoints_file : Optional[str], optional
+        Optional KPOINTS filename used for path metadata.
+    fermi_energy : Optional[ScalarFloat], optional
+        Explicit Fermi energy in eV, or ``None`` to infer it.
+    atom_indices : Optional[list[int]], optional
+        Optional zero-based atom subset.
+    attach_oam : bool, optional
+        Whether to derive OAM channels before simulation.
+    normalize : bool, optional
+        Whether to z-score normalize the final intensity.
+    dk : Optional[ScalarFloat], optional
+        Momentum broadening width in 1/Angstrom, or ``None``.
+    procar_mode : Literal["legacy", "full"], optional
+        PROCAR parsing mode.
+    doscar_mode : Literal["legacy", "full"], optional
+        DOSCAR parsing mode.
+    check_dimensions : bool, optional
+        Whether to validate dimensions across input files.
+    sigma : ScalarFloat, optional
+        Gaussian energy broadening width in eV.
+    gamma : ScalarFloat, optional
+        Lorentzian energy broadening width in eV.
+    fidelity : int, optional
+        Number of energy samples (**static**; changing it retraces).
+    temperature : ScalarFloat, optional
+        Electronic temperature in Kelvin.
+    photon_energy : ScalarFloat, optional
+        Incident photon energy in eV.
+    polarization : str, optional
+        Polarization mode (**static**; changing it retraces).
+    incident_theta : ScalarFloat, optional
+        Incident polar angle in degrees.
+    incident_phi : ScalarFloat, optional
+        Incident azimuth angle in degrees.
+    polarization_angle : ScalarFloat, optional
+        Linear polarization angle in radians.
+    ls_scale : ScalarFloat, optional
+        Spin-orbit intensity scale.
+
     Returns
     -------
-    ArpesSpectrum
+    spectrum : ArpesSpectrum
         Final simulated spectrum.
     """
     context: WorkflowContext = load_vasp_context(

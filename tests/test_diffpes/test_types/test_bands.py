@@ -1,8 +1,8 @@
-"""Test band, projection, and ARPES spectrum carriers and factories.
+"""Validate band, projection, spin, and ARPES carriers and factories.
 
-Extended Summary
-----------------
-Covers construction, PyTree round trips, eager and compiled execution, gradient-transparent validation, and rejection contracts for the carriers defined in ``diffpes.types.bands``.
+The cases cover JAX PyTree behavior, eager and compiled construction,
+gradient-transparent validation, optional spin and OAM data, and shape and
+finiteness rejection contracts.
 """
 
 import chex
@@ -10,8 +10,14 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype.typing import Callable
 
 from diffpes.types import (
+    ArpesSpectrum,
+    BandStructure,
+    OrbitalProjection,
+    SpinBandStructure,
+    SpinOrbitalProjection,
     make_arpes_spectrum,
     make_band_structure,
     make_orbital_projection,
@@ -21,392 +27,452 @@ from diffpes.types import (
 from tests._assertions import assert_rejects
 
 
-class TestSpinOrbitalProjectionWithOAM:
-    """Tests for make_spin_orbital_projection with explicit OAM data.
+class TestBandStructure:
+    """Validate :class:`~diffpes.types.BandStructure` as a JAX PyTree.
 
-    Exercises the branch in ``make_spin_orbital_projection`` where
-    ``oam`` is not None, covering the OAM array casting code path.
+    Eigenvalues, k-points, weights, and the Fermi energy must remain numerical
+    leaves with stable dimensions through JAX transformations.
+
+    :see: :class:`~diffpes.types.BandStructure`
     """
 
-    def test_with_oam_stores_array(self) -> None:
-        """Verify that providing oam creates a float64 OAM array in the result.
+    def test_pytree_round_trip(self) -> None:
+        """Preserve all band fields through JAX reconstruction.
 
-        Constructs a SpinOrbitalProjection with explicit OAM and asserts
-        the ``oam`` field is not None and has the correct shape.
+        The check compares a two-point, two-band structure and its nonuniform
+        k-point weights before and after a PyTree round trip.
+
+        Notes
+        -----
+        Constructs the carrier through its factory, flattens and unflattens it
+        with JAX, and compares every array leaf with Chex.
         """
-        K, B, A = 2, 3, 1
-        proj = jnp.ones((K, B, A, 9), dtype=jnp.float64)
-        spin = jnp.zeros((K, B, A, 6), dtype=jnp.float64)
-        oam = jnp.ones((K, B, A, 3), dtype=jnp.float64) * 0.5
-        sop = make_spin_orbital_projection(
-            projections=proj, spin=spin, oam=oam
+        bands: BandStructure = make_band_structure(
+            eigenvalues=jnp.array([[0.0, 1.0], [2.0, 3.0]]),
+            kpoints=jnp.zeros((2, 3)),
+            kpoint_weights=jnp.array([0.25, 0.75]),
+            fermi_energy=-0.5,
         )
-        assert sop.oam is not None
-        assert sop.oam.shape == (K, B, A, 3)
-        assert sop.oam.dtype == jnp.float64
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(bands)
+        restored: BandStructure = jax.tree_util.tree_unflatten(tree, leaves)
+
+        chex.assert_trees_all_close(restored, bands)
 
 
-class TestBandsPyTree:
-    """PyTree round-trip tests for SpinOrbitalProjection and SpinBandStructure.
+class TestOrbitalProjection:
+    """Validate :class:`~diffpes.types.OrbitalProjection` optional leaves.
 
-    Exercises the ``tree_flatten`` / ``tree_unflatten`` methods for
-    the spin-aware band and projection types.
+    Projection weights must remain present while omitted spin and OAM arrays
+    remain empty subtrees.
+
+    :see: :class:`~diffpes.types.OrbitalProjection`
     """
 
-    def test_spin_orbital_projection_pytree_round_trip(self) -> None:
-        """Verify SpinOrbitalProjection survives a JAX PyTree flatten/unflatten round-trip."""
-        K, B, A = 3, 4, 2
-        proj = jnp.ones((K, B, A, 9), dtype=jnp.float64)
-        spin = jnp.zeros((K, B, A, 6), dtype=jnp.float64)
-        sop = make_spin_orbital_projection(projections=proj, spin=spin)
-        leaves, treedef = jax.tree_util.tree_flatten(sop)
-        sop2 = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert jnp.allclose(sop2.projections, sop.projections)
-        assert jnp.allclose(sop2.spin, sop.spin)
-        assert sop2.oam is None
+    def test_preserves_absent_optional_fields(self) -> None:
+        """Store a nine-orbital projection with no spin or OAM data.
 
-    def test_spin_band_structure_pytree_round_trip(self) -> None:
-        """Verify SpinBandStructure survives a JAX PyTree flatten/unflatten round-trip."""
-        K, B = 5, 3
-        evals_up = jnp.zeros((K, B), dtype=jnp.float64)
-        evals_down = jnp.ones((K, B), dtype=jnp.float64)
-        kpoints = jnp.zeros((K, 3), dtype=jnp.float64)
-        sbs = make_spin_band_structure(
-            eigenvalues_up=evals_up,
-            eigenvalues_down=evals_down,
-            kpoints=kpoints,
+        The check verifies the exact projection shape and both ``None``
+        sentinels for a non-spin calculation.
+
+        Notes
+        -----
+        Constructs one projection through its public factory and uses Chex for
+        the array shape plus direct identity checks for optional fields.
+        """
+        projection: OrbitalProjection = make_orbital_projection(
+            jnp.zeros((2, 3, 1, 9))
+        )
+
+        chex.assert_shape(projection.projections, (2, 3, 1, 9))
+        assert projection.spin is None
+        assert projection.oam is None
+
+
+class TestSpinOrbitalProjection:
+    """Validate :class:`~diffpes.types.SpinOrbitalProjection` as a PyTree.
+
+    Mandatory spin projections and optional orbital angular momentum must
+    survive JAX reconstruction with their component axes intact.
+
+    :see: :class:`~diffpes.types.SpinOrbitalProjection`
+    """
+
+    def test_pytree_round_trip_with_oam(self) -> None:
+        """Preserve spin and OAM arrays through JAX reconstruction.
+
+        The check uses six spin channels and three OAM components for a
+        two-point, three-band, one-atom projection.
+
+        Notes
+        -----
+        Constructs the spin carrier through its factory, performs a JAX tree
+        round trip, and compares all three array leaves with Chex.
+        """
+        projection: SpinOrbitalProjection = make_spin_orbital_projection(
+            projections=jnp.ones((2, 3, 1, 9)),
+            spin=jnp.zeros((2, 3, 1, 6)),
+            oam=jnp.full((2, 3, 1, 3), 0.5),
+        )
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(projection)
+        restored: SpinOrbitalProjection = jax.tree_util.tree_unflatten(
+            tree, leaves
+        )
+
+        chex.assert_trees_all_close(
+            restored.projections, projection.projections
+        )
+        chex.assert_trees_all_close(restored.spin, projection.spin)
+        chex.assert_trees_all_close(restored.oam, projection.oam)
+
+
+class TestSpinBandStructure:
+    """Validate :class:`~diffpes.types.SpinBandStructure` as a JAX PyTree.
+
+    Up- and down-spin eigenvalues must share their k-point coordinates and
+    survive reconstruction together.
+
+    :see: :class:`~diffpes.types.SpinBandStructure`
+    """
+
+    def test_pytree_round_trip(self) -> None:
+        """Preserve both spin channels through JAX reconstruction.
+
+        The check compares two five-by-three eigenvalue arrays and their scalar
+        Fermi energy before and after a PyTree round trip.
+
+        Notes
+        -----
+        Constructs the spin-resolved carrier, applies JAX flatten and unflatten,
+        and compares both energy channels with Chex.
+        """
+        bands: SpinBandStructure = make_spin_band_structure(
+            eigenvalues_up=jnp.zeros((5, 3)),
+            eigenvalues_down=jnp.ones((5, 3)),
+            kpoints=jnp.zeros((5, 3)),
             fermi_energy=-1.0,
         )
-        leaves, treedef = jax.tree_util.tree_flatten(sbs)
-        sbs2 = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert jnp.allclose(sbs2.eigenvalues_up, sbs.eigenvalues_up)
-        assert jnp.allclose(sbs2.eigenvalues_down, sbs.eigenvalues_down)
-        assert jnp.allclose(sbs2.fermi_energy, sbs.fermi_energy)
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(bands)
+        restored: SpinBandStructure = jax.tree_util.tree_unflatten(
+            tree, leaves
+        )
+
+        chex.assert_trees_all_close(
+            restored.eigenvalues_up, bands.eigenvalues_up
+        )
+        chex.assert_trees_all_close(
+            restored.eigenvalues_down, bands.eigenvalues_down
+        )
+
+
+class TestArpesSpectrum:
+    """Validate :class:`~diffpes.types.ArpesSpectrum` array storage.
+
+    The momentum-energy intensity map must retain its association with the
+    strictly increasing energy axis.
+
+    :see: :class:`~diffpes.types.ArpesSpectrum`
+    """
+
+    def test_stores_intensity_and_energy_axis(self) -> None:
+        """Preserve a two-point, eight-energy-bin ARPES spectrum.
+
+        The check verifies the exact two-dimensional intensity and
+        one-dimensional energy-axis shapes.
+
+        Notes
+        -----
+        Constructs the spectrum through its public factory and checks both
+        numerical dimensions with Chex.
+        """
+        spectrum: ArpesSpectrum = make_arpes_spectrum(
+            intensity=jnp.zeros((2, 8)),
+            energy_axis=jnp.linspace(-3.0, 1.0, 8),
+        )
+
+        chex.assert_shape(spectrum.intensity, (2, 8))
+        chex.assert_shape(spectrum.energy_axis, (8,))
 
 
 class TestMakeBandStructure(chex.TestCase):
-    """Tests for :func:`diffpes.types.bands.make_band_structure`.
+    """Validate :func:`~diffpes.types.make_band_structure` under JAX.
 
-    Verifies correct construction of ``BandStructure`` PyTrees including
-    output shape validation under both JIT and eager modes, default
-    uniform k-point weight generation, and automatic type conversion of
-    the ``fermi_energy`` scalar to a JAX array.
+    The factory must supply uniform weights, normalize scalar dtype, preserve
+    gradients, and reject non-finite eigenvalues in eager and compiled modes.
+
+    :see: :func:`~diffpes.types.make_band_structure`
     """
 
     @chex.variants(with_jit=True, without_jit=True)
-    def test_basic_creation(self) -> None:
-        """Verify that a BandStructure is created with correct field shapes.
+    def test_constructs_uniform_weights(self) -> None:
+        """Construct uniform weights in eager and compiled execution.
 
-        Test Logic
-        ----------
-        1. **Construct band structure**:
-           Create zero-filled eigenvalues (10 k-points, 5 bands) and
-           k-points arrays, then call the factory via ``self.variant``
-           to test both JIT-compiled and eager execution paths.
+        The check expects eight unit weights and a scalar JAX Fermi energy for
+        an eight-point, three-band input.
 
-        2. **Assert shapes**:
-           Check that ``eigenvalues`` is (10, 5), ``kpoints`` is (10, 3),
-           ``kpoint_weights`` is (10,), and ``fermi_energy`` is scalar.
-
-        Asserts
-        -------
-        All output fields have the expected shapes, confirming that the
-        factory correctly allocates default weights and casts the Fermi
-        energy to a 0-D array.
+        Notes
+        -----
+        Wraps the public factory with ``self.variant`` and compares output
+        shapes, weights, and scalar array type with Chex.
         """
-        nk, nb = 10, 5
-        eigenvalues = jnp.zeros((nk, nb))
-        kpoints = jnp.zeros((nk, 3))
-        var_fn = self.variant(make_band_structure)
-        bands = var_fn(
-            eigenvalues=eigenvalues,
-            kpoints=kpoints,
-            fermi_energy=0.0,
+        factory: Callable[..., BandStructure] = self.variant(
+            make_band_structure
         )
-        chex.assert_shape(bands.eigenvalues, (nk, nb))
-        chex.assert_shape(bands.kpoints, (nk, 3))
-        chex.assert_shape(bands.kpoint_weights, (nk,))
-        chex.assert_shape(bands.fermi_energy, ())
-
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_default_weights(self) -> None:
-        """Verify that omitting kpoint_weights produces uniform weights.
-
-        Test Logic
-        ----------
-        1. **Construct without explicit weights**:
-           Call ``make_band_structure`` with 8 k-points and no
-           ``kpoint_weights`` argument.
-
-        2. **Compare to expected uniform vector**:
-           Build an expected weight vector of all ones (float64) with
-           length matching the number of k-points.
-
-        Asserts
-        -------
-        ``bands.kpoint_weights`` is element-wise close to a uniform
-        ``ones(8)`` vector, confirming the default-weight logic.
-        """
-        nk = 8
-        eigenvalues = jnp.zeros((nk, 3))
-        kpoints = jnp.zeros((nk, 3))
-        var_fn = self.variant(make_band_structure)
-        bands = var_fn(eigenvalues=eigenvalues, kpoints=kpoints)
-        expected = jnp.ones(nk, dtype=jnp.float64)
-        chex.assert_trees_all_close(bands.kpoint_weights, expected)
-
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_type_conversion(self) -> None:
-        """Verify that the fermi_energy Python float is cast to a JAX array.
-
-        Test Logic
-        ----------
-        1. **Pass a Python float**:
-           Supply ``fermi_energy=-1.5`` as a plain Python float to the
-           factory function.
-
-        2. **Check result type**:
-           Inspect whether ``bands.fermi_energy`` is an instance of
-           ``jax.Array``, confirming the factory performed the cast.
-
-        Asserts
-        -------
-        ``bands.fermi_energy`` is an instance of ``jax.Array``, not a
-        raw Python float, verifying the float64 conversion logic.
-        """
-        eigenvalues = jnp.ones((4, 2))
-        kpoints = jnp.zeros((4, 3))
-        var_fn = self.variant(make_band_structure)
-        bands = var_fn(
-            eigenvalues=eigenvalues,
-            kpoints=kpoints,
+        bands: BandStructure = factory(
+            eigenvalues=jnp.zeros((8, 3)),
+            kpoints=jnp.zeros((8, 3)),
             fermi_energy=-1.5,
         )
-        chex.assert_equal(isinstance(bands.fermi_energy, jax.Array), True)
 
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_explicit_kpoint_weights(self) -> None:
-        """Verify that explicit kpoint_weights are stored correctly.
+        chex.assert_trees_all_close(bands.kpoint_weights, jnp.ones(8))
+        chex.assert_shape(bands.fermi_energy, ())
+        assert isinstance(bands.fermi_energy, jax.Array)
 
-        Test Logic
-        ----------
-        1. **Construct with explicit weights**:
-           Call ``make_band_structure`` with a non-uniform
-           ``kpoint_weights`` array (e.g. length 6).
+    def test_rejects_nonfinite_eigenvalues(self) -> None:
+        """Reject a NaN eigenvalue in eager and compiled execution.
 
-        2. **Assert stored weights**:
-           Check that ``bands.kpoint_weights`` matches the supplied
-           array (cast to float64).
+        The check gates the value-threaded ``eqx.error_if`` validation rather
+        than allowing a poisoned carrier to escape.
 
-        Asserts
-        -------
-        The else branch (kpoint_weights is not None) is exercised and
-        the supplied weights are preserved.
+        Notes
+        -----
+        Calls the raw and ``eqx.filter_jit`` factories with one NaN eigenvalue
+        and matches the same runtime diagnostic in both modes.
         """
-        nk, nb = 6, 2
-        eigenvalues = jnp.zeros((nk, nb))
-        kpoints = jnp.zeros((nk, 3))
-        weights = jnp.linspace(0.5, 1.5, nk, dtype=jnp.float64)
-        var_fn = self.variant(make_band_structure)
-        bands = var_fn(
-            eigenvalues=eigenvalues,
-            kpoints=kpoints,
-            kpoint_weights=weights,
-            fermi_energy=0.0,
-        )
-        chex.assert_trees_all_close(bands.kpoint_weights, weights, atol=1e-12)
-
-    def test_nonfinite_eigenvalues_raise(self) -> None:
-        """Reject non-finite eigenvalues eagerly and under JIT.
-
-        Asserts
-        -------
-        The value-threaded ``eqx.error_if`` check raises in both execution
-        modes instead of silently returning a poisoned carrier.
-        """
-        eigenvalues = jnp.array([[jnp.nan]], dtype=jnp.float64)
-        kpoints = jnp.zeros((1, 3), dtype=jnp.float64)
-
+        eigenvalues: jax.Array = jnp.array([[jnp.nan]])
+        kpoints: jax.Array = jnp.zeros((1, 3))
+        under_jit: bool
         for under_jit in (False, True):
-            with self.subTest(under_jit=under_jit):
-                factory = (
-                    eqx.filter_jit(make_band_structure)
-                    if under_jit
-                    else make_band_structure
-                )
-                with pytest.raises(RuntimeError, match="eigenvalues finite"):
-                    factory(eigenvalues=eigenvalues, kpoints=kpoints)
+            factory: Callable[..., BandStructure] = (
+                eqx.filter_jit(make_band_structure)
+                if under_jit
+                else make_band_structure
+            )
+            with pytest.raises(RuntimeError, match="eigenvalues finite"):
+                factory(eigenvalues=eigenvalues, kpoints=kpoints)
 
-    def test_validation_is_gradient_transparent(self) -> None:
-        """Preserve valid values and their gradients through validation.
+    def test_validation_preserves_gradient(self) -> None:
+        """Preserve the unit gradient through valid eigenvalue checking.
 
-        Asserts
-        -------
-        The validated eigenvalue leaf is bitwise equal to its input and its
-        gradient matches direct array construction.
+        The derivative of the sum of two validated eigenvalues must match the
+        direct array-sum derivative exactly.
+
+        Notes
+        -----
+        Differentiates an independently defined sum through the carrier factory
+        and compares it with ``jax.grad(jnp.sum)`` using Chex.
         """
-        eigenvalues = jnp.array([[0.25, -0.5]], dtype=jnp.float64)
-        kpoints = jnp.zeros((1, 3), dtype=jnp.float64)
+        eigenvalues: jax.Array = jnp.array([[0.25, -0.5]])
+        kpoints: jax.Array = jnp.zeros((1, 3))
 
-        def validated_sum(values):
-            bands = make_band_structure(eigenvalues=values, kpoints=kpoints)
-            result = jnp.sum(bands.eigenvalues)
+        def validated_sum(values: jax.Array) -> jax.Array:
+            """Return the sum of validated band energies."""
+            bands: BandStructure = make_band_structure(values, kpoints)
+            result: jax.Array = jnp.sum(bands.eigenvalues)
             return result
 
-        bands = make_band_structure(eigenvalues=eigenvalues, kpoints=kpoints)
-        chex.assert_trees_all_equal(bands.eigenvalues, eigenvalues)
-        chex.assert_trees_all_equal(
-            jax.grad(validated_sum)(eigenvalues),
-            jax.grad(jnp.sum)(eigenvalues),
+        actual: jax.Array = jax.grad(validated_sum)(eigenvalues)
+        expected: jax.Array = jax.grad(jnp.sum)(eigenvalues)
+
+        chex.assert_trees_all_equal(actual, expected)
+
+
+class TestMakeOrbitalProjection:
+    """Validate :func:`~diffpes.types.make_orbital_projection`.
+
+    The factory must accept compatible spin data and reject malformed orbital
+    axes or negative projection probabilities.
+
+    :see: :func:`~diffpes.types.make_orbital_projection`
+    """
+
+    def test_stores_optional_spin(self) -> None:
+        """Preserve the six-channel optional spin projection array.
+
+        The check verifies a four-point, three-band, one-atom spin array shape
+        alongside the mandatory nine-orbital weights.
+
+        Notes
+        -----
+        Supplies compatible projection and spin arrays to the public factory
+        and checks the stored spin dimensions with Chex.
+        """
+        projection: OrbitalProjection = make_orbital_projection(
+            projections=jnp.ones((4, 3, 1, 9)),
+            spin=jnp.zeros((4, 3, 1, 6)),
+        )
+
+        chex.assert_shape(projection.spin, (4, 3, 1, 6))
+
+    def test_rejects_invalid_projection_values(self) -> None:
+        """Reject a wrong orbital axis and negative projection weights.
+
+        The check covers the static nine-orbital convention and the traced
+        nonnegative-probability contract.
+
+        Notes
+        -----
+        Uses the rejection helper with an eight-orbital tensor and then with a
+        negative nine-orbital tensor, matching each diagnostic.
+        """
+        assert_rejects(
+            make_orbital_projection,
+            projections=jnp.zeros((1, 1, 1, 8)),
+            match="projections must have 9 orbital columns",
+        )
+        assert_rejects(
+            make_orbital_projection,
+            projections=-jnp.ones((1, 1, 1, 9)),
+            match="projections non negative",
         )
 
 
-class TestMakeOrbitalProjection(chex.TestCase):
-    """Tests for :func:`diffpes.types.bands.make_orbital_projection`.
+class TestMakeSpinOrbitalProjection:
+    """Validate :func:`~diffpes.types.make_spin_orbital_projection`.
 
-    Verifies correct construction of ``OrbitalProjection`` PyTrees including
-    output shape validation, default ``None`` handling for optional spin and
-    OAM fields, and proper shape storage when spin data is provided.
+    The spin-specific factory must require compatible six-channel spin data and
+    preserve an optional three-component OAM array.
+
+    :see: :func:`~diffpes.types.make_spin_orbital_projection`
     """
 
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_basic_creation(self) -> None:
-        """Verify that an OrbitalProjection is created with correct defaults.
+    def test_stores_explicit_oam(self) -> None:
+        """Preserve a three-component orbital-angular-momentum array.
 
-        Test Logic
-        ----------
-        1. **Construct with projections only**:
-           Create a zero-filled projections array with shape
-           (10 k-points, 5 bands, 2 atoms, 9 orbitals) and call the
-           factory without providing optional ``spin`` or ``oam``.
+        The check verifies the ``2 x 3 x 1 x 3`` OAM shape and float64 dtype
+        after factory normalization.
 
-        2. **Assert projection shape**:
-           Check that ``orb.projections`` has shape (10, 5, 2, 9).
-
-        3. **Assert optional fields are None**:
-           Confirm that both ``orb.spin`` and ``orb.oam`` are ``None``
-           when not supplied.
-
-        Asserts
-        -------
-        Projections shape is correct and optional fields default to
-        ``None``, confirming the factory's sentinel-preserving logic.
+        Notes
+        -----
+        Supplies compatible projection, spin, and OAM arrays and checks the
+        optional output leaf with Chex and a dtype comparison.
         """
-        nk, nb, na = 10, 5, 2
-        proj = jnp.zeros((nk, nb, na, 9))
-        var_fn = self.variant(make_orbital_projection)
-        orb = var_fn(projections=proj)
-        chex.assert_shape(orb.projections, (nk, nb, na, 9))
-        chex.assert_equal(orb.spin, None)
-        chex.assert_equal(orb.oam, None)
-
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_with_spin(self) -> None:
-        """Verify that spin projections are stored with the correct shape.
-
-        Test Logic
-        ----------
-        1. **Construct with spin data**:
-           Create projection and spin arrays with compatible leading
-           dimensions (4 k-points, 3 bands, 1 atom) and pass both to
-           the factory.
-
-        2. **Assert spin shape**:
-           Check that ``orb.spin`` has shape (4, 3, 1, 6), matching the
-           6 spin-projection channels (up/down for x, y, z).
-
-        Asserts
-        -------
-        ``orb.spin`` has the expected 4-D shape, confirming that the
-        factory correctly casts and stores the optional spin array.
-        """
-        nk, nb, na = 4, 3, 1
-        proj = jnp.ones((nk, nb, na, 9))
-        spin = jnp.zeros((nk, nb, na, 6))
-        var_fn = self.variant(make_orbital_projection)
-        orb = var_fn(projections=proj, spin=spin)
-        chex.assert_shape(orb.spin, (nk, nb, na, 6))
-
-
-class TestMakeArpesSpectrum(chex.TestCase):
-    """Tests for :func:`diffpes.types.bands.make_arpes_spectrum`.
-
-    Verifies correct construction of ``ArpesSpectrum`` PyTrees including
-    output shape validation for the 2-D intensity map and 1-D energy axis
-    under both JIT and eager execution modes.
-    """
-
-    @chex.variants(with_jit=True, without_jit=True)
-    def test_basic_creation(self) -> None:
-        """Verify that an ArpesSpectrum is created with correct field shapes.
-
-        Test Logic
-        ----------
-        1. **Construct spectrum**:
-           Create a zero-filled intensity map (10 k-points, 100 energy
-           points) and a linearly spaced energy axis, then call the
-           factory via ``self.variant`` to test both JIT and eager modes.
-
-        2. **Assert shapes**:
-           Check that ``intensity`` is (10, 100) and ``energy_axis`` is
-           (100,).
-
-        Asserts
-        -------
-        Both output fields have the expected shapes, confirming that the
-        factory correctly casts inputs to float64 arrays and preserves
-        dimensionality.
-        """
-        nk, ne = 10, 100
-        intensity = jnp.zeros((nk, ne))
-        energy_axis = jnp.linspace(-3.0, 1.0, ne)
-        var_fn = self.variant(make_arpes_spectrum)
-        spec = var_fn(
-            intensity=intensity,
-            energy_axis=energy_axis,
+        projection: SpinOrbitalProjection = make_spin_orbital_projection(
+            projections=jnp.ones((2, 3, 1, 9)),
+            spin=jnp.zeros((2, 3, 1, 6)),
+            oam=jnp.full((2, 3, 1, 3), 0.5),
         )
-        chex.assert_shape(spec.intensity, (nk, ne))
-        chex.assert_shape(spec.energy_axis, (ne,))
+
+        chex.assert_shape(projection.oam, (2, 3, 1, 3))
+        assert projection.oam is not None
+        assert projection.oam.dtype == jnp.float64
+
+    def test_rejects_negative_projection_values(self) -> None:
+        """Reject negative orbital probabilities with valid spin dimensions.
+
+        The check isolates the traced nonnegative constraint of the spin-aware
+        factory.
+
+        Notes
+        -----
+        Supplies a negative nine-orbital tensor and a compatible zero spin
+        tensor, then matches the factory's probability diagnostic.
+        """
+        assert_rejects(
+            make_spin_orbital_projection,
+            projections=-jnp.ones((1, 1, 1, 9)),
+            spin=jnp.zeros((1, 1, 1, 6)),
+            match="projections non negative",
+        )
 
 
-def test_band_factories_reject_invalid_values() -> None:
-    """Reject the NaN audit probe and invalid spin-band weights."""
-    assert_rejects(
-        make_band_structure,
-        eigenvalues=jnp.array([[jnp.nan]]),
-        kpoints=jnp.zeros((1, 3)),
-        match="eigenvalues finite",
-    )
-    assert_rejects(
-        make_spin_band_structure,
-        eigenvalues_up=jnp.zeros((1, 1)),
-        eigenvalues_down=jnp.zeros((1, 1)),
-        kpoints=jnp.zeros((1, 3)),
-        kpoint_weights=jnp.array([-1.0]),
-        match="weights non negative",
-    )
+class TestMakeSpinBandStructure:
+    """Validate :func:`~diffpes.types.make_spin_band_structure`.
+
+    The factory must align both spin channels with one k-point mesh and reject
+    negative integration weights.
+
+    :see: :func:`~diffpes.types.make_spin_band_structure`
+    """
+
+    def test_constructs_aligned_spin_channels(self) -> None:
+        """Construct equal-shape up- and down-spin eigenvalue arrays.
+
+        The check verifies both channels retain the requested four-point,
+        two-band dimensions.
+
+        Notes
+        -----
+        Supplies finite spin channels and common k-points, then checks their
+        carrier shapes with Chex.
+        """
+        bands: SpinBandStructure = make_spin_band_structure(
+            eigenvalues_up=jnp.zeros((4, 2)),
+            eigenvalues_down=jnp.ones((4, 2)),
+            kpoints=jnp.zeros((4, 3)),
+        )
+
+        chex.assert_shape(bands.eigenvalues_up, (4, 2))
+        chex.assert_shape(bands.eigenvalues_down, (4, 2))
+
+    def test_rejects_negative_weights(self) -> None:
+        """Reject a negative spin-band integration weight.
+
+        The check isolates the traced nonnegative-weight contract for one
+        k-point and one band in each spin channel.
+
+        Notes
+        -----
+        Uses the rejection helper with compatible spin arrays and a single
+        negative weight, matching the factory diagnostic.
+        """
+        assert_rejects(
+            make_spin_band_structure,
+            eigenvalues_up=jnp.zeros((1, 1)),
+            eigenvalues_down=jnp.zeros((1, 1)),
+            kpoints=jnp.zeros((1, 3)),
+            kpoint_weights=jnp.array([-1.0]),
+            match="weights non negative",
+        )
 
 
-def test_projection_factories_reject_invalid_values() -> None:
-    """Reject malformed orbital axes and negative orbital probabilities."""
-    assert_rejects(
-        make_orbital_projection,
-        projections=jnp.zeros((1, 1, 1, 8)),
-        match="projections must have 9 orbital columns",
-    )
-    assert_rejects(
-        make_spin_orbital_projection,
-        projections=-jnp.ones((1, 1, 1, 9)),
-        spin=jnp.zeros((1, 1, 1, 6)),
-        match="projections non negative",
-    )
+class TestMakeArpesSpectrum:
+    """Validate :func:`~diffpes.types.make_arpes_spectrum`.
 
+    The factory must preserve intensity dimensions and reject non-increasing
+    energy coordinates.
 
-def test_arpes_spectrum_rejects_unsorted_energy_axis() -> None:
-    """Reject non-increasing ARPES energy coordinates."""
-    assert_rejects(
-        make_arpes_spectrum,
-        intensity=jnp.zeros((1, 2)),
-        energy_axis=jnp.array([0.0, 0.0]),
-        match="energy axis strictly increasing",
-    )
+    :see: :func:`~diffpes.types.make_arpes_spectrum`
+    """
+
+    def test_constructs_spectrum_shapes(self) -> None:
+        """Construct ten momentum points over 100 energy bins.
+
+        The check gates the exact two-dimensional intensity and one-dimensional
+        energy-axis shapes after float64 normalization.
+
+        Notes
+        -----
+        Supplies a zero intensity map and linearly spaced energy axis, then
+        checks both output dimensions with Chex.
+        """
+        spectrum: ArpesSpectrum = make_arpes_spectrum(
+            intensity=jnp.zeros((10, 100)),
+            energy_axis=jnp.linspace(-3.0, 1.0, 100),
+        )
+
+        chex.assert_shape(spectrum.intensity, (10, 100))
+        chex.assert_shape(spectrum.energy_axis, (100,))
+
+    def test_rejects_unsorted_energy_axis(self) -> None:
+        """Reject repeated ARPES energy coordinates.
+
+        The check verifies strict energy ordering independently of the finite
+        intensity map.
+
+        Notes
+        -----
+        Supplies two equal energy coordinates and matches the traced ordering
+        diagnostic through the shared rejection helper.
+        """
+        assert_rejects(
+            make_arpes_spectrum,
+            intensity=jnp.zeros((1, 2)),
+            energy_axis=jnp.array([0.0, 0.0]),
+            match="energy axis strictly increasing",
+        )

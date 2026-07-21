@@ -32,8 +32,6 @@ def radial_integral(
 ) -> Complex[Array, " ..."]:
     r"""Evaluate dipole radial integral on a fixed radial grid.
 
-    Extended Summary
-    ----------------
     Computes the dipole radial integral that appears in the partial-wave
     expansion of the photoemission matrix element:
 
@@ -68,6 +66,8 @@ def radial_integral(
     the output has the same leading shape, with the radial integration
     contracted over the last axis.
 
+    :see: :class:`~.test_integrate.TestRadialIntegral`
+
     Parameters
     ----------
     k : Float[Array, " ..."]
@@ -83,6 +83,11 @@ def radial_integral(
     -------
     values : Complex[Array, " ..."]
         Complex radial integral values with the same leading shape as ``k``.
+
+    Raises
+    ------
+    ValueError
+        If ``l_prime`` is negative.
 
     Notes
     -----

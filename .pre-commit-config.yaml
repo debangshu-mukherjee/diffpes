@@ -20,4 +20,12 @@ repos:
         entry: uv run python .github/badges/loc_badge.py
         language: system
         pass_filenames: false
-        files: ^src/.*\.py$
+        always_run: true
+      - id: requirements-export
+        name: requirements.txt export (GitHub dependency graph)
+        entry: >
+          uv export --frozen --all-extras --no-emit-project --no-hashes
+          --quiet --output-file requirements.txt
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$

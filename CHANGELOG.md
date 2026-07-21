@@ -51,8 +51,8 @@ and the project uses calendar versioning.
 - Added an explicitly registered radial ARPES certification surface together
   with portable canonical JSON/HDF5 certificate persistence, offline
   inspection and verification, and user/API documentation. Consistency
-  checksums are CRC32 bookkeeping for accidental mismatches only and carry no
-  physical assurance meaning.
+  markers use CRC32 bookkeeping for accidental mismatches only and carry no
+  security, authenticity, or physical-assurance meaning.
 - Added a tag-gated, uv-native PyPI Trusted Publishing workflow with wheel
   and source-distribution smoke tests.
 - Added Equinox, Optimistix, Lineax, and Optax as the differentiable type,

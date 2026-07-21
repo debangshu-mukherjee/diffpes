@@ -12,7 +12,7 @@ The submodules are organized as follows:
 - :mod:`chgcar`
     VASP CHGCAR file parser.
 - :mod:`certificate`
-    Portable JSON and HDF5 persistence for forward certificates.
+    Portable persistence for forward-model certificates.
 - :mod:`doscar`
     VASP DOSCAR file parser.
 - :mod:`eigenval`
@@ -20,8 +20,7 @@ The submodules are organized as follows:
 - :mod:`hdf5`
     HDF5 serializer and deserializer for diffpes PyTrees.
 - :mod:`helpers`
-    Parser-adjacent workflow helpers for assembling
-    simulation-ready arrays.
+    Parser-adjacent workflow helpers for assembling simulation-ready arrays.
 - :mod:`kpoints`
     VASP KPOINTS file parser.
 - :mod:`plotting`
@@ -33,31 +32,22 @@ The submodules are organized as follows:
 
 Routine Listings
 ----------------
-:obj:`CERTIFICATE_FORMAT`
-    Stable portable forward-certificate format identifier.
-:obj:`CERTIFICATE_SCHEMA_MAJOR`
-    Supported portable certificate schema major version.
-:obj:`CERTIFICATE_SCHEMA_MINOR`
-    Current portable certificate schema minor version.
-:class:`CertificateFormatError`
-    Error raised for malformed or unsupported certificate records.
 :func:`aggregate_atoms`
     Sum orbital projections over a set of atoms.
 :func:`attach_certificate_h5`
-    Atomically attach a forward certificate to an HDF5 result file.
+    Atomically attach a certificate to an HDF5 result file.
 :func:`apply_kpath_ticks`
     Apply symmetry-point ticks/labels from KPathInfo to an axis.
 :func:`check_consistency`
     Check dimension agreement across parsed VASP files.
 :func:`list_band_scatter_presets`
-    Return supported preset names for projected band scatter
-    plots.
+    Return supported preset names for projected band scatter plots.
 :func:`load_from_h5`
     Load PyTrees from an HDF5 file.
 :func:`load_certificate_h5`
-    Load a forward certificate embedded in an HDF5 result file.
+    Load a certificate embedded in an HDF5 result file.
 :func:`load_certificate_json`
-    Load a forward certificate from its portable JSON record.
+    Load a validated forward certificate from canonical JSON.
 :func:`plot_arpes_spectrum`
     Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 :func:`plot_arpes_with_kpath`
@@ -65,8 +55,7 @@ Routine Listings
 :func:`plot_band_scatter_preset`
     Plot projected bands as marker-size-weighted scatter points.
 :func:`plot_band_scatter_with_kpath`
-    Plot projected band scatter and annotate x-axis with k-path
-    labels.
+    Plot projected band scatter and annotate x-axis with k-path labels.
 :func:`read_chgcar`
     Parse a VASP CHGCAR file.
 :func:`read_doscar`
@@ -84,7 +73,7 @@ Routine Listings
 :func:`save_to_h5`
     Save one or more named PyTrees to an HDF5 file.
 :func:`save_certificate_json`
-    Atomically save a portable forward-certificate JSON record.
+    Atomically save a forward certificate as canonical JSON.
 :func:`select_atoms`
     Extract orbital projections for a subset of atoms.
 
@@ -96,10 +85,6 @@ to JAX arrays via factory functions.
 """
 
 from .certificate import (
-    CERTIFICATE_FORMAT,
-    CERTIFICATE_SCHEMA_MAJOR,
-    CERTIFICATE_SCHEMA_MINOR,
-    CertificateFormatError,
     attach_certificate_h5,
     load_certificate_h5,
     load_certificate_json,
@@ -128,10 +113,6 @@ from .poscar import read_poscar
 from .procar import read_procar
 
 __all__: list[str] = [
-    "CERTIFICATE_FORMAT",
-    "CERTIFICATE_SCHEMA_MAJOR",
-    "CERTIFICATE_SCHEMA_MINOR",
-    "CertificateFormatError",
     "aggregate_atoms",
     "apply_kpath_ticks",
     "attach_certificate_h5",

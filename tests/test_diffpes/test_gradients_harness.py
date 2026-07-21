@@ -15,7 +15,7 @@ import pytest
 from jax import test_util
 from jaxtyping import Array, Complex, Float
 
-from diffpes.simul.crosssections import heuristic_weights
+from diffpes.simul import heuristic_weights
 from tests._gradients import (
     RTOL_LADDER,
     assert_grad_matches_fd,
@@ -26,6 +26,7 @@ from tests._gradients import (
     gradient_gate,
     random_generic_complex,
 )
+from tests._types import GradRegime
 
 
 @jax.custom_jvp
@@ -41,6 +42,8 @@ def _wrong_sine_jvp(
     tangents: tuple[Float[Array, "..."], ...],
 ) -> tuple[Float[Array, "..."], Float[Array, "..."]]:
     """Plant a tangent scaled by 1.1 for harness-defect detection."""
+    x: Float[Array, "..."]
+    x_tangent: Float[Array, "..."]
     (x,) = primals
     (x_tangent,) = tangents
     primal: Float[Array, "..."] = _wrong_sine(x)
@@ -65,6 +68,8 @@ def _near_wrong_sine_jvp(
     tangents: tuple[Float[Array, "..."], ...],
 ) -> tuple[Float[Array, "..."], Float[Array, "..."]]:
     """Plant a tangent scaled by 1.00001 to pin the detection floor."""
+    x: Float[Array, "..."]
+    x_tangent: Float[Array, "..."]
     (x,) = primals
     (x_tangent,) = tangents
     primal: Float[Array, "..."] = _near_wrong_sine(x)
@@ -77,10 +82,24 @@ def _near_wrong_sine_jvp(
 
 
 class TestGradientHarness(chex.TestCase):
-    """Validate the shared gradient harness and gates 01.G3 and 01.G4."""
+    """Validate the shared gradient harness and gates 01.G3 and 01.G4.
+
+    Covers analytic real and complex derivatives, scale-aware steps, planted
+    tangent defects, zero-gradient tripwires, and complex-step restrictions.
+
+    :see: :func:`~tests._gradients.assert_grad_matches_fd`
+    :see: :func:`~tests._gradients.assert_nonzero_grad`
+    :see: :func:`~tests._gradients.central_fd_grad`
+    :see: :func:`~tests._gradients.complex_step_derivative`
+    :see: :func:`~tests._gradients.fd_step`
+    :see: :func:`~tests._gradients.gradient_gate`
+    """
 
     def test_closed_form_truths(self) -> None:
         """Verify analytic smooth gradients pass at relative tolerance 1e-6.
+
+        The shared gate must accept closed-form derivatives across smooth and
+        stiff regimes and across parameter scales from ``1e-3`` to ``5``.
 
         Notes
         -----
@@ -110,6 +129,9 @@ class TestGradientHarness(chex.TestCase):
     def test_fd_step_scales_per_element(self) -> None:
         """Verify finite-difference steps scale with each parameter magnitude.
 
+        The step policy must retain numerical resolution for small parameters
+        without applying one global perturbation to mixed-unit inputs.
+
         Notes
         -----
         Compares a mixed-unit vector against the exact
@@ -123,6 +145,9 @@ class TestGradientHarness(chex.TestCase):
 
     def test_wirtinger_convention(self) -> None:
         """Pin JAX's C-to-R gradient as d/dRe minus i times d/dIm.
+
+        The finite-difference harness must reproduce JAX's complex gradient
+        convention for a real-valued modulus-squared loss.
 
         Notes
         -----
@@ -150,12 +175,16 @@ class TestGradientHarness(chex.TestCase):
     def test_planted_wrong_gradient(self) -> None:
         """Verify a ten-percent tangent defect fails every tolerance rung.
 
+        No configured smooth, stiff, or singular tolerance may accept the
+        deliberately corrupted derivative of an otherwise correct primal.
+
         Notes
         -----
         A ``custom_jvp`` retains the correct sine primal but scales its
         derivative by 1.1; the shared gate must raise for gate 01.G4.
         """
         theta: Float[Array, "3"] = jnp.array([-0.4, 0.2, 0.8])
+        regime: GradRegime
         for regime in RTOL_LADDER:
             with self.subTest(regime=regime), pytest.raises(AssertionError):
                 assert_grad_matches_fd(
@@ -164,6 +193,9 @@ class TestGradientHarness(chex.TestCase):
 
     def test_detection_floor(self) -> None:
         """Verify a one-part-in-100000 defect fails the smooth tolerance.
+
+        The strict smooth regime must detect a derivative error at its stated
+        sensitivity floor even when the forward values remain exact.
 
         Notes
         -----
@@ -178,6 +210,9 @@ class TestGradientHarness(chex.TestCase):
 
     def test_planted_zero_gradient(self) -> None:
         """Verify finite-but-zero stopped gradients fail both tripwires.
+
+        A finite primal and finite automatic derivative are insufficient when
+        the physical loss retains nonzero finite-difference sensitivity.
 
         Notes
         -----
@@ -199,6 +234,9 @@ class TestGradientHarness(chex.TestCase):
     def test_in_tree_zero_gradient(self) -> None:
         """Verify the known heuristic photon-energy dead gradient is caught.
 
+        The nonzero-gradient gate must expose the constant interpolation
+        plateau in the heuristic cross-section path at 30 eV.
+
         Notes
         -----
         Differentiates the sum of heuristic orbital weights at 30 eV, where
@@ -214,6 +252,9 @@ class TestGradientHarness(chex.TestCase):
 
     def test_complex_step_derivative(self) -> None:
         """Verify complex-step sine accuracy and reject modulus-squared.
+
+        Complex-step differentiation must retain machine precision for a
+        holomorphic function and reject a non-holomorphic operation.
 
         Notes
         -----
@@ -231,6 +272,9 @@ class TestGradientHarness(chex.TestCase):
 
     def test_check_grads_semantics_anchor(self) -> None:
         """Pin JAX check_grads behavior on truth and a planted tangent defect.
+
+        The upstream JAX checker must independently accept the analytic sine
+        derivative and reject the same corrupted tangent used by the harness.
 
         Notes
         -----

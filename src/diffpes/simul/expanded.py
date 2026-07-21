@@ -121,7 +121,11 @@ def _build_inputs(
     orb_proj: OrbitalProjection = make_orbital_projection(
         projections=proj_arr,
     )
-    return bands, orb_proj
+    simulation_inputs: tuple[BandStructure, OrbitalProjection] = (
+        bands,
+        orb_proj,
+    )
+    return simulation_inputs
 
 
 @jaxtyped(typechecker=beartype)
@@ -208,16 +212,39 @@ def simulate_novice_expanded(
     non-s orbitals contribute equally to the photoemission
     intensity.
 
+    :see: :class:`~.test_expanded.TestSimulateNoviceExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` to wrap the
-       raw arrays into ``BandStructure`` and ``OrbitalProjection``.
-    2. **Build parameters**: Calls ``make_simulation_params`` to
-       construct a ``SimulationParams`` PyTree from the scalar
-       broadening / fidelity / temperature / photon-energy values.
-    3. **Simulate**: Delegates to :func:`~diffpes.simul.simulate_novice`,
-       which vectorizes the Voigt convolution over all k-points and
-       bands with ``jax.vmap``.
+    1. **Build carrier inputs**::
+
+           bands, orb_proj = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the raw arrays and binds the band and projection
+       carriers.
+
+    2. **Build simulation settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               gamma=gamma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+
+       This derives the energy window and preserves both Voigt widths.
+
+    3. **Evaluate the novice model**::
+
+           spectrum = simulate_novice(bands, orb_proj, params)
+
+       This delegates the differentiable numerical work to the carrier API.
 
     Parameters
     ----------
@@ -287,16 +314,38 @@ def simulate_basic_expanded(
     providing a rough approximation of photoionization cross-section
     effects without tabulated data.
 
+    :see: :class:`~.test_expanded.TestSimulateBasicExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` to wrap the
-       raw arrays into ``BandStructure`` and ``OrbitalProjection``.
-    2. **Build parameters**: Calls ``make_simulation_params`` to
-       construct a ``SimulationParams`` PyTree. No ``gamma`` is
-       needed because this level uses pure Gaussian broadening.
-    3. **Simulate**: Delegates to :func:`~diffpes.simul.simulate_basic`,
-       which computes heuristic weights from ``photon_energy`` and
-       vectorizes the Gaussian convolution with ``jax.vmap``.
+    1. **Build carrier inputs**::
+
+           bands, orb_proj = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the raw arrays and binds the band and projection
+       carriers.
+
+    2. **Build simulation settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+
+       This derives the energy window without introducing a Lorentzian width.
+
+    3. **Evaluate the basic model**::
+
+           spectrum = simulate_basic(bands, orb_proj, params)
+
+       This applies the core Gaussian model and its heuristic orbital weights.
 
     Parameters
     ----------
@@ -364,17 +413,39 @@ def simulate_basicplus_expanded(
     from tabulated atomic data and provide physically accurate
     orbital-dependent intensity scaling at each photon energy.
 
+    :see: :class:`~.test_expanded.TestSimulateBasicplusExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` to wrap the
-       raw arrays into ``BandStructure`` and ``OrbitalProjection``.
-    2. **Build parameters**: Calls ``make_simulation_params`` to
-       construct a ``SimulationParams`` PyTree. No ``gamma`` is
-       needed because this level uses pure Gaussian broadening.
-    3. **Simulate**: Delegates to
-       :func:`~diffpes.simul.simulate_basicplus`, which interpolates
-       Yeh-Lindau cross-section weights from ``photon_energy`` and
-       vectorizes the Gaussian convolution with ``jax.vmap``.
+    1. **Build carrier inputs**::
+
+           bands, orb_proj = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the raw arrays and binds the band and projection
+       carriers.
+
+    2. **Build simulation settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+
+       This retains the photon energy used for Yeh-Lindau interpolation.
+
+    3. **Evaluate the basicplus model**::
+
+           spectrum = simulate_basicplus(bands, orb_proj, params)
+
+       This delegates cross-section weighting and Gaussian broadening to the
+       core.
 
     Parameters
     ----------
@@ -447,21 +518,49 @@ def simulate_advanced_expanded(  # noqa: PLR0913
     unpolarized light the s- and p-polarization contributions are
     averaged.
 
+    :see: :class:`~.test_expanded.TestSimulateAdvancedExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` to wrap the
-       raw arrays into ``BandStructure`` and ``OrbitalProjection``.
-    2. **Build parameters**: Calls ``make_simulation_params`` to
-       construct a ``SimulationParams`` PyTree. No ``gamma`` is
-       needed because this level uses pure Gaussian broadening.
-    3. **Build polarization**: Calls ``make_polarization_config`` to
-       construct a ``PolarizationConfig`` PyTree from the incident
-       angles and polarization type.
-    4. **Simulate**: Delegates to
-       :func:`~diffpes.simul.simulate_advanced`, which computes
-       Yeh-Lindau weights, builds the electric-field vector, and
-       evaluates polarization-weighted Gaussian spectra via
-       ``jax.vmap``.
+    1. **Build carrier inputs**::
+
+           bands, orb_proj = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the raw arrays and binds the band and projection
+       carriers.
+
+    2. **Build simulation settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+
+       This derives the Gaussian energy grid and traced physical settings.
+
+    3. **Build polarization settings**::
+
+           pol = _build_polarization(
+               polarization=polarization,
+               incident_theta=incident_theta,
+               incident_phi=incident_phi,
+               polarization_angle=polarization_angle,
+           )
+
+       This converts degree-valued incidence angles through the shared factory.
+
+    4. **Evaluate the advanced model**::
+
+           spectrum = simulate_advanced(bands, orb_proj, params, pol)
+
+       This delegates polarization-weighted intensity to the core model.
 
     Parameters
     ----------
@@ -549,22 +648,50 @@ def simulate_expert_expanded(  # noqa: PLR0913
     matrix element weighting. For unpolarized light the s- and
     p-polarization contributions are averaged.
 
+    :see: :class:`~.test_expanded.TestSimulateExpertExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` to wrap the
-       raw arrays into ``BandStructure`` and ``OrbitalProjection``.
-    2. **Build parameters**: Calls ``make_simulation_params`` to
-       construct a ``SimulationParams`` PyTree. Both ``sigma`` and
-       ``gamma`` are required because this level uses Voigt
-       (Gaussian + Lorentzian) broadening.
-    3. **Build polarization**: Calls ``make_polarization_config`` to
-       construct a ``PolarizationConfig`` PyTree from the incident
-       angles and polarization type.
-    4. **Simulate**: Delegates to
-       :func:`~diffpes.simul.simulate_expert`, which computes
-       Yeh-Lindau weights, builds the electric-field vector,
-       evaluates dipole matrix elements, and produces
-       polarization-weighted Voigt spectra via ``jax.vmap``.
+    1. **Build carrier inputs**::
+
+           bands, orb_proj = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the raw arrays and binds the band and projection
+       carriers.
+
+    2. **Build simulation settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               gamma=gamma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+
+       This derives the energy window and preserves both Voigt widths.
+
+    3. **Build polarization settings**::
+
+           pol = _build_polarization(
+               polarization=polarization,
+               incident_theta=incident_theta,
+               incident_phi=incident_phi,
+               polarization_angle=polarization_angle,
+           )
+
+       This converts degree-valued incidence angles through the shared factory.
+
+    4. **Evaluate the expert model**::
+
+           spectrum = simulate_expert(bands, orb_proj, params, pol)
+
+       This delegates dipole weighting and Voigt broadening to the core model.
 
     Parameters
     ----------
@@ -656,16 +783,58 @@ def simulate_soc_expanded(  # noqa: PLR0913
     ``(n_kpoints, n_bands, n_atoms, 6)`` (up/down for x, y, z).
     Incident angles are interpreted in degrees.
 
+    :see: :class:`~.test_expanded.TestSimulateSocExpanded`
+
     Implementation Logic
     --------------------
-    1. **Build PyTrees**: Calls :func:`_build_inputs` for the
-       ``BandStructure`` and constructs a
-       ``SpinOrbitalProjection`` with mandatory spin data.
-    2. **Build params and polarization**: Same as
-       :func:`simulate_expert_expanded` (auto-derived energy window,
-       degree-to-radian conversion for angles).
-    3. **Simulate**: Delegates to :func:`~diffpes.simul.simulate_soc`
-       with the given ``ls_scale``.
+    1. **Build the band carrier**::
+
+           bands, _projection = _build_inputs(
+               eigenbands=eigenbands,
+               surface_orb=surface_orb,
+               ef=ef,
+           )
+
+       This validates the common raw arrays and preserves the Fermi-energy
+       shift.
+
+    2. **Attach spin-resolved projections**::
+
+           soc_proj = make_spin_orbital_projection(
+               projections=jnp.asarray(surface_orb, dtype=jnp.float64),
+               spin=surface_spin,
+           )
+
+       This keeps the six spin channels explicit for the SOC correction.
+
+    3. **Build simulation and polarization settings**::
+
+           params = make_expanded_simulation_params(
+               eigenbands=eigenbands,
+               fidelity=fidelity,
+               sigma=sigma,
+               gamma=gamma,
+               temperature=temperature,
+               photon_energy=photon_energy,
+           )
+           pol = _build_polarization(
+               polarization=polarization,
+               incident_theta=incident_theta,
+               incident_phi=incident_phi,
+               polarization_angle=polarization_angle,
+           )
+
+       These carriers retain the traced physical parameters and the static
+       mode choice.
+
+    4. **Evaluate the SOC model**::
+
+           spectrum = simulate_soc(
+               bands, soc_proj, params, pol, ls_scale=ls_scale
+           )
+
+       This applies the spin-dependent correction only after carrier
+       validation.
 
     Parameters
     ----------
@@ -716,7 +885,8 @@ def simulate_soc_expanded(  # noqa: PLR0913
     simulate_expert_expanded : Same pipeline without spin data.
     """
     bands: BandStructure
-    bands, _ = _build_inputs(
+    _projection: OrbitalProjection
+    bands, _projection = _build_inputs(
         eigenbands=eigenbands,
         surface_orb=surface_orb,
         ef=ef,
@@ -772,14 +942,49 @@ def simulate_expanded(  # noqa: PLR0913
     (e.g. ``gamma`` for basic/basicplus/advanced, or polarization
     settings for novice/basic/basicplus) are silently ignored.
 
+    :see: :class:`~.test_expanded.TestSimulateExpanded`
+
     Implementation Logic
     --------------------
-    1. **Normalize level**: ``level`` is lowered to a canonical key.
-    2. **Dispatch**: An ``if``-chain selects the matching
-       ``simulate_*_expanded`` function and forwards only the
-       parameters that function accepts.
-    3. **Error on unknown level**: Raises ``ValueError`` with the
-       list of valid levels.
+    1. **Normalize the level key**::
+
+           level_key = level.lower()
+
+       This makes the static dispatcher case-insensitive.
+
+    2. **Select the matching wrapper**::
+
+           if level_key == "novice":
+               spectrum = simulate_novice_expanded(
+                   eigenbands=eigenbands,
+                   surface_orb=surface_orb,
+                   ef=ef,
+                   sigma=sigma,
+                   gamma=gamma,
+                   fidelity=fidelity,
+                   temperature=temperature,
+                   photon_energy=photon_energy,
+               )
+
+       The remaining ``elif`` branches use the same explicit forwarding
+       pattern, so each level receives only its public parameters.
+
+    3. **Reject unsupported levels**::
+
+           msg: str = (
+               "Unknown simulation level. "
+               "Expected one of: novice, basic, basicplus, advanced, "
+               "expert, soc."
+           )
+           raise ValueError(msg)
+
+       This fails before returning a partially defined spectrum.
+
+    4. **Return the selected spectrum**::
+
+           return spectrum
+
+       This preserves one annotated return variable across all valid branches.
 
     Parameters
     ----------
@@ -846,7 +1051,7 @@ def simulate_expanded(  # noqa: PLR0913
     """
     level_key: str = level.lower()
     if level_key == "novice":
-        return simulate_novice_expanded(
+        spectrum: ArpesSpectrum = simulate_novice_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             ef=ef,
@@ -856,8 +1061,8 @@ def simulate_expanded(  # noqa: PLR0913
             temperature=temperature,
             photon_energy=photon_energy,
         )
-    if level_key == "basic":
-        return simulate_basic_expanded(
+    elif level_key == "basic":
+        spectrum = simulate_basic_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             ef=ef,
@@ -866,8 +1071,8 @@ def simulate_expanded(  # noqa: PLR0913
             temperature=temperature,
             photon_energy=photon_energy,
         )
-    if level_key == "basicplus":
-        return simulate_basicplus_expanded(
+    elif level_key == "basicplus":
+        spectrum = simulate_basicplus_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             ef=ef,
@@ -876,8 +1081,8 @@ def simulate_expanded(  # noqa: PLR0913
             temperature=temperature,
             photon_energy=photon_energy,
         )
-    if level_key == "advanced":
-        return simulate_advanced_expanded(
+    elif level_key == "advanced":
+        spectrum = simulate_advanced_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             ef=ef,
@@ -890,8 +1095,8 @@ def simulate_expanded(  # noqa: PLR0913
             incident_phi=incident_phi,
             polarization_angle=polarization_angle,
         )
-    if level_key == "expert":
-        return simulate_expert_expanded(
+    elif level_key == "expert":
+        spectrum = simulate_expert_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             ef=ef,
@@ -905,12 +1110,12 @@ def simulate_expanded(  # noqa: PLR0913
             incident_phi=incident_phi,
             polarization_angle=polarization_angle,
         )
-    if level_key == "soc":
+    elif level_key == "soc":
         if surface_spin is None:
             raise ValueError(
                 "simulate_expanded(level='soc', ...) requires surface_spin."
             )
-        return simulate_soc_expanded(
+        spectrum = simulate_soc_expanded(
             eigenbands=eigenbands,
             surface_orb=surface_orb,
             surface_spin=surface_spin,
@@ -926,11 +1131,13 @@ def simulate_expanded(  # noqa: PLR0913
             polarization_angle=polarization_angle,
             ls_scale=ls_scale,
         )
-    msg: str = (
-        "Unknown simulation level. "
-        "Expected one of: novice, basic, basicplus, advanced, expert, soc."
-    )
-    raise ValueError(msg)
+    else:
+        msg: str = (
+            "Unknown simulation level. "
+            "Expected one of: novice, basic, basicplus, advanced, expert, soc."
+        )
+        raise ValueError(msg)
+    return spectrum
 
 
 __all__: list[str] = [

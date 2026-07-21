@@ -28,6 +28,11 @@ Validation and regression tests for :mod:`diffpes.simul`.
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: tests.test_diffpes.test_simul.test_plan02_gates
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: tests.test_diffpes.test_simul.test_polarization
    :members:
    :undoc-members:
@@ -44,6 +49,11 @@ Validation and regression tests for :mod:`diffpes.simul`.
    :show-inheritance:
 
 .. automodule:: tests.test_diffpes.test_simul.test_spectrum
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_simul.test_tb_radial_gradients
    :members:
    :undoc-members:
    :show-inheritance:

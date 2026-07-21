@@ -9,9 +9,9 @@ and light polarization configuration.
 Routine Listings
 ----------------
 :class:`PolarizationConfig`
-    PyTree for photon polarization geometry.
+    Store photon-polarization geometry in a JAX PyTree.
 :class:`SimulationParams`
-    PyTree for ARPES simulation parameters.
+    Store ARPES simulation parameters in a JAX PyTree.
 :func:`make_polarization_config`
     Create a validated PolarizationConfig instance.
 :func:`make_expanded_simulation_params`
@@ -45,7 +45,7 @@ _MIN_FIDELITY: int = 2
 
 
 class SimulationParams(eqx.Module):
-    """PyTree for ARPES simulation parameters.
+    """Store ARPES simulation parameters in a JAX PyTree.
 
     Collects all scalar physical parameters that control an ARPES
     simulation: the energy window and its discretisation, Gaussian
@@ -59,6 +59,9 @@ class SimulationParams(eqx.Module):
     ``fidelity`` field is a plain Python ``int`` stored as auxiliary
     data because it controls array shapes and must be known at
     compile time.
+
+
+    :see: :class:`~.test_params.TestSimulationParams`
 
     Attributes
     ----------
@@ -75,7 +78,8 @@ class SimulationParams(eqx.Module):
     photon_energy : Float[Array, " "]
         Incident photon energy in eV.
     fidelity : int
-        Number of points along the energy axis.
+        Number of points along the energy axis (**static** -- a compile-time
+        constant; changing it triggers retracing).
 
     Notes
     -----
@@ -104,7 +108,7 @@ class SimulationParams(eqx.Module):
 
 
 class PolarizationConfig(eqx.Module):
-    """PyTree for photon polarization geometry.
+    """Store photon-polarization geometry in a JAX PyTree.
 
     Describes the photon polarization state and incidence geometry
     for an ARPES experiment. The three angular fields define the
@@ -118,6 +122,9 @@ class PolarizationConfig(eqx.Module):
     while ``polarization_type`` is a Python string stored as
     auxiliary data because JAX cannot trace strings.
 
+
+    :see: :class:`~.test_params.TestPolarizationConfig`
+
     Attributes
     ----------
     theta : Float[Array, " "]
@@ -127,7 +134,8 @@ class PolarizationConfig(eqx.Module):
     polarization_angle : Float[Array, " "]
         Arbitrary linear polarization angle in radians.
     polarization_type : str
-        One of LVP, LHP, RCP, LCP, LAP, unpolarized.
+        One of LVP, LHP, RCP, LCP, LAP, unpolarized (**static** -- a
+        compile-time constant; changing it triggers retracing).
 
     Notes
     -----
@@ -153,7 +161,7 @@ class PolarizationConfig(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_simulation_params(
+def make_simulation_params(  # noqa: DOC503
     energy_min: ScalarNumeric = -3.0,
     energy_max: ScalarNumeric = 1.0,
     fidelity: int = 25000,
@@ -175,19 +183,36 @@ def make_simulation_params(
     ``energy_max`` defaults may be overridden based on the actual
     eigenband energy range supplied via an ``eigenbands`` parameter.
 
+    :see: :class:`~.test_params.TestMakeSimulationParams`
+
     Implementation Logic
     --------------------
-    1. **Cast energy_min** to 0-D ``jnp.float64`` via
-       ``jnp.asarray``.
-    2. **Cast energy_max** to 0-D ``jnp.float64`` via
-       ``jnp.asarray``.
-    3. **Keep fidelity** as a Python ``int`` (not cast). It is
-       stored as auxiliary data in the PyTree because it determines
-       array shapes.
-    4. **Cast sigma, gamma, temperature, photon_energy** each to
-       0-D ``jnp.float64`` arrays via ``jnp.asarray``.
-    5. **Construct** the ``SimulationParams`` Equinox module from all
-       seven fields and return it.
+    1. **Prepare the normalized values**::
+
+           emin_arr = jnp.asarray(energy_min, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           fidelity < _MIN_FIDELITY
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.isfinite(emin_arr)
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return params
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -196,7 +221,8 @@ def make_simulation_params(
     energy_max : ScalarNumeric, optional
         Upper energy bound in eV. Default is 1.0.
     fidelity : int, optional
-        Energy axis resolution. Default is 25000.
+        Energy axis resolution (**static** -- a compile-time constant;
+        changing it triggers retracing). Default is 25000.
     sigma : ScalarFloat, optional
         Gaussian broadening in eV. Default is 0.04.
     gamma : ScalarFloat, optional
@@ -220,12 +246,19 @@ def make_simulation_params(
         ``energy_min >= energy_max``, or if any broadening width,
         temperature, or photon energy is not positive.
 
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    ``fidelity`` is less than two. Traced validation uses ``eqx.error_if``
+    and raises ``EquinoxRuntimeError`` for non-finite values, an unordered
+    energy window, or non-positive physical scalars.
+
     See Also
     --------
     SimulationParams : The PyTree class constructed by this factory.
     """
     if fidelity < _MIN_FIDELITY:
-        msg = "make_simulation_params: fidelity must be at least 2"
+        msg: str = "make_simulation_params: fidelity must be at least 2"
         raise ValueError(msg)
 
     emin_arr: Float[Array, " "] = jnp.asarray(energy_min, dtype=jnp.float64)
@@ -292,7 +325,7 @@ def make_simulation_params(
             ~(pe_arr > 0.0),
             "make_simulation_params: photon_energy must be positive",
         )
-        return SimulationParams(
+        validated_params: SimulationParams = SimulationParams(
             energy_min=emin_arr,
             energy_max=emax_arr,
             fidelity=fidelity,
@@ -301,13 +334,14 @@ def make_simulation_params(
             temperature=temp_arr,
             photon_energy=pe_arr,
         )
+        return validated_params
 
     params: SimulationParams = validate_and_create()
     return params
 
 
 @jaxtyped(typechecker=beartype)
-def make_polarization_config(
+def make_polarization_config(  # noqa: DOC503
     theta: ScalarFloat = 0.7854,
     phi: ScalarFloat = 0.0,
     polarization_angle: ScalarFloat = 0.0,
@@ -326,19 +360,36 @@ def make_polarization_config(
     geometry that provides balanced sensitivity to both in-plane
     and out-of-plane orbital components.
 
+    :see: :class:`~.test_params.TestMakePolarizationConfig`
+
     Implementation Logic
     --------------------
-    1. **Cast theta** to 0-D ``jnp.float64`` via ``jnp.asarray``.
-       Default is ``0.7854`` rad = pi/4 ~ 45 degrees.
-    2. **Cast phi** to 0-D ``jnp.float64`` via ``jnp.asarray``.
-       Default is ``0.0`` rad.
-    3. **Cast polarization_angle** to 0-D ``jnp.float64`` via
-       ``jnp.asarray``. Default is ``0.0`` rad.
-    4. **Keep polarization_type** as a Python string (not cast).
-       It is stored as auxiliary data in the PyTree because it
-       selects code branches at compile time.
-    5. **Construct** the ``PolarizationConfig`` Equinox module from all
-       four fields and return it.
+    1. **Prepare the normalized values**::
+
+           theta_arr = jnp.asarray(theta, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           polarization_type not in _POLARIZATION_TYPES
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.isfinite(theta_arr)
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return config
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -350,7 +401,8 @@ def make_polarization_config(
     polarization_angle : ScalarFloat, optional
         Linear polarization angle in radians. Default is 0.
     polarization_type : str, optional
-        Polarization type. Default is ``"unpolarized"``.
+        Polarization type (**static** -- a compile-time constant; changing it
+        triggers retracing). Default is ``"unpolarized"``.
 
     Returns
     -------
@@ -365,13 +417,20 @@ def make_polarization_config(
     EquinoxRuntimeError
         If any angular parameter is non-finite.
 
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    ``polarization_type`` is unsupported. Traced validation uses
+    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when an angle is
+    non-finite.
+
     See Also
     --------
     PolarizationConfig : The PyTree class constructed by this
         factory.
     """
     if polarization_type not in _POLARIZATION_TYPES:
-        msg = (
+        msg: str = (
             "make_polarization_config: polarization_type must be one of "
             f"{_POLARIZATION_TYPES}"
         )
@@ -400,18 +459,20 @@ def make_polarization_config(
             ~(jnp.isfinite(pol_arr)),
             "make_polarization_config: polarization angle finite",
         )
-        return PolarizationConfig(
+        validated_config: PolarizationConfig = PolarizationConfig(
             theta=theta_arr,
             phi=phi_arr,
             polarization_angle=pol_arr,
             polarization_type=polarization_type,
         )
+        return validated_config
 
     config: PolarizationConfig = validate_and_create()
     return config
 
 
-def make_expanded_simulation_params(
+@jaxtyped(typechecker=beartype)
+def make_expanded_simulation_params(  # noqa: DOC503
     eigenbands: Float[Array, "K B"],
     fidelity: int = 25000,
     sigma: ScalarFloat = 0.04,
@@ -428,16 +489,36 @@ def make_expanded_simulation_params(
     ``[min(eigenbands) - energy_padding, max(eigenbands) + energy_padding]``,
     ensuring every band falls within the simulated range.
 
+    :see: :class:`~.test_params.TestMakeExpandedSimulationParams`
+
     Implementation Logic
     --------------------
-    1. **Cast to float64**: ``eigenbands`` is promoted to
-       ``jnp.float64`` via ``jnp.asarray``.
-    2. **Derive energy bounds**: ``energy_min`` and ``energy_max``
-       are computed from the global min/max of the band array plus
-       symmetric padding controlled by ``energy_padding``.
-    3. **Delegate**: Passes all values to
-       :func:`~diffpes.types.make_simulation_params` for final
-       construction and type validation.
+    1. **Prepare the normalized values**::
+
+           bands_arr = jnp.asarray(eigenbands, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           bands_arr.size == 0
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(bands_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return params
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -445,7 +526,8 @@ def make_expanded_simulation_params(
         Band eigenvalues in eV, shape ``(n_kpoints, n_bands)``.
         Used only to derive ``energy_min`` and ``energy_max``.
     fidelity : int, optional
-        Number of points in the energy axis. Default is 25000.
+        Number of points in the energy axis (**static** -- a compile-time
+        constant; changing it triggers retracing). Default is 25000.
     sigma : ScalarFloat, optional
         Gaussian broadening width in eV. Default is 0.04.
     gamma : ScalarFloat, optional
@@ -462,6 +544,22 @@ def make_expanded_simulation_params(
     params : SimulationParams
         Simulation parameters with data-derived energy window.
 
+    Raises
+    ------
+    ValueError
+        If ``eigenbands`` is empty, resolved statically from its shape.
+    EquinoxRuntimeError
+        If ``eigenbands`` or ``energy_padding`` is non-finite, or if
+        ``energy_padding`` is negative under eager or compiled execution.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before tracing when the band array
+    is empty. Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for non-finite bands or for padding that is
+    non-finite or negative. The delegated factory applies its own documented
+    static and traced validation contract.
+
     See Also
     --------
     make_simulation_params : Lower-level factory with explicit
@@ -469,6 +567,19 @@ def make_expanded_simulation_params(
     """
     bands_arr: Float[Array, "K B"] = jnp.asarray(eigenbands, dtype=jnp.float64)
     pad: Float[Array, " "] = jnp.asarray(energy_padding, dtype=jnp.float64)
+    if bands_arr.size == 0:
+        msg: str = "eigenbands must contain at least one value"
+        raise ValueError(msg)
+    bands_arr = eqx.error_if(
+        bands_arr,
+        ~jnp.all(jnp.isfinite(bands_arr)),
+        "make_expanded_simulation_params: eigenbands finite",
+    )
+    pad = eqx.error_if(
+        pad,
+        ~jnp.isfinite(pad) | (pad < 0.0),
+        "make_expanded_simulation_params: padding finite and nonnegative",
+    )
     energy_min: Float[Array, " "] = jnp.min(bands_arr) - pad
     energy_max: Float[Array, " "] = jnp.max(bands_arr) + pad
     params: SimulationParams = make_simulation_params(

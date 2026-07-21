@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-Reads VASP DOSCAR files and returns a
-:class:`~diffpes.types.DensityOfStates` or
-:class:`~diffpes.types.FullDensityOfStates` PyTree depending on
-the ``return_mode`` parameter.
+Reads VASP DOSCAR files and returns a density-of-states carrier.
+Legacy data uses :class:`~diffpes.types.DensityOfStates`.
+Full data uses :class:`~diffpes.types.FullDensityOfStates`.
+The ``return_mode`` parameter selects the carrier.
 
 Routine Listings
 ----------------
@@ -23,8 +23,9 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
-from beartype.typing import Literal, Optional, Union
-from jaxtyping import Array, Float
+from beartype import beartype
+from beartype.typing import Literal, Optional, TextIO, Union
+from jaxtyping import Array, Float, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
@@ -37,6 +38,7 @@ from diffpes.types import (
 )
 
 
+@jaxtyped(typechecker=beartype)
 def read_doscar(  # noqa: PLR0912, PLR0915
     filename: str = "DOSCAR",
     return_mode: Literal["legacy", "full"] = "legacy",
@@ -46,8 +48,6 @@ def read_doscar(  # noqa: PLR0912, PLR0915
     Reads a VASP DOSCAR file containing total (and optionally
     site-projected) density of states on a uniform energy grid.
 
-    Extended Summary
-    ----------------
     The DOSCAR file format written by VASP consists of:
 
     * **Header** (6 lines):
@@ -70,42 +70,39 @@ def read_doscar(  # noqa: PLR0912, PLR0915
       orbital-projected DOS values. Column counts vary depending on
       ``LORBIT`` and spin polarization.
 
+    :see: :class:`~.test_doscar.TestReadDoscar`
+
     Implementation Logic
     --------------------
-    1. **Parse header** -- read the first 6 lines. Extract ``NATOMS``
-       from line 1 and ``NEDOS`` / ``EFERMI`` from line 6.
+    1. **Read the header and total-DOS dimensions**::
 
-    2. **Read total DOS block** -- peek at the first data line to
-       determine the column count (3 for non-spin, 5 for spin).
-       Read all ``NEDOS`` rows into a ``(NEDOS, ncols)`` array.
+           path: Path = Path(filename)
+           with path.open("r") as fid:
+               header: list[str] = fid.readline().split()
+               natoms: int = int(header[0])
 
-    3. **Legacy mode early return** -- if ``return_mode == "legacy"``,
-       extract only ``energy`` (column 0) and ``total_dos`` (column 1,
-       i.e. spin-up DOS) and return a ``DensityOfStates``.
+       This establishes the atom count before the function allocates the
+       total and projected data.
 
-    4. **Full mode column extraction** -- split columns into spin-up
-       DOS, optional spin-down DOS, and integrated DOS arrays.
+    2. **Allocate and populate the total-DOS table**::
 
-    5. **Read PDOS blocks** -- for each of the ``NATOMS`` atoms:
+           data: Float[NDArray, "E C"] = np.zeros(
+               (nedos, ncols), dtype=np.float64
+           )
 
-       a. Read the per-atom header line (EMIN/EMAX/NEDOS/EFERMI).
-       b. Read the first data line to determine the PDOS column count.
-       c. Read the remaining ``NEDOS - 1`` lines.
-       d. Strip the energy column (column 0) and store the orbital
-          columns.
+       This preserves each column until the function knows the return mode.
 
-    6. **Stack PDOS** -- if any PDOS blocks were successfully read,
-       stack them into a ``(NATOMS, NEDOS, C)`` array where ``C`` is
-       the number of orbital columns.
+    3. **Return the selected DOS carrier**::
 
-    7. **Construct return value** -- build a ``FullDensityOfStates``
-       PyTree containing all extracted arrays.
+           return dos
+
+       Both branches bind their validated result to ``dos``.
 
     Parameters
     ----------
     filename : str, optional
         Path to DOSCAR file. Default is ``"DOSCAR"``.
-    return_mode : {"legacy", "full"}, optional
+    return_mode : Literal["legacy", "full"], optional
         ``"legacy"`` (default) returns a ``DensityOfStates`` with
         only spin-up total DOS (backward-compatible). ``"full"``
         returns a ``FullDensityOfStates`` with both spin channels,
@@ -126,6 +123,11 @@ def read_doscar(  # noqa: PLR0912, PLR0915
     for ``LORBIT=11``). The Fermi energy stored in the returned
     object is taken directly from the file header (line 6, column 4).
     """
+    fid: TextIO
+    i: int
+    _atom: int
+    j: int
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         header: list[str] = fid.readline().split()
@@ -138,7 +140,6 @@ def read_doscar(  # noqa: PLR0912, PLR0915
         nedos: int = int(meta[2])
         efermi: float = meta[3]
 
-        # Read total DOS block
         first_line: str = fid.readline()
         first_vals: list[float] = [float(x) for x in first_line.split()]
         ncols: int = len(first_vals)
@@ -150,6 +151,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
             vals: list[float] = [float(x) for x in fid.readline().split()]
             data[i, :] = vals
 
+        dos: DensityOfStates | FullDensityOfStates
         if return_mode == "legacy":
             energy: Float[Array, " E"] = jnp.asarray(
                 data[:, 0], dtype=jnp.float64
@@ -157,14 +159,13 @@ def read_doscar(  # noqa: PLR0912, PLR0915
             total_dos: Float[Array, " E"] = jnp.asarray(
                 data[:, 1], dtype=jnp.float64
             )
-            result_legacy: DensityOfStates = make_density_of_states(
+            dos = make_density_of_states(
                 energy=energy,
                 total_dos=total_dos,
                 fermi_energy=efermi,
             )
-            return result_legacy
+            return dos
 
-        # Full mode: extract all columns
         is_spin: bool = ncols == SPIN_COLS
         energy_arr: Float[Array, " E"] = jnp.asarray(
             data[:, 0], dtype=jnp.float64
@@ -183,23 +184,14 @@ def read_doscar(  # noqa: PLR0912, PLR0915
         else:
             int_up_arr = jnp.asarray(data[:, 2], dtype=jnp.float64)
 
-        # Read PDOS blocks if present
         pdos_arr: Optional[Float[Array, "A E C"]] = None
         pdos_blocks: list[Float[NDArray, "E C"]] = []
         for _atom in range(natoms):
-            # Each PDOS block may have a header line
-            # repeating EMIN EMAX NEDOS EFERMI
-            # or just start with data lines
             line: str = fid.readline()
             if not line or not line.strip():
                 break
-            # Check if this is a PDOS header (same format as total DOS header)
             line_vals: list[float] = [float(x) for x in line.split()]
             if NONSPIN_COLS <= len(line_vals) <= SPIN_COLS:
-                # Could be either a header or short PDOS line
-                # PDOS header has same EMIN EMAX NEDOS EFERMI format
-                # We detect by checking if first value matches energy range
-                # Actually, DOSCAR PDOS blocks always have a header line
                 pdos_ncols_check: str = fid.readline()
                 if not pdos_ncols_check.strip():
                     break
@@ -216,10 +208,8 @@ def read_doscar(  # noqa: PLR0912, PLR0915
                     if not row_line.strip():
                         break
                     atom_data[j, :] = [float(x) for x in row_line.split()]
-                # Store only the orbital columns (skip energy column 0)
                 pdos_blocks.append(atom_data[:, 1:])
             else:
-                # This line is the first PDOS data line (no header)
                 pdos_ncols = len(line_vals)
                 atom_data = np.zeros((nedos, pdos_ncols), dtype=np.float64)
                 atom_data[0, :] = line_vals
@@ -231,12 +221,11 @@ def read_doscar(  # noqa: PLR0912, PLR0915
                 pdos_blocks.append(atom_data[:, 1:])
 
         if pdos_blocks:
-            # Stack into (A, E, C) array
             pdos_arr = jnp.asarray(
                 np.stack(pdos_blocks, axis=0), dtype=jnp.float64
             )
 
-    result_full: FullDensityOfStates = make_full_density_of_states(
+    dos = make_full_density_of_states(
         energy=energy_arr,
         total_dos_up=dos_up_arr,
         integrated_dos_up=int_up_arr,
@@ -246,7 +235,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
         pdos=pdos_arr,
         natoms=natoms,
     )
-    return result_full
+    return dos
 
 
 __all__: list[str] = [

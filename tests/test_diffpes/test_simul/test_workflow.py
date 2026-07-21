@@ -1,4 +1,10 @@
-"""Tests for high-level workflow helpers in :mod:`diffpes.simul.workflow`."""
+"""Tests for high-level workflow helpers in :mod:`diffpes.simul.workflow`.
+
+Extended Summary
+----------------
+Validates VASP context loading, projection preparation, simulation dispatch,
+and the combined file-to-spectrum workflow with controlled temporary inputs.
+"""
 
 from pathlib import Path
 
@@ -6,8 +12,10 @@ import chex
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype.typing import Any, Callable
 from jaxtyping import Array, Float
 
+import diffpes
 from diffpes.simul import (
     load_vasp_context,
     prepare_projection,
@@ -31,15 +39,23 @@ _FIXTURES_DIR: Path = (
 
 
 class TestLoadVaspContextEdgeCases(chex.TestCase):
-    """Additional edge-case tests for :func:`diffpes.simul.load_vasp_context`."""
+    """Additional edge-case tests for :func:`diffpes.simul.load_vasp_context`.
 
-    def test_no_doscar_fermi_defaults_to_zero(self):
+    :see: :func:`~diffpes.simul.load_vasp_context`
+    """
+
+    def test_no_doscar_fermi_defaults_to_zero(self) -> None:
         """Verify Fermi energy is 0.0 when doscar_file=None and fermi_energy=None.
 
         Passes ``doscar_file=None`` and ``fermi_energy=None``, exercising
         workflow.py line 142 (``resolved_fermi = 0.0``). Asserts the
         returned band structure has fermi_energy == 0.0.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        context: diffpes.types.WorkflowContext
+
         context = load_vasp_context(
             directory=str(_FIXTURES_DIR),
             eigenval_file="EIGENVAL_spin",
@@ -54,12 +70,15 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
         )
         assert context.dos is None
 
-    def test_missing_doscar_raises(self):
+    def test_missing_doscar_raises(self) -> None:
         """Verify FileNotFoundError when DOSCAR is required but absent.
 
         Passes a non-existent ``doscar_file`` with ``fermi_energy=None``,
         exercising workflow.py lines 146-150 (FileNotFoundError path).
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         with pytest.raises(FileNotFoundError):
             load_vasp_context(
                 directory=str(_FIXTURES_DIR),
@@ -71,13 +90,18 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
                 check_dimensions=False,
             )
 
-    def test_explicit_fermi_reads_doscar_optionally(self):
+    def test_explicit_fermi_reads_doscar_optionally(self) -> None:
         """Verify DOSCAR is still read for context when fermi_energy is provided.
 
         Passes ``fermi_energy=1.5`` and a valid ``doscar_file``, exercising
         workflow.py lines 154-158 (optional DOSCAR read). Asserts the
         provided fermi_energy is used, but ``dos`` is populated from the file.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        context: diffpes.types.WorkflowContext
+
         context = load_vasp_context(
             directory=str(_FIXTURES_DIR),
             eigenval_file="EIGENVAL_spin",
@@ -94,10 +118,22 @@ class TestLoadVaspContextEdgeCases(chex.TestCase):
 
 
 class TestLoadVaspContext(chex.TestCase):
-    """Tests for :func:`diffpes.simul.load_vasp_context`."""
+    """Tests for :func:`diffpes.simul.load_vasp_context`.
 
-    def test_loads_context_with_optional_dos_and_kpath(self):
-        """Verify context loading with inferred Fermi level and checks."""
+    :see: :func:`~diffpes.simul.load_vasp_context`
+    """
+
+    def test_loads_context_with_optional_dos_and_kpath(self) -> None:
+        """Verify context loading with inferred Fermi level and checks.
+
+        This case establishes the loads context with optional dos and kpath contract for
+        load vasp context with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        context: diffpes.types.WorkflowContext
+
         context = load_vasp_context(
             directory=str(_FIXTURES_DIR),
             eigenval_file="EIGENVAL_spin",
@@ -120,16 +156,30 @@ class TestLoadVaspContext(chex.TestCase):
 
 
 class TestPrepareProjection(chex.TestCase):
-    """Tests for :func:`diffpes.simul.prepare_projection`."""
+    """Tests for :func:`diffpes.simul.prepare_projection`.
 
-    def test_spin_orbital_projection_attaches_oam(self):
+    :see: :func:`~diffpes.simul.prepare_projection`
+    """
+
+    def test_spin_orbital_projection_attaches_oam(self) -> None:
         """Verify OAM attachment works for SpinOrbitalProjection input.
 
         Constructs a SpinOrbitalProjection and calls ``prepare_projection``
         with ``attach_oam=True``. Asserts the returned object is still a
         SpinOrbitalProjection with OAM attached, covering workflow.py
         line 224 (make_spin_orbital_projection with oam).
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        projections: Array
+        spin: Array
+        orb: diffpes.types.SpinOrbitalProjection
+        prepared: (
+            diffpes.types.OrbitalProjection
+            | diffpes.types.SpinOrbitalProjection
+        )
+
         projections = jnp.ones((2, 2, 2, 9), dtype=jnp.float64)
         spin = jnp.ones((2, 2, 2, 6), dtype=jnp.float64)
         orb = make_spin_orbital_projection(projections=projections, spin=spin)
@@ -138,8 +188,22 @@ class TestPrepareProjection(chex.TestCase):
         assert prepared.oam is not None
         chex.assert_shape(prepared.oam, (2, 2, 2, 3))
 
-    def test_selects_atoms_and_attaches_oam(self):
-        """Verify atom sub-selection and OAM attachment in one call."""
+    def test_selects_atoms_and_attaches_oam(self) -> None:
+        """Verify atom sub-selection and OAM attachment in one call.
+
+        This case establishes the selects atoms and attaches oam contract for prepare
+        projection with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        projections: Array
+        orb: diffpes.types.OrbitalProjection
+        prepared: (
+            diffpes.types.OrbitalProjection
+            | diffpes.types.SpinOrbitalProjection
+        )
+
         projections = jnp.ones((2, 2, 3, 9), dtype=jnp.float64)
         orb = make_orbital_projection(projections=projections)
         prepared = prepare_projection(
@@ -153,10 +217,30 @@ class TestPrepareProjection(chex.TestCase):
 
 
 class TestSimulateContext(chex.TestCase):
-    """Tests for :func:`diffpes.simul.simulate_context`."""
+    """Tests for :func:`diffpes.simul.simulate_context`.
 
-    def test_momentum_broadening_changes_output(self):
-        """Verify nonzero dk changes simulated intensity."""
+    :see: :func:`~diffpes.simul.simulate_context`
+    """
+
+    def test_momentum_broadening_changes_output(self) -> None:
+        """Verify nonzero dk changes simulated intensity.
+
+        This case establishes the momentum broadening changes output contract for
+        simulate context with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        eigenbands: Array
+        kx: Array
+        kpoints: Array
+        projections: Array
+        bands: diffpes.types.BandStructure
+        orb: diffpes.types.OrbitalProjection
+        context: diffpes.types.WorkflowContext
+        base: diffpes.types.ArpesSpectrum
+        broadened: diffpes.types.ArpesSpectrum
+
         nk: int = 12
         nb: int = 4
         na: int = 2
@@ -263,10 +347,23 @@ class TestSimulateContext(chex.TestCase):
 
 
 class TestRunVaspWorkflow(chex.TestCase):
-    """Tests for :func:`diffpes.simul.run_vasp_workflow`."""
+    """Tests for :func:`diffpes.simul.run_vasp_workflow`.
 
-    def test_runs_end_to_end_with_normalization(self):
-        """Verify one-call workflow runs and returns normalized spectrum."""
+    :see: :func:`~diffpes.simul.run_vasp_workflow`
+    """
+
+    def test_runs_end_to_end_with_normalization(self) -> None:
+        """Verify one-call workflow runs and returns normalized spectrum.
+
+        This case establishes the runs end to end with normalization contract for run
+        vasp workflow with the concrete values and array shapes described below.
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        spectrum: diffpes.types.ArpesSpectrum
+        mean_val: Array
+
         spectrum = run_vasp_workflow(
             level="basic",
             directory=str(_FIXTURES_DIR),

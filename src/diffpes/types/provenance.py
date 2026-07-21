@@ -1,0 +1,507 @@
+"""Types-owned carriers for artifact provenance and information flow.
+
+Extended Summary
+----------------
+The carriers in this module contain the immutable result of provenance graph
+analysis.  Graph construction and semantic propagation remain owned by
+``diffpes.certify``; this module owns only their validated data boundary.
+
+Routine Listings
+----------------
+:class:`InformationState`
+    Store effective semantic state for one artifact or result node.
+:class:`ProvenanceGraph`
+    Store a validated lineage graph and its propagated semantics.
+:class:`ProvenanceReport`
+    Store a structural and semantic provenance-validation report.
+:func:`make_information_state`
+    Create a validated semantic-information state for one graph node.
+:func:`make_provenance_graph`
+    Create a validated immutable provenance graph carrier.
+:func:`make_provenance_report`
+    Create a validated structural and semantic provenance report.
+"""
+
+from collections.abc import Sequence
+
+import equinox as eqx
+from beartype import beartype
+from jaxtyping import jaxtyped
+
+from .certification import TransformationRecord
+
+
+class InformationState(eqx.Module):
+    """Store effective semantic state for one artifact or result node.
+
+    This carrier separates semantics that remain available from information
+    and claims invalidated along the node's provenance path.
+
+    :see: :class:`~.test_provenance.TestInformationState`
+
+    Attributes
+    ----------
+    node_id : str
+        Artifact or result identifier (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    active_semantics : tuple[str, ...]
+        Available scientific semantics (**static** -- compile-time constants;
+        changing them triggers retracing).
+    destroyed_information : tuple[str, ...]
+        Information lost before this node (**static** -- compile-time
+        constants; changing them triggers retracing).
+    invalidated_claims : tuple[str, ...]
+        Claims invalidated before this node (**static** -- compile-time
+        constants; changing them triggers retracing).
+
+    Notes
+    -----
+    The state is declarative static metadata. It records information flow but
+    does not alter or differentiate through the associated physical arrays.
+
+    See Also
+    --------
+    make_information_state : Create a validated semantic-information state
+        for one graph node.
+    """
+
+    node_id: str = eqx.field(static=True)
+    active_semantics: tuple[str, ...] = eqx.field(static=True)
+    destroyed_information: tuple[str, ...] = eqx.field(static=True)
+    invalidated_claims: tuple[str, ...] = eqx.field(static=True)
+
+
+class ProvenanceGraph(eqx.Module):
+    """Store a validated lineage graph and its propagated semantics.
+
+    The graph retains every transformation edge, external root, and effective
+    semantic state needed to inspect information flow without reevaluation.
+
+    :see: :class:`~.test_provenance.TestProvenanceGraph`
+
+    Attributes
+    ----------
+    records : tuple[TransformationRecord, ...]
+        Transformation records in graph order.
+    external_inputs : tuple[str, ...]
+        External root identifiers (**static** -- compile-time constants;
+        changing them triggers retracing).
+    initial_semantics : tuple[tuple[str, tuple[str, ...]], ...]
+        Initial semantics per external root (**static** -- compile-time
+        constants; changing them triggers retracing).
+    topological_order : tuple[str, ...]
+        Validated node order (**static** -- compile-time constants; changing
+        them triggers retracing).
+    information : tuple[InformationState, ...]
+        Propagated semantic state for graph nodes.
+    validation_errors : tuple[str, ...]
+        Structural or semantic validation errors (**static** -- compile-time
+        constants; changing them triggers retracing).
+    graph_checksum : str
+        Deterministic consistency checksum (**static** -- a compile-time
+        constant; changing it triggers retracing).
+
+    Notes
+    -----
+    The graph is an immutable audit carrier evaluated outside forward kernels.
+    Its records and information states contain no differentiable array leaves.
+
+    See Also
+    --------
+    make_provenance_graph : Create a validated immutable provenance graph
+        carrier.
+    """
+
+    records: tuple[TransformationRecord, ...]
+    external_inputs: tuple[str, ...] = eqx.field(static=True)
+    initial_semantics: tuple[tuple[str, tuple[str, ...]], ...] = eqx.field(
+        static=True
+    )
+    topological_order: tuple[str, ...] = eqx.field(static=True)
+    information: tuple[InformationState, ...]
+    validation_errors: tuple[str, ...] = eqx.field(static=True)
+    graph_checksum: str = eqx.field(static=True)
+
+
+class ProvenanceReport(eqx.Module):
+    """Store a structural and semantic provenance-validation report.
+
+    This carrier summarizes graph validity and exposes its roots, terminal
+    outputs, orphaned inputs, and deterministic traversal identity.
+
+    :see: :class:`~.test_provenance.TestProvenanceReport`
+
+    Attributes
+    ----------
+    valid : bool
+        Whether validation succeeded (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    errors : tuple[str, ...]
+        Validation failures (**static** -- compile-time constants; changing
+        them triggers retracing).
+    roots : tuple[str, ...]
+        Root node identifiers (**static** -- compile-time constants; changing
+        them triggers retracing).
+    terminal_outputs : tuple[str, ...]
+        Terminal output identifiers (**static** -- compile-time constants;
+        changing them triggers retracing).
+    orphaned_inputs : tuple[str, ...]
+        Unconsumed external input identifiers (**static** -- compile-time
+        constants; changing them triggers retracing).
+    topological_order : tuple[str, ...]
+        Validated node order (**static** -- compile-time constants; changing
+        them triggers retracing).
+    graph_checksum : str
+        Deterministic consistency checksum (**static** -- a compile-time
+        constant; changing it triggers retracing).
+
+    Notes
+    -----
+    The report contains only static graph metadata and therefore contributes no
+    gradient path to a certified forward execution.
+
+    See Also
+    --------
+    make_provenance_report : Create a validated structural and semantic
+        provenance report.
+    """
+
+    valid: bool = eqx.field(static=True)
+    errors: tuple[str, ...] = eqx.field(static=True)
+    roots: tuple[str, ...] = eqx.field(static=True)
+    terminal_outputs: tuple[str, ...] = eqx.field(static=True)
+    orphaned_inputs: tuple[str, ...] = eqx.field(static=True)
+    topological_order: tuple[str, ...] = eqx.field(static=True)
+    graph_checksum: str = eqx.field(static=True)
+
+
+def _require_text(value: str, name: str) -> str:
+    """Require one nonblank string."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a nonblank string")
+    return value
+
+
+def _text_tuple(
+    values: Sequence[str],
+    name: str,
+    *,
+    unique: bool = True,
+) -> tuple[str, ...]:
+    """Validate and freeze one string sequence."""
+    result: tuple[str, ...] = tuple(
+        _require_text(value, name) for value in values
+    )
+    if unique and len(result) != len(set(result)):
+        raise ValueError(f"{name} must not contain duplicates")
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_information_state(  # noqa: DOC502
+    node_id: str,
+    active_semantics: tuple[str, ...] = (),
+    destroyed_information: tuple[str, ...] = (),
+    invalidated_claims: tuple[str, ...] = (),
+) -> InformationState:
+    """Create a validated semantic-information state for one graph node.
+
+    Freeze named semantic sets while rejecting blank or duplicate entries.
+
+    :see: :class:`~.test_provenance.TestMakeInformationState`
+
+    Implementation Logic
+    --------------------
+    1. **Validate node identity**::
+
+           node_id=_require_text(node_id, "node_id")
+
+       Reject a blank node identifier.
+    2. **Freeze semantic sets**::
+
+           active_semantics=_text_tuple(active_semantics, "active_semantics")
+
+       Convert each sequence to an immutable, duplicate-free tuple.
+    3. **Construct the state**::
+
+           state = InformationState(...)
+
+       Bind and return the semantic state carrier.
+
+    Parameters
+    ----------
+    node_id : str
+        Artifact or result identifier (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    active_semantics : tuple[str, ...]
+        Available semantics (**static** -- compile-time constants; changing
+        them triggers retracing). Default is empty.
+    destroyed_information : tuple[str, ...]
+        Lost information labels (**static** -- compile-time constants;
+        changing them triggers retracing). Default is empty.
+    invalidated_claims : tuple[str, ...]
+        Invalidated claim identifiers (**static** -- compile-time constants;
+        changing them triggers retracing). Default is empty.
+
+    Returns
+    -------
+    state : InformationState
+        Validated immutable semantic-information state.
+
+    Raises
+    ------
+    ValueError
+        If an identifier is blank or a semantic sequence contains duplicates.
+
+    Notes
+    -----
+    Validation is static; the resulting carrier contains no numerical leaves.
+    """
+    state: InformationState = InformationState(
+        node_id=_require_text(node_id, "node_id"),
+        active_semantics=_text_tuple(
+            active_semantics,
+            "active_semantics",
+        ),
+        destroyed_information=_text_tuple(
+            destroyed_information,
+            "destroyed_information",
+        ),
+        invalidated_claims=_text_tuple(
+            invalidated_claims,
+            "invalidated_claims",
+        ),
+    )
+    return state
+
+
+@jaxtyped(typechecker=beartype)
+def make_provenance_graph(  # noqa: PLR0913
+    records: tuple[TransformationRecord, ...],
+    external_inputs: tuple[str, ...],
+    initial_semantics: tuple[tuple[str, tuple[str, ...]], ...],
+    topological_order: tuple[str, ...],
+    information: tuple[InformationState, ...],
+    validation_errors: tuple[str, ...],
+    graph_checksum: str,
+) -> ProvenanceGraph:
+    """Create a validated immutable provenance graph carrier.
+
+    Validate carrier types, root coverage, and unique semantic-state IDs,
+    then freeze the graph in deterministic topological order.
+
+    :see: :class:`~.test_provenance.TestMakeProvenanceGraph`
+
+    Implementation Logic
+    --------------------
+    1. **Validate carrier sequences**::
+
+           frozen_records = tuple(records)
+
+       Require transformation records and information states to use their
+       canonical types.
+    2. **Validate root semantics**::
+
+           if set(semantic_nodes) != set(inputs):
+
+       Require one unique initial-semantic entry for every external input.
+    3. **Validate state identities**::
+
+           if len(state_ids) != len(set(state_ids)):
+
+       Prevent ambiguous propagated semantic states.
+    4. **Construct the graph**::
+
+           graph = ProvenanceGraph(...)
+
+       Freeze the validated graph and bind the result.
+
+    Parameters
+    ----------
+    records : tuple[TransformationRecord, ...]
+        Transformation records in graph order.
+    external_inputs : tuple[str, ...]
+        External root identifiers (**static** -- compile-time constants;
+        changing them triggers retracing).
+    initial_semantics : tuple[tuple[str, tuple[str, ...]], ...]
+        Initial semantics for every root (**static** -- compile-time constants;
+        changing them triggers retracing).
+    topological_order : tuple[str, ...]
+        Validated node order (**static** -- compile-time constants; changing
+        them triggers retracing).
+    information : tuple[InformationState, ...]
+        Propagated semantic states for graph nodes.
+    validation_errors : tuple[str, ...]
+        Graph validation errors (**static** -- compile-time constants;
+        changing them triggers retracing).
+    graph_checksum : str
+        Deterministic consistency checksum (**static** -- a compile-time
+        constant; changing it triggers retracing).
+
+    Returns
+    -------
+    graph : ProvenanceGraph
+        Validated immutable provenance graph.
+
+    Raises
+    ------
+    TypeError
+        If ``records`` or ``information`` contains the wrong carrier type.
+    ValueError
+        If text values are blank or duplicated, initial semantics do not cover
+        every external input, or information-state node IDs are duplicated.
+
+    Notes
+    -----
+    Graph validation uses only static identities and carrier structure; it does
+    not inspect or reduce physical model arrays.
+    """
+    frozen_records: tuple[TransformationRecord, ...] = tuple(records)
+    if any(not isinstance(record, TransformationRecord) for record in records):
+        raise TypeError("records must contain TransformationRecord instances")
+    inputs: tuple[str, ...] = _text_tuple(external_inputs, "external_inputs")
+    semantic_pairs: tuple[tuple[str, tuple[str, ...]], ...] = tuple(
+        (
+            _require_text(node_id, "initial_semantics node_id"),
+            _text_tuple(semantics, "initial_semantics values"),
+        )
+        for node_id, semantics in initial_semantics
+    )
+    semantic_nodes: tuple[str, ...] = tuple(
+        node_id for node_id, _ in semantic_pairs
+    )
+    if len(semantic_nodes) != len(set(semantic_nodes)):
+        raise ValueError("initial_semantics node IDs must be unique")
+    if set(semantic_nodes) != set(inputs):
+        raise ValueError(
+            "initial_semantics must describe every external input"
+        )
+    states: tuple[InformationState, ...] = tuple(information)
+    if any(not isinstance(state, InformationState) for state in states):
+        raise TypeError("information must contain InformationState instances")
+    state_ids: tuple[str, ...] = tuple(state.node_id for state in states)
+    if len(state_ids) != len(set(state_ids)):
+        raise ValueError("information node IDs must be unique")
+    graph: ProvenanceGraph = ProvenanceGraph(
+        records=frozen_records,
+        external_inputs=inputs,
+        initial_semantics=semantic_pairs,
+        topological_order=_text_tuple(
+            topological_order,
+            "topological_order",
+        ),
+        information=states,
+        validation_errors=_text_tuple(
+            validation_errors,
+            "validation_errors",
+            unique=False,
+        ),
+        graph_checksum=_require_text(graph_checksum, "graph_checksum"),
+    )
+    return graph
+
+
+@jaxtyped(typechecker=beartype)
+def make_provenance_report(
+    valid: bool,
+    errors: tuple[str, ...],
+    roots: tuple[str, ...],
+    terminal_outputs: tuple[str, ...],
+    orphaned_inputs: tuple[str, ...],
+    topological_order: tuple[str, ...],
+    graph_checksum: str,
+) -> ProvenanceReport:
+    """Create a validated structural and semantic provenance report.
+
+    Freeze the graph summary and require the validity flag to agree exactly
+    with whether validation errors are present.
+
+    :see: :class:`~.test_provenance.TestMakeProvenanceReport`
+
+    Implementation Logic
+    --------------------
+    1. **Normalize errors**::
+
+           normalized_errors = _text_tuple(errors, "errors", unique=False)
+
+       Freeze validation failures without hiding repeated diagnostics.
+    2. **Check validity consistency**::
+
+           if valid == bool(normalized_errors):
+
+       Require success exactly when no graph error is present.
+    3. **Construct the report**::
+
+           report = ProvenanceReport(...)
+
+       Freeze graph endpoints and bind the result.
+
+    Parameters
+    ----------
+    valid : bool
+        Whether graph validation succeeded (**static** -- a compile-time
+        constant; changing it triggers retracing).
+    errors : tuple[str, ...]
+        Validation failures (**static** -- compile-time constants; changing
+        them triggers retracing).
+    roots : tuple[str, ...]
+        Root identifiers (**static** -- compile-time constants; changing them
+        triggers retracing).
+    terminal_outputs : tuple[str, ...]
+        Terminal output identifiers (**static** -- compile-time constants;
+        changing them triggers retracing).
+    orphaned_inputs : tuple[str, ...]
+        Unconsumed input identifiers (**static** -- compile-time constants;
+        changing them triggers retracing).
+    topological_order : tuple[str, ...]
+        Validated node order (**static** -- compile-time constants; changing
+        them triggers retracing).
+    graph_checksum : str
+        Deterministic consistency checksum (**static** -- a compile-time
+        constant; changing it triggers retracing).
+
+    Returns
+    -------
+    report : ProvenanceReport
+        Validated immutable provenance report.
+
+    Raises
+    ------
+    ValueError
+        If a text value is blank, a unique sequence contains duplicates, or
+        ``valid`` does not agree with whether ``errors`` is empty.
+
+    Notes
+    -----
+    Report construction is static and introduces no differentiable leaves.
+    """
+    normalized_errors: tuple[str, ...] = _text_tuple(
+        errors,
+        "errors",
+        unique=False,
+    )
+    if valid == bool(normalized_errors):
+        raise ValueError("valid must be true exactly when errors is empty")
+    report: ProvenanceReport = ProvenanceReport(
+        valid=valid,
+        errors=normalized_errors,
+        roots=_text_tuple(roots, "roots"),
+        terminal_outputs=_text_tuple(terminal_outputs, "terminal_outputs"),
+        orphaned_inputs=_text_tuple(orphaned_inputs, "orphaned_inputs"),
+        topological_order=_text_tuple(
+            topological_order,
+            "topological_order",
+        ),
+        graph_checksum=_require_text(graph_checksum, "graph_checksum"),
+    )
+    return report
+
+
+__all__: list[str] = [
+    "InformationState",
+    "ProvenanceGraph",
+    "ProvenanceReport",
+    "make_information_state",
+    "make_provenance_graph",
+    "make_provenance_report",
+]

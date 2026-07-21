@@ -2,17 +2,15 @@
 
 Extended Summary
 ----------------
-Provides Matplotlib helper functions that consume an
-:class:`~diffpes.types.ArpesSpectrum` PyTree directly and render
-publication-style ARPES intensity maps.
+Provides Matplotlib helper functions that render publication-style ARPES
+intensity maps. Inputs use :class:`~diffpes.types.ArpesSpectrum` directly.
 
 Routine Listings
 ----------------
 :func:`apply_kpath_ticks`
     Apply symmetry-point ticks/labels from KPathInfo to an axis.
 :func:`list_band_scatter_presets`
-    Return supported preset names for projected band scatter
-    plots.
+    Return supported preset names for projected band scatter plots.
 :func:`plot_arpes_spectrum`
     Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 :func:`plot_arpes_with_kpath`
@@ -20,8 +18,7 @@ Routine Listings
 :func:`plot_band_scatter_preset`
     Plot projected bands as marker-size-weighted scatter points.
 :func:`plot_band_scatter_with_kpath`
-    Plot projected band scatter and annotate x-axis with k-path
-    labels.
+    Plot projected band scatter and annotate x-axis with k-path labels.
 
 Notes
 -----
@@ -34,7 +31,7 @@ functions.
 import numpy as np
 from beartype import beartype
 from beartype.typing import Literal, Optional, Tuple, Union
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, jaxtyped
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
@@ -114,10 +111,14 @@ def _prepare_plot_arrays(
             "energy_axis.shape[0]."
         )
         raise ValueError(msg)
-    return intensity, energy_axis
+    plot_arrays: Tuple[Float[NDArray, "K E"], Float[NDArray, " E"]] = (
+        intensity,
+        energy_axis,
+    )
+    return plot_arrays
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def plot_arpes_spectrum(
     spectrum: ArpesSpectrum,
     ax: Optional[Axes] = None,
@@ -132,24 +133,38 @@ def plot_arpes_spectrum(
 ) -> Tuple[Union[Figure, SubFigure], Axes, AxesImage]:
     """Plot an ARPES intensity map from an ArpesSpectrum PyTree.
 
-    Extended Summary
-    ----------------
     Renders a 2D ARPES map using ``matplotlib.axes.Axes.imshow`` with
     energy on the vertical axis and k-point index on the horizontal
     axis. The function accepts an existing axis or creates a new figure
     and axis when none is supplied.
 
+    :see: :class:`~.test_plotting.TestPlotArpesSpectrum`
+
     Implementation Logic
     --------------------
-    1. Normalize and validate arrays via :func:`_prepare_plot_arrays`.
-    2. Create a new figure/axis pair if ``ax`` is ``None``; otherwise
-       reuse the provided axis and its parent figure.
-    3. Compute plotting bounds from data:
-       x-range ``[0, K-1]`` and y-range ``[min(E), max(E)]``.
-    4. Draw ``intensity.T`` with ``origin="lower"`` so lower energies
-       appear at the bottom and k-index increases left to right.
-    5. Optionally apply color limits and add a labeled colorbar.
-    6. Set axis labels and title, then return figure, axis, and image.
+    1. **Normalize plotting arrays**::
+
+           intensity, energy_axis = _prepare_plot_arrays(spectrum)
+
+       This validates the image rank and energy-axis length before plotting.
+
+    2. **Draw the transposed intensity image**::
+
+           image: AxesImage = ax.imshow(
+               intensity.T,
+               origin="lower",
+               aspect=aspect,
+               extent=extent,
+               cmap=cmap,
+           )
+
+       The transpose places energy vertically and k-point index horizontally.
+
+    3. **Return the Matplotlib objects**::
+
+           return plot_result
+
+       This binding keeps axis reuse and colorbar state explicit.
 
     Parameters
     ----------
@@ -166,7 +181,7 @@ def plot_arpes_spectrum(
         Optional ``(vmin, vmax)`` color limits.
     interpolation : str, optional
         Image interpolation mode. Default is ``"nearest"``.
-    aspect : str, optional
+    aspect : Literal["equal", "auto"], optional
         Image aspect ratio passed to ``imshow``. Default is ``"auto"``.
     xlabel : str, optional
         x-axis label text. Default is ``"k-point index"``.
@@ -184,11 +199,6 @@ def plot_arpes_spectrum(
     image : AxesImage
         Image artist created by ``imshow``.
 
-    Notes
-    -----
-    The transpose ``intensity.T`` is intentional:
-    input data is ``(K, E)``, while ``imshow`` expects rows to map to
-    the y-axis. Transposition maps energy to y and k-index to x.
     """
     intensity: Float[NDArray, "K E"]
     energy_axis: Float[NDArray, " E"]
@@ -199,6 +209,7 @@ def plot_arpes_spectrum(
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
+    ax: Axes
 
     nkpoints: int = intensity.shape[0]
     x_max: float = float(max(nkpoints - 1, 0))
@@ -221,10 +232,15 @@ def plot_arpes_spectrum(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    return fig, ax, image
+    plot_result: Tuple[Union[Figure, SubFigure], Axes, AxesImage] = (
+        fig,
+        ax,
+        image,
+    )
+    return plot_result
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def apply_kpath_ticks(
     ax: Axes,
     kpath: KPathInfo,
@@ -235,21 +251,35 @@ def apply_kpath_ticks(
 ) -> Axes:
     """Apply symmetry-point ticks/labels from KPathInfo to an axis.
 
-    Extended Summary
-    ----------------
     Adds k-path symmetry labels (e.g., G, M, K) to an existing axis
     using :class:`KPathInfo`. Optionally draws vertical guide lines at
     interior symmetry points to visually separate path segments.
 
+    :see: :class:`~.test_plotting.TestApplyKpathTicks`
+
     Implementation Logic
     --------------------
-    1. Convert ``kpath.label_indices`` to a Python list of ints.
-    2. Convert ``kpath.labels`` to a Python list of strings.
-    3. Truncate to the shorter list length to tolerate minor metadata
-       mismatches without raising.
-    4. Apply ticks and tick labels to the x-axis.
-    5. Optionally draw interior vertical lines at ticks excluding the
-       first and last symmetry points.
+    1. **Normalize label positions and text**::
+
+           indices: list[int] = np.asarray(
+               kpath.label_indices, dtype=np.int32
+           ).tolist()
+           labels: list[str] = list(kpath.labels)
+
+       Host-side lists match the Matplotlib tick API and preserve label order.
+
+    2. **Apply the shared label count**::
+
+           n_labels: int = min(len(indices), len(labels))
+           ticks: list[float] = [float(idx) for idx in indices[:n_labels]]
+
+       Truncation tolerates incomplete legacy metadata without shifting labels.
+
+    3. **Return the annotated axis**::
+
+           return ax
+
+       The caller receives the same axis after optional guide-line drawing.
 
     Parameters
     ----------
@@ -275,6 +305,8 @@ def apply_kpath_ticks(
     -----
     This function mutates ``ax`` and returns it for convenient chaining.
     """
+    tick: float
+
     indices: list[int] = np.asarray(
         kpath.label_indices, dtype=np.int32
     ).tolist()
@@ -298,7 +330,7 @@ def apply_kpath_ticks(
     return ax
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def plot_arpes_with_kpath(  # noqa: PLR0913
     spectrum: ArpesSpectrum,
     kpath: KPathInfo,
@@ -315,20 +347,46 @@ def plot_arpes_with_kpath(  # noqa: PLR0913
 ) -> Tuple[Union[Figure, SubFigure], Axes, AxesImage]:
     """Plot ARPES spectrum and annotate k-axis using KPathInfo.
 
-    Extended Summary
-    ----------------
     Convenience wrapper combining :func:`plot_arpes_spectrum` and
     :func:`apply_kpath_ticks` in one call. Useful for line-mode band
     paths where symmetry labels should be shown directly on the ARPES
     image.
 
+    :see: :class:`~.test_plotting.TestPlotArpesWithKpath`
+
     Implementation Logic
     --------------------
-    1. Delegate base image rendering to :func:`plot_arpes_spectrum`
-       using the provided visual styling arguments.
-    2. Apply k-path ticks/labels (and optional symmetry guide lines)
-       via :func:`apply_kpath_ticks`.
-    3. Return the same figure/axis/image triple from the base plot.
+    1. **Render the base spectrum**::
+
+           fig, ax, image = plot_arpes_spectrum(
+               spectrum=spectrum,
+               ax=ax,
+               cmap=cmap,
+               aspect=aspect,
+               clim=clim,
+               colorbar=colorbar,
+               xlabel=xlabel,
+               ylabel=ylabel,
+               title=title,
+           )
+
+       This centralizes image validation and styling in the base plotter.
+
+    2. **Apply symmetry labels**::
+
+           apply_kpath_ticks(
+               ax=ax,
+               kpath=kpath,
+               draw_symmetry_lines=draw_symmetry_lines,
+           )
+
+       This adds line-mode metadata without recreating the image artist.
+
+    3. **Return the composed plot**::
+
+           return plot_result
+
+       The result contains the figure, axis, and image from the base call.
 
     Parameters
     ----------
@@ -346,7 +404,7 @@ def plot_arpes_with_kpath(  # noqa: PLR0913
         Optional ``(vmin, vmax)`` color limits.
     interpolation : str, optional
         Image interpolation mode for ``imshow``.
-    aspect : str, optional
+    aspect : Literal["equal", "auto"], optional
         Image aspect ratio for ``imshow``.
     xlabel : str, optional
         x-axis label. Default is ``"Momentum (k)"``.
@@ -385,25 +443,41 @@ def plot_arpes_with_kpath(  # noqa: PLR0913
         ylabel=ylabel,
         title=title,
     )
+    ax: Axes
     apply_kpath_ticks(
         ax=ax,
         kpath=kpath,
         draw_symmetry_lines=draw_symmetry_lines,
     )
-    return fig, ax, image
+    plot_result: Tuple[Union[Figure, SubFigure], Axes, AxesImage] = (
+        fig,
+        ax,
+        image,
+    )
+    return plot_result
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def list_band_scatter_presets() -> tuple[str, ...]:
     """Return supported preset names for projected band scatter plots.
 
+    Returns the canonical immutable names accepted by the projected-band
+    plotting functions.
+
+    :see: :class:`~.test_plotting.TestListBandScatterPresets`
+
     Returns
     -------
-    tuple[str, ...]
+    presets : tuple[str, ...]
         Available preset names accepted by
         :func:`plot_band_scatter_preset`.
+
+    Notes
+    -----
+    The function returns the tuple without allocating or reordering it.
     """
-    return PRESET_NAMES
+    presets: tuple[str, ...] = PRESET_NAMES
+    return presets
 
 
 @beartype
@@ -418,7 +492,11 @@ def _prepare_band_arrays(
         msg: str = "Expected bands.eigenvalues to have shape (K, B)."
         raise ValueError(msg)
     fermi: float = float(np.asarray(bands.fermi_energy, dtype=np.float64))
-    return eigenvalues, fermi
+    band_arrays: tuple[Float[NDArray, "K B"], float] = (
+        eigenvalues,
+        fermi,
+    )
+    return band_arrays
 
 
 @beartype
@@ -428,9 +506,11 @@ def _subset_atom_axis(
 ) -> Float[NDArray, "K B A2 C"]:
     """Subset an array on atom axis (axis=2) when atom indices are provided."""
     if atom_indices is None:
-        return data
-    idx: Int[NDArray, " A"] = np.asarray(atom_indices, dtype=np.int32)
-    return data[:, :, idx, :]
+        subset: Float[NDArray, "K B A2 C"] = data
+    else:
+        idx: Int[NDArray, " A"] = np.asarray(atom_indices, dtype=np.int32)
+        subset = data[:, :, idx, :]
+    return subset
 
 
 @beartype
@@ -441,12 +521,26 @@ def _weights_from_preset(  # noqa: PLR0912
 ) -> tuple[Float[NDArray, "K B"], bool]:
     """Resolve a band-weight matrix from a preset name.
 
+    Parameters
+    ----------
+    orb_proj : Union[OrbitalProjection, SpinOrbitalProjection]
+        Projection carrier containing orbital and optional spin/OAM data.
+    preset : str
+        Preset name selecting the reduction to compute.
+    atom_indices : Optional[list[int]]
+        Optional zero-based atom subset.
+
     Returns
     -------
     weights : Float[NDArray, "K B"]
         Band weights with shape ``(K, B)``.
     signed : bool
         Whether weights are signed and should be color-mapped.
+
+    Raises
+    ------
+    ValueError
+        If the preset is unknown or requires unavailable spin or OAM data.
     """
     key: str = preset.lower()
     proj: Float[NDArray, "K B A O"] = _subset_atom_axis(
@@ -491,7 +585,9 @@ def _weights_from_preset(  # noqa: PLR0912
     }
     if weights is None and key.startswith("spin_"):
         if spin_arr is None:
-            msg = f"Preset '{preset}' requires spin data, but spin is None."
+            msg: str = (
+                f"Preset '{preset}' requires spin data, but spin is None."
+            )
             raise ValueError(msg)
         if key in spin_channel:
             weights = np.sum(spin_arr[..., spin_channel[key]], axis=2)
@@ -531,10 +627,11 @@ def _weights_from_preset(  # noqa: PLR0912
         presets: str = ", ".join(PRESET_NAMES)
         msg = f"Unknown preset '{preset}'. Available presets: {presets}."
         raise ValueError(msg)
-    return weights, signed
+    preset_weights: tuple[Float[NDArray, "K B"], bool] = (weights, signed)
+    return preset_weights
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def plot_band_scatter_preset(  # noqa: PLR0913
     bands: BandStructure,
     orb_proj: Union[OrbitalProjection, SpinOrbitalProjection],
@@ -554,18 +651,43 @@ def plot_band_scatter_preset(  # noqa: PLR0913
 ) -> tuple[Union[Figure, SubFigure], Axes, PathCollection]:
     """Plot projected bands as marker-size-weighted scatter points.
 
-    Extended Summary
-    ----------------
     Builds a fat-band style scatter plot from a named preset. Marker
     size encodes projection magnitude. For signed presets (spin net
     components and OAM channels), marker color encodes sign/value via a
     colormap.
 
+    :see: :class:`~.test_plotting.TestPlotBandScatterPreset`
+
+    Implementation Logic
+    --------------------
+    1. **Resolve the preset weights**::
+
+           weights, signed = _weights_from_preset(
+               orb_proj, preset, atom_indices
+           )
+
+       This reduces the requested orbital data to one value per band.
+
+    2. **Scale the marker areas**::
+
+           marker_sizes: Float[NDArray, "K B"] = np.maximum(
+               np.abs(weights) * size_scale,
+               min_size,
+           )
+
+       The magnitude controls area while the lower bound keeps points visible.
+
+    3. **Return the plot objects**::
+
+           return plot_result
+
+       The caller receives the figure, axis, and scatter artist.
+
     Parameters
     ----------
     bands : BandStructure
         Band structure with ``eigenvalues`` shape ``(K, B)``.
-    orb_proj : OrbitalProjection or SpinOrbitalProjection
+    orb_proj : Union[OrbitalProjection, SpinOrbitalProjection]
         Projection object containing orbital weights and optional spin/OAM.
     preset : str, optional
         Preset key from :func:`list_band_scatter_presets`.
@@ -602,6 +724,11 @@ def plot_band_scatter_preset(  # noqa: PLR0913
         Axis used for plotting.
     scatter : PathCollection
         Scatter artist returned by Matplotlib.
+
+    Raises
+    ------
+    ValueError
+        If the preset weights and band eigenvalues have different shapes.
     """
     eigenvalues: Float[NDArray, "K B"]
     fermi: float
@@ -610,7 +737,7 @@ def plot_band_scatter_preset(  # noqa: PLR0913
     signed: bool
     weights, signed = _weights_from_preset(orb_proj, preset, atom_indices)
     if weights.shape != eigenvalues.shape:
-        msg = (
+        msg: str = (
             "Preset weights must have shape matching bands.eigenvalues (K, B)."
         )
         raise ValueError(msg)
@@ -633,6 +760,7 @@ def plot_band_scatter_preset(  # noqa: PLR0913
         fig, ax = plt.subplots()
     else:
         fig = ax.figure
+    ax: Axes
 
     scatter: PathCollection
     if signed:
@@ -660,10 +788,15 @@ def plot_band_scatter_preset(  # noqa: PLR0913
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    return fig, ax, scatter
+    plot_result: tuple[Union[Figure, SubFigure], Axes, PathCollection] = (
+        fig,
+        ax,
+        scatter,
+    )
+    return plot_result
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def plot_band_scatter_with_kpath(  # noqa: PLR0913
     bands: BandStructure,
     orb_proj: Union[OrbitalProjection, SpinOrbitalProjection],
@@ -684,6 +817,90 @@ def plot_band_scatter_with_kpath(  # noqa: PLR0913
     draw_symmetry_lines: bool = True,
 ) -> tuple[Union[Figure, SubFigure], Axes, PathCollection]:
     """Plot projected band scatter and annotate x-axis with k-path labels.
+
+    Combines a projected-band scatter plot with the symmetry labels from
+    one :class:`KPathInfo` carrier.
+
+    :see: :class:`~.test_plotting.TestPlotBandScatterWithKpath`
+
+    Implementation Logic
+    --------------------
+    1. **Create the projected-band scatter plot**::
+
+           fig, ax, scatter = plot_band_scatter_preset(
+               bands=bands,
+               orb_proj=orb_proj,
+               preset=preset,
+               atom_indices=atom_indices,
+               ax=ax,
+               shift_fermi=shift_fermi,
+               size_scale=size_scale,
+               min_size=min_size,
+               alpha=alpha,
+               color=color,
+               cmap=cmap,
+               colorbar=colorbar,
+               xlabel=xlabel,
+               ylabel=ylabel,
+               title=title,
+           )
+
+       The base plotter owns the marker construction and axis styling.
+
+    2. **Apply the k-path labels**::
+
+           apply_kpath_ticks(
+               ax=ax,
+               kpath=kpath,
+               draw_symmetry_lines=draw_symmetry_lines,
+               line_color="black",
+               line_alpha=0.35,
+           )
+
+       This adds symmetry metadata to the existing axis.
+
+    3. **Return the plot objects**::
+
+           return plot_result
+
+       The caller receives the figure, axis, and scatter artist.
+
+    Parameters
+    ----------
+    bands : BandStructure
+        Band structure with ``eigenvalues`` shape ``(K, B)``.
+    orb_proj : Union[OrbitalProjection, SpinOrbitalProjection]
+        Projection object containing orbital weights and optional spin/OAM.
+    kpath : KPathInfo
+        Symmetry labels and indices for the plotted k-point path.
+    preset : str, optional
+        Preset key from :func:`list_band_scatter_presets`.
+    atom_indices : Optional[list[int]], optional
+        Optional zero-based atom indices used before reduction.
+    ax : Optional[Axes], optional
+        Existing axis to draw on, or ``None`` to create one.
+    shift_fermi : bool, optional
+        Whether to plot energies relative to the Fermi level.
+    size_scale : float, optional
+        Linear scale factor for marker sizes.
+    min_size : float, optional
+        Minimum marker size in points squared.
+    alpha : float, optional
+        Marker opacity.
+    color : str, optional
+        Solid marker color for unsigned presets.
+    cmap : str, optional
+        Colormap used for signed presets.
+    colorbar : bool, optional
+        Whether to draw a colorbar for signed presets.
+    xlabel : str, optional
+        Horizontal axis label.
+    ylabel : str, optional
+        Vertical energy-axis label in eV.
+    title : str, optional
+        Plot title.
+    draw_symmetry_lines : bool, optional
+        Whether to draw vertical lines at symmetry points.
 
     Returns
     -------
@@ -713,6 +930,7 @@ def plot_band_scatter_with_kpath(  # noqa: PLR0913
         ylabel=ylabel,
         title=title,
     )
+    ax: Axes
     apply_kpath_ticks(
         ax=ax,
         kpath=kpath,
@@ -720,7 +938,12 @@ def plot_band_scatter_with_kpath(  # noqa: PLR0913
         line_color="black",
         line_alpha=0.35,
     )
-    return fig, ax, scatter
+    plot_result: tuple[Union[Figure, SubFigure], Axes, PathCollection] = (
+        fig,
+        ax,
+        scatter,
+    )
+    return plot_result
 
 
 __all__: list[str] = [

@@ -1,9 +1,14 @@
-"""Tests for JAX-native certification dependency analysis."""
+"""Tests for JAX-native certification dependency analysis.
+
+The tests cover public behavior, differentiability, validation, and stable
+scientific identity in the supported certification regime.
+"""
 
 import jax
 import jax.numpy as jnp
+from beartype.typing import Any
 
-from diffpes.certify.dependencies import (
+from diffpes.certify import (
     dependency_map,
     information_spectrum,
     linearized_forward,
@@ -11,13 +16,30 @@ from diffpes.certify.dependencies import (
 )
 
 
-class TestDependencies:
-    """Verify structural, local, and spectral information flow."""
+class TestDependencyMap:
+    """Verify :func:`~diffpes.certify.dependency_map`.
 
-    def test_dependency_map_distinguishes_disconnected_leaf(self):
-        """Trace only leaves consumed by the output JAXPR."""
+    The cases cover the public behavior in the supported certification regime.
 
-        def forward(inputs):
+    :see: :func:`~diffpes.certify.dependency_map`
+    """
+
+    def test_dependency_map_distinguishes_disconnected_leaf(self) -> None:
+        """Trace only leaves consumed by the output JAXPR.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        inputs: Any
+        result: Any
+
+        def forward(inputs: Any) -> Any:
+            x: Any
+            unused: Any
             x, unused = inputs
             del unused
             return x**2
@@ -28,18 +50,56 @@ class TestDependencies:
         assert result.structural.tolist() == [[True, False]]
         assert result.traced.tolist() == [[True, False]]
 
-    def test_linearization_reuses_exact_jvp(self):
-        """Retain the linear map of a cubic function."""
+
+class TestLinearizedForward:
+    """Verify :func:`~diffpes.certify.linearized_forward`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.linearized_forward`
+    """
+
+    def test_linearization_reuses_exact_jvp(self) -> None:
+        """Retain the linear map of a cubic function.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        value: Any
+        pushforward: Any
         value, pushforward = linearized_forward(
             lambda x: x**3, jnp.array([2.0])
         )
         assert jnp.allclose(value, 8.0)
         assert jnp.allclose(pushforward(jnp.ones(1)), 12.0)
 
-    def test_information_spectrum_and_gradient(self):
-        """Recover and differentiate the singular value of x squared."""
 
-        def singular(x):
+class TestInformationSpectrum:
+    """Verify :func:`~diffpes.certify.information_spectrum`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.information_spectrum`
+    """
+
+    def test_information_spectrum_and_gradient(self) -> None:
+        """Recover and differentiate the singular value of x squared.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        x: Any
+
+        def singular(x: Any) -> Any:
+            spectrum: Any
             spectrum = information_spectrum(
                 lambda candidate: candidate**2,
                 x,
@@ -52,8 +112,28 @@ class TestDependencies:
         assert jnp.allclose(singular(x), 4.0, rtol=1e-12)
         assert jnp.allclose(jax.grad(singular)(x), 2.0, rtol=1e-9)
 
-    def test_sensitivity_map_has_output_by_input_orientation(self):
-        """Store output projections along rows and input probes in columns."""
+
+class TestSensitivityMap:
+    """Verify :func:`~diffpes.certify.sensitivity_map`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.sensitivity_map`
+    """
+
+    def test_sensitivity_map_has_output_by_input_orientation(self) -> None:
+        """Store output projections along rows and input probes in columns.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        inputs: Any
+        directions: Any
+        result: Any
         inputs = jnp.array([2.0])
         directions = jnp.ones((1, 1))
         result = sensitivity_map(

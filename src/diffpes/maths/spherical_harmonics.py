@@ -157,7 +157,8 @@ def _associated_legendre_plm(
     negative m directly; the caller should pass ``|m|`` and apply
     the appropriate sign/phase correction externally.
     """
-    # P_m^m = (-1)^m (2m-1)!! (1-x^2)^{m/2}
+    i: int
+
     pmm: Float[Array, " ..."] = jnp.ones_like(x)
     if m > 0:
         sin_theta: Float[Array, " ..."] = jnp.sqrt(
@@ -171,25 +172,32 @@ def _associated_legendre_plm(
     if l == m:
         return pmm
 
-    # P_{m+1}^m = x (2m+1) P_m^m
     pmm1: Float[Array, " ..."] = x * (2.0 * m + 1.0) * pmm
     if l == m + 1:
         return pmm1
 
-    # Upward recurrence: (l-m) P_l^m = (2l-1) x P_{l-1}^m - (l+m-1) P_{l-2}^m
     def _step(
         idx: Integer[Array, ""],
         state: tuple[Float[Array, " ..."], Float[Array, " ..."]],
     ) -> tuple[Float[Array, " ..."], Float[Array, " ..."]]:
+        p_prev2: Float[Array, " ..."]
+        p_prev1: Float[Array, " ..."]
         p_prev2, p_prev1 = state
         idx_f: Float[Array, ""] = jnp.asarray(idx, dtype=jnp.float64)
         m_f: Float[Array, ""] = jnp.asarray(m, dtype=jnp.float64)
         p_curr: Float[Array, " ..."] = (
             (2.0 * idx_f - 1.0) * x * p_prev1 - (idx_f + m_f - 1.0) * p_prev2
         ) / (idx_f - m_f)
-        return p_prev1, p_curr
+        recurrence_state: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+            p_prev1,
+            p_curr,
+        )
+        return recurrence_state
 
-    _, plm = jax.lax.fori_loop(m + 2, l + 1, _step, (pmm, pmm1))
+    recurrence_result: tuple[Float[Array, " ..."], Float[Array, " ..."]] = (
+        jax.lax.fori_loop(m + 2, l + 1, _step, (pmm, pmm1))
+    )
+    plm: Float[Array, " ..."] = recurrence_result[1]
     return plm
 
 
@@ -204,8 +212,6 @@ def real_spherical_harmonic(
 
     Computes :math:`Y_l^m(\theta, \varphi)`.
 
-    Extended Summary
-    ----------------
     Computes the real-valued spherical harmonic using the
     Condon-Shortley phase convention:
 
@@ -237,6 +243,28 @@ def real_spherical_harmonic(
     to both ``theta`` and ``phi`` through JAX automatic
     differentiation.
 
+    :see: :class:`~.test_spherical_harmonics.TestRealSphericalHarmonic`
+
+    Implementation Logic
+    --------------------
+    1. **Compute the associated Legendre values**::
+
+           cos_theta: Float[Array, " ..."] = jnp.cos(theta)
+           am: int = abs(m)
+           plm: Float[Array, " ..."] = _associated_legendre_plm(
+               l, am, cos_theta
+           )
+
+       These values provide the angular basis for each real branch.
+
+    2. **Select the real harmonic branch**::
+
+           if m > 0:
+               ylm = jnp.sqrt(2.0) * norm * plm * jnp.cos(m * phi)
+               return ylm
+
+       The sign of ``m`` selects the cosine, constant, or sine basis.
+
     Parameters
     ----------
     l : int
@@ -252,6 +280,11 @@ def real_spherical_harmonic(
     -------
     ylm : Float[Array, " ..."]
         Real spherical harmonic values.
+
+    Raises
+    ------
+    ValueError
+        If ``l`` is negative or ``abs(m)`` exceeds ``l``.
     """
     if l < 0:
         msg: str = "l must be non-negative"
@@ -272,8 +305,6 @@ def real_spherical_harmonic(
     if m == 0:
         ylm = norm * plm
         return ylm
-    # Cancel the Condon-Shortley phase (-1)^|m| embedded in P_l^|m|
-    # to match the real-to-complex transform used in the Gaunt table.
     ylm = (-1) ** am * jnp.sqrt(2.0) * norm * plm * jnp.sin(am * phi)
     return ylm
 
@@ -286,8 +317,6 @@ def real_spherical_harmonics_all(
 ) -> Float[Array, " ... N"]:
     r"""Evaluate all real spherical harmonics up to l_max.
 
-    Extended Summary
-    ----------------
     Computes every real spherical harmonic :math:`Y_l^m(\theta, \varphi)`
     for :math:`0 \le l \le l_{\max}` and :math:`-l \le m \le l`,
     returning them stacked along a new trailing axis.
@@ -309,6 +338,28 @@ def real_spherical_harmonics_all(
     Legendre recurrence chain; no cross-l recurrence sharing is
     exploited.
 
+    :see: :class:`~.test_spherical_harmonics.TestRealSphericalHarmonicsAll`
+
+    Implementation Logic
+    --------------------
+    1. **Collect harmonics in canonical order**::
+
+           for l in range(l_max + 1):
+               for m in range(-l, l + 1):
+                   results.append(
+                       real_spherical_harmonic(l, m, theta, phi)
+                   )
+
+       The nested ranges produce the documented degree-then-order sequence.
+
+    2. **Stack the harmonic fields**::
+
+           ylm_all: Float[Array, " ... N"] = jnp.stack(
+               results, axis=-1
+           )
+
+       The new trailing axis indexes each ``(l, m)`` pair.
+
     Parameters
     ----------
     l_max : int
@@ -324,6 +375,9 @@ def real_spherical_harmonics_all(
         All spherical harmonics stacked along the last axis,
         where ``N = (l_max + 1)**2``.
     """
+    l: int
+    m: int
+
     results: list[Float[Array, " ..."]] = []
     for l in range(l_max + 1):
         for m in range(-l, l + 1):

@@ -15,13 +15,15 @@ than an accidental scientific promise.
 Routine Listings
 ----------------
 :func:`build_provenance`
-    Validate records, topologically order them, and propagate information.
+    Build a deterministic provenance DAG and propagate information.
 :func:`validate_provenance`
-    Re-evaluate the complete graph structure and derived state.
+    Independently re-evaluate graph structure and derived state.
 :func:`effective_information`
-    Inspect semantics and losses at one graph output.
+    Return propagated semantics, losses, and invalidations for one node.
+:func:`invalidated_claims`
+    Return every claim invalidated at or upstream of one output.
 :func:`lineage`
-    Return the transitive artifact ancestry of one output.
+    Return the transitive parent-node lineage of one output.
 """
 
 from __future__ import annotations
@@ -30,49 +32,21 @@ import heapq
 from collections.abc import Iterable, Mapping, Sequence
 
 import equinox as eqx
+from beartype import beartype
+from beartype.typing import Any, cast
+from jaxtyping import jaxtyped
 
-from diffpes.types.certification import TransformationRecord
+from diffpes.types import (
+    InformationState,
+    ProvenanceGraph,
+    ProvenanceReport,
+    TransformationRecord,
+    make_information_state,
+    make_provenance_graph,
+    make_provenance_report,
+)
 
 from .checksums import checksum_pytree
-
-
-class InformationState(eqx.Module):
-    """Effective semantic state attached to one artifact or result node."""
-
-    node_id: str = eqx.field(static=True)
-    active_semantics: tuple[str, ...] = eqx.field(static=True)
-    destroyed_information: tuple[str, ...] = eqx.field(static=True)
-    invalidated_claims: tuple[str, ...] = eqx.field(static=True)
-
-
-class ProvenanceGraph(eqx.Module):
-    """Immutable validated lineage graph and propagated semantic state."""
-
-    records: tuple[TransformationRecord, ...]
-    external_inputs: tuple[str, ...] = eqx.field(static=True)
-    initial_semantics: tuple[tuple[str, tuple[str, ...]], ...] = eqx.field(
-        static=True
-    )
-    topological_order: tuple[str, ...] = eqx.field(static=True)
-    information: tuple[InformationState, ...]
-    validation_errors: tuple[str, ...] = eqx.field(static=True)
-    graph_checksum: str = eqx.field(static=True)
-
-
-class ProvenanceReport(eqx.Module):
-    """Structural and semantic validation report for a provenance graph."""
-
-    valid: bool = eqx.field(static=True)
-    errors: tuple[str, ...] = eqx.field(static=True)
-    roots: tuple[str, ...] = eqx.field(static=True)
-    terminal_outputs: tuple[str, ...] = eqx.field(static=True)
-    orphaned_inputs: tuple[str, ...] = eqx.field(static=True)
-    topological_order: tuple[str, ...] = eqx.field(static=True)
-    graph_checksum: str = eqx.field(static=True)
-
-
-class ProvenanceError(ValueError):
-    """Report an invalid artifact-lineage or semantic graph."""
 
 
 class _Analysis(eqx.Module):
@@ -93,32 +67,39 @@ def _normalize_terms(
     field_name: str,
 ) -> tuple[str, ...]:
     """Validate and deterministically order one identifier/property set."""
-    normalized = tuple(values)
+    normalized: tuple[str, ...] = tuple(values)
     if any(
         not isinstance(value, str) or not value.strip() for value in normalized
     ):
-        msg = f"{field_name} entries must be nonblank strings"
-        raise ProvenanceError(msg)
+        msg: str = f"{field_name} entries must be nonblank strings"
+        raise ValueError(msg)
     if len(set(normalized)) != len(normalized):
-        msg = f"{field_name} entries must be unique"
-        raise ProvenanceError(msg)
-    return tuple(sorted(normalized))
+        msg: str = f"{field_name} entries must be unique"
+        raise ValueError(msg)
+    result: tuple[str, ...] = tuple(sorted(normalized))
+    return result
 
 
 def _normalize_external_inputs(
     external_inputs: Mapping[str, Iterable[str]] | Iterable[str],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, tuple[str, ...]], ...]]:
     """Normalize external node identities and their input semantics."""
+    node_ids: tuple[str, ...]
+    semantic_pairs: tuple[tuple[str, tuple[str, ...]], ...]
     if isinstance(external_inputs, Mapping):
+        input_mapping: Mapping[str, Iterable[str]] = cast(
+            "Mapping[str, Iterable[str]]",
+            external_inputs,
+        )
         node_ids = _normalize_terms(
-            external_inputs.keys(),
+            input_mapping.keys(),
             field_name="external_inputs",
         )
         semantic_pairs = tuple(
             (
                 node_id,
                 _normalize_terms(
-                    external_inputs[node_id],
+                    input_mapping[node_id],
                     field_name=f"initial semantics for {node_id}",
                 ),
             )
@@ -130,7 +111,11 @@ def _normalize_external_inputs(
             field_name="external_inputs",
         )
         semantic_pairs = tuple((node_id, ()) for node_id in node_ids)
-    return node_ids, semantic_pairs
+    result: tuple[tuple[str, ...], tuple[tuple[str, tuple[str, ...]], ...]] = (
+        node_ids,
+        semantic_pairs,
+    )
+    return result
 
 
 def _record_key(
@@ -138,12 +123,13 @@ def _record_key(
     original_index: int,
 ) -> tuple[str, str, tuple[str, ...], int]:
     """Return a deterministic ordering key for one transformation execution."""
-    return (
+    key: tuple[str, str, tuple[str, ...], int] = (
         record.transformation_id,
         record.transformation_version,
         record.output_ids,
         original_index,
     )
+    return key
 
 
 def _record_errors(  # noqa: PLR0912
@@ -156,12 +142,15 @@ def _record_errors(  # noqa: PLR0912
     tuple[str, ...],
 ]:
     """Collect local record and node-identity errors."""
+    index: Any
+    record: Any
+    output_id: Any
     errors: list[str] = []
     producer: dict[str, int] = {}
     consumed: set[str] = set()
     all_outputs: list[str] = []
     for index, record in enumerate(records):
-        reference = (
+        reference: str = (
             f"{record.transformation_id}@{record.transformation_version}"
         )
         if not record.transformation_id.strip():
@@ -174,14 +163,14 @@ def _record_errors(  # noqa: PLR0912
             errors.append(f"record {index} ({reference}) repeats a parent")
         if len(set(record.output_ids)) != len(record.output_ids):
             errors.append(f"record {index} ({reference}) repeats an output")
-        overlap = set(record.parent_ids) & set(record.output_ids)
+        overlap: set[str] = set(record.parent_ids) & set(record.output_ids)
         if overlap:
-            details = ", ".join(sorted(overlap))
+            details: str = ", ".join(sorted(overlap))
             errors.append(
                 f"record {index} ({reference}) directly consumes its own "
                 f"output: {details}"
             )
-        contradictory = set(record.preserves) & set(record.destroys)
+        contradictory: set[str] = set(record.preserves) & set(record.destroys)
         contradictory |= set(record.introduces) & set(record.destroys)
         if contradictory:
             details = ", ".join(sorted(contradictory))
@@ -203,26 +192,32 @@ def _record_errors(  # noqa: PLR0912
                 producer[output_id] = index
             all_outputs.append(output_id)
         consumed.update(record.parent_ids)
-    collision = set(external_inputs) & set(all_outputs)
+    collision: set[str] = set(external_inputs) & set(all_outputs)
     if collision:
         details = ", ".join(sorted(collision))
         errors.append(
             f"external inputs are also produced internally: {details}"
         )
-    known_nodes = set(external_inputs) | set(all_outputs)
+    known_nodes: set[str] = set(external_inputs) | set(all_outputs)
     for index, record in enumerate(records):
-        missing = set(record.parent_ids) - known_nodes
+        missing: set[str] = set(record.parent_ids) - known_nodes
         if missing:
             details = ", ".join(sorted(missing))
             errors.append(f"record {index} has missing parents: {details}")
-    orphaned = (
+    orphaned: tuple[str, ...] = (
         tuple(sorted(set(external_inputs) - consumed)) if records else ()
     )
     if orphaned:
         errors.append(
             "declared external inputs are not consumed: " + ", ".join(orphaned)
         )
-    return errors, producer, consumed, orphaned
+    result: tuple[list[str], dict[str, int], set[str], tuple[str, ...]] = (
+        errors,
+        producer,
+        consumed,
+        orphaned,
+    )
+    return result
 
 
 def _topological_indices(
@@ -230,10 +225,14 @@ def _topological_indices(
     producer: Mapping[str, int],
 ) -> tuple[tuple[int, ...], bool]:
     """Return deterministic Kahn ordering and whether a cycle remains."""
+    record: Any
+    parent_index: Any
+    degree: Any
+    child: Any
     dependencies: list[set[int]] = []
     children: list[set[int]] = [set() for _ in records]
     for index, record in enumerate(records):
-        parents = {
+        parents: set[int] = {
             producer[parent]
             for parent in record.parent_ids
             if parent in producer and producer[parent] != index
@@ -241,14 +240,17 @@ def _topological_indices(
         dependencies.append(parents)
         for parent_index in parents:
             children[parent_index].add(index)
-    indegree = [len(parents) for parents in dependencies]
+    indegree: list[int] = [len(parents) for parents in dependencies]
     ready: list[tuple[tuple[str, str, tuple[str, ...], int], int]] = []
     for index, degree in enumerate(indegree):
         if degree == 0:
             heapq.heappush(ready, (_record_key(records[index], index), index))
     ordered: list[int] = []
     while ready:
-        _, index = heapq.heappop(ready)
+        ready_item: tuple[tuple[str, str, tuple[str, ...], int], int] = (
+            heapq.heappop(ready)
+        )
+        index: int = ready_item[1]
         ordered.append(index)
         for child in sorted(children[index]):
             indegree[child] -= 1
@@ -257,14 +259,15 @@ def _topological_indices(
                     ready,
                     (_record_key(records[child], child), child),
                 )
-    has_cycle = len(ordered) != len(records)
+    has_cycle: bool = len(ordered) != len(records)
     if has_cycle:
-        remaining = sorted(
+        remaining: list[int] = sorted(
             set(range(len(records))) - set(ordered),
             key=lambda index: _record_key(records[index], index),
         )
         ordered.extend(remaining)
-    return tuple(ordered), has_cycle
+    result: tuple[tuple[int, ...], bool] = (tuple(ordered), has_cycle)
+    return result
 
 
 def _propagate_information(
@@ -275,8 +278,10 @@ def _propagate_information(
     has_cycle: bool,
 ) -> tuple[InformationState, ...]:
     """Propagate semantics only when the graph admits a complete ordering."""
+    index: Any
+    output_id: Any
     state: dict[str, InformationState] = {
-        node_id: InformationState(
+        node_id: make_information_state(
             node_id=node_id,
             active_semantics=semantics,
             destroyed_information=(),
@@ -285,43 +290,47 @@ def _propagate_information(
         for node_id, semantics in initial_semantics
     }
     if has_cycle:
-        return tuple(state[node_id] for node_id, _ in initial_semantics)
+        information: tuple[InformationState, ...] = tuple(
+            state[node_id] for node_id, _ in initial_semantics
+        )
+        return information  # noqa: RET504
     for index in ordered_indices:
-        record = records[index]
-        parent_states = tuple(
+        record: TransformationRecord = records[index]
+        parent_states: tuple[InformationState, ...] = tuple(
             state[parent_id]
             for parent_id in record.parent_ids
             if parent_id in state
         )
-        inherited = {
+        inherited: set[str] = {
             term
             for parent_state in parent_states
             for term in parent_state.active_semantics
         }
-        losses = {
+        losses: set[str] = {
             term
             for parent_state in parent_states
             for term in parent_state.destroyed_information
         }
-        invalidated = {
+        invalidated: set[str] = {
             claim
             for parent_state in parent_states
             for claim in parent_state.invalidated_claims
         }
-        retained = inherited & set(record.preserves)
+        retained: set[str] = inherited & set(record.preserves)
         losses.update(inherited - retained)
         losses.update(record.destroys)
         retained.difference_update(record.destroys)
         retained.update(record.introduces)
         invalidated.update(record.invalidates_claims)
         for output_id in record.output_ids:
-            state[output_id] = InformationState(
+            state[output_id] = make_information_state(
                 node_id=output_id,
                 active_semantics=tuple(sorted(retained)),
                 destroyed_information=tuple(sorted(losses)),
                 invalidated_claims=tuple(sorted(invalidated)),
             )
-    return tuple(state[node_id] for node_id in sorted(state))
+    information = tuple(state[node_id] for node_id in sorted(state))
+    return information  # noqa: RET504
 
 
 def _analyze(
@@ -330,27 +339,40 @@ def _analyze(
     initial_semantics: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> _Analysis:
     """Perform deterministic structural analysis and semantic propagation."""
-    errors, producer, consumed, orphaned = _record_errors(
+    record_analysis: tuple[
+        list[str], dict[str, int], set[str], tuple[str, ...]
+    ] = _record_errors(
         records,
         external_inputs,
     )
-    ordered_indices, has_cycle = _topological_indices(records, producer)
+    errors: list[str] = record_analysis[0]
+    producer: dict[str, int] = record_analysis[1]
+    consumed: set[str] = record_analysis[2]
+    orphaned: tuple[str, ...] = record_analysis[3]
+    topology: tuple[tuple[int, ...], bool] = _topological_indices(
+        records,
+        producer,
+    )
+    ordered_indices: tuple[int, ...] = topology[0]
+    has_cycle: bool = topology[1]
     if has_cycle:
         errors.append("provenance graph contains a cycle")
-    ordered_records = tuple(records[index] for index in ordered_indices)
-    output_order = tuple(
+    ordered_records: tuple[TransformationRecord, ...] = tuple(
+        records[index] for index in ordered_indices
+    )
+    output_order: tuple[str, ...] = tuple(
         output_id
         for record in ordered_records
         for output_id in record.output_ids
     )
-    information = _propagate_information(
+    information: tuple[InformationState, ...] = _propagate_information(
         ordered_indices,
         records,
         initial_semantics,
         has_cycle=has_cycle,
     )
-    all_outputs = set(producer)
-    roots = tuple(
+    all_outputs: set[str] = set(producer)
+    roots: tuple[str, ...] = tuple(
         sorted(
             set(external_inputs)
             | {
@@ -361,8 +383,8 @@ def _analyze(
             }
         )
     )
-    terminal_outputs = tuple(sorted(all_outputs - consumed))
-    return _Analysis(
+    terminal_outputs: tuple[str, ...] = tuple(sorted(all_outputs - consumed))
+    analysis: _Analysis = _Analysis(
         ordered_records=ordered_records,
         topological_order=output_order,
         information=information,
@@ -371,8 +393,10 @@ def _analyze(
         terminal_outputs=terminal_outputs,
         orphaned_inputs=orphaned,
     )
+    return analysis
 
 
+@jaxtyped(typechecker=beartype)
 def build_provenance(
     records: Sequence[TransformationRecord],
     *,
@@ -381,15 +405,39 @@ def build_provenance(
 ) -> ProvenanceGraph:
     """Build a deterministic provenance DAG and propagate information.
 
+    The operation propagates semantic state, information loss, and claim
+    invalidation through a directed artifact graph. It reports contradictions
+    explicitly.
+
+    :see: :class:`~.test_provenance.TestBuildProvenance`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           graph: ProvenanceGraph = make_provenance_graph(
+                   records=normalized_records,
+                   external_inputs=input_ids,
+                   initial_semantics=semantic_pairs,
+                   topological_order=analysis.topological_order,
+                   information=analysis.information,
+                   validation_errors=analysis.errors,
+                   graph_checksum=checksum,
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
     Parameters
     ----------
     records : Sequence[TransformationRecord]
         Transformation executions linking parent and output artifact IDs.
-    external_inputs : Mapping[str, Iterable[str]] or Iterable[str], optional
+    external_inputs : Mapping[str, Iterable[str]] | Iterable[str], optional
         Known source-node IDs. A mapping additionally declares the semantic
         properties initially available on each source.
     strict : bool, optional
-        Raise :class:`ProvenanceError` for any invalid graph. ``False`` is
+        Raise :class:`ValueError` for any invalid graph. ``False`` is
         useful to construct an inspectable rejected graph.
 
     Returns
@@ -399,20 +447,31 @@ def build_provenance(
 
     Raises
     ------
-    ProvenanceError
-        If strict validation detects a cycle, missing/duplicate node, unused
-        input, or contradictory information declaration.
+    ValueError
+        If strict validation detects a cycle or an invalid node. This error
+        also identifies an unused input or contradictory information.
     """
-    normalized_records = tuple(records)
-    input_ids, semantic_pairs = _normalize_external_inputs(external_inputs)
-    analysis = _analyze(normalized_records, input_ids, semantic_pairs)
+    normalized_records: tuple[TransformationRecord, ...] = tuple(records)
+    normalized_inputs: tuple[
+        tuple[str, ...], tuple[tuple[str, tuple[str, ...]], ...]
+    ] = _normalize_external_inputs(external_inputs)
+    input_ids: tuple[str, ...] = normalized_inputs[0]
+    semantic_pairs: tuple[tuple[str, tuple[str, ...]], ...] = (
+        normalized_inputs[1]
+    )
+    analysis: _Analysis = _analyze(
+        normalized_records,
+        input_ids,
+        semantic_pairs,
+    )
     if strict and analysis.errors:
-        raise ProvenanceError("; ".join(analysis.errors))
-    checksum = checksum_pytree(
+        msg: str = "; ".join(analysis.errors)
+        raise ValueError(msg)
+    checksum: str = checksum_pytree(
         (normalized_records, semantic_pairs),
         record_kind="provenance",
     )
-    return ProvenanceGraph(
+    graph: ProvenanceGraph = make_provenance_graph(
         records=normalized_records,
         external_inputs=input_ids,
         initial_semantics=semantic_pairs,
@@ -421,28 +480,54 @@ def build_provenance(
         validation_errors=analysis.errors,
         graph_checksum=checksum,
     )
+    return graph
 
 
+@jaxtyped(typechecker=beartype)
 def validate_provenance(graph: ProvenanceGraph) -> ProvenanceReport:
     """Independently re-evaluate graph structure and derived state.
+
+    The operation propagates semantic state, information loss, and claim
+    invalidation through a directed artifact graph. It reports contradictions
+    explicitly.
+
+    :see: :class:`~.test_provenance.TestValidateProvenance`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           report: ProvenanceReport = make_provenance_report(
+                   valid=not errors,
+                   errors=tuple(errors),
+                   roots=analysis.roots,
+                   terminal_outputs=analysis.terminal_outputs,
+                   orphaned_inputs=analysis.orphaned_inputs,
+                   topological_order=analysis.topological_order,
+                   graph_checksum=expected_checksum,
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
     graph : ProvenanceGraph
-        Graph returned by :func:`build_provenance` or deserialized elsewhere.
+        Graph returned by :func:`build_provenance` or read from storage.
 
     Returns
     -------
     report : ProvenanceReport
         Complete deterministic validation result.
     """
-    analysis = _analyze(
+    analysis: _Analysis = _analyze(
         graph.records,
         graph.external_inputs,
         graph.initial_semantics,
     )
-    errors = list(analysis.errors)
-    expected_checksum = checksum_pytree(
+    errors: list[str] = list(analysis.errors)
+    expected_checksum: str = checksum_pytree(
         (graph.records, graph.initial_semantics),
         record_kind="provenance",
     )
@@ -454,7 +539,7 @@ def validate_provenance(graph: ProvenanceGraph) -> ProvenanceReport:
         )
     if graph.information != analysis.information:
         errors.append("stored information propagation does not match records")
-    return ProvenanceReport(
+    report: ProvenanceReport = make_provenance_report(
         valid=not errors,
         errors=tuple(errors),
         roots=analysis.roots,
@@ -463,70 +548,165 @@ def validate_provenance(graph: ProvenanceGraph) -> ProvenanceReport:
         topological_order=analysis.topological_order,
         graph_checksum=expected_checksum,
     )
+    return report
 
 
+@jaxtyped(typechecker=beartype)
 def effective_information(
     graph: ProvenanceGraph,
     output_id: str,
 ) -> InformationState:
     """Return propagated semantics, losses, and invalidations for one node.
 
+    The operation propagates semantic state, information loss, and claim
+    invalidation through a directed artifact graph. It reports contradictions
+    explicitly.
+
+    :see: :class:`~.test_provenance.TestEffectiveInformation`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           msg: str = f"unknown provenance node: {output_id}"
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
+    Parameters
+    ----------
+    graph : ProvenanceGraph
+        Validated provenance graph to inspect.
+    output_id : str
+        Artifact or result node identifier.
+
+    Returns
+    -------
+    information : InformationState
+        Propagated semantic state at the requested node.
+
     Raises
     ------
     KeyError
         If ``output_id`` is absent from the graph.
     """
+    state: Any
     for state in graph.information:
         if state.node_id == output_id:
-            return state
-    msg = f"unknown provenance node: {output_id}"
+            information: InformationState = state
+            return information  # noqa: RET504
+    msg: str = f"unknown provenance node: {output_id}"
     raise KeyError(msg)
 
 
+@jaxtyped(typechecker=beartype)
 def invalidated_claims(
     graph: ProvenanceGraph,
     output_id: str,
 ) -> tuple[str, ...]:
-    """Return every claim invalidated at or upstream of one output."""
-    return effective_information(graph, output_id).invalidated_claims
+    """Return every claim invalidated at or upstream of one output.
+
+    The operation propagates semantic state, information loss, and claim
+    invalidation through a directed artifact graph. It reports contradictions
+    explicitly.
+
+    :see: :class:`~.test_provenance.TestInvalidatedClaims`
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           claims: tuple[str, ...] = effective_information(
+                   graph,
+                   output_id,
+               ).invalidated_claims
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
+    Parameters
+    ----------
+    graph : ProvenanceGraph
+        Validated provenance graph to inspect.
+    output_id : str
+        Artifact or result node identifier.
+
+    Returns
+    -------
+    claims : tuple[str, ...]
+        Sorted claim identifiers invalidated along the upstream lineage.
+    """
+    claims: tuple[str, ...] = effective_information(
+        graph,
+        output_id,
+    ).invalidated_claims
+    return claims
 
 
+@jaxtyped(typechecker=beartype)
 def lineage(graph: ProvenanceGraph, output_id: str) -> tuple[str, ...]:
     """Return the transitive parent-node lineage of one output.
+
+    The operation propagates semantic state, information loss, and claim
+    invalidation through a directed artifact graph. It reports contradictions
+    explicitly.
+
+    :see: :class:`~.test_provenance.TestLineage`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           result: tuple[str, ...] = tuple(sorted(ancestors))
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
+    Parameters
+    ----------
+    graph : ProvenanceGraph
+        Validated provenance graph to inspect.
+    output_id : str
+        Artifact or result node identifier.
+
+    Returns
+    -------
+    result : tuple[str, ...]
+        Sorted transitive ancestor identifiers.
 
     Raises
     ------
     KeyError
         If ``output_id`` is absent from the graph.
     """
+    parent_id: Any
     producer: dict[str, TransformationRecord] = {
         produced: record
         for record in graph.records
         for produced in record.output_ids
     }
-    known = set(graph.external_inputs) | set(producer)
+    known: set[str] = set(graph.external_inputs) | set(producer)
     if output_id not in known:
-        msg = f"unknown provenance node: {output_id}"
+        msg: str = f"unknown provenance node: {output_id}"
         raise KeyError(msg)
     ancestors: set[str] = set()
-    pending = [output_id]
+    pending: list[str] = [output_id]
     while pending:
-        current = pending.pop()
-        record = producer.get(current)
+        current: str = pending.pop()
+        record: TransformationRecord | None = producer.get(current)
         if record is None:
             continue
         for parent_id in record.parent_ids:
             if parent_id not in ancestors:
                 ancestors.add(parent_id)
                 pending.append(parent_id)
-    return tuple(sorted(ancestors))
+    result: tuple[str, ...] = tuple(sorted(ancestors))
+    return result
 
 
 __all__: list[str] = [
-    "InformationState",
-    "ProvenanceError",
-    "ProvenanceGraph",
-    "ProvenanceReport",
     "build_provenance",
     "effective_information",
     "invalidated_claims",

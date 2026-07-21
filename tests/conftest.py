@@ -7,19 +7,6 @@ contracts shared by the complete test suite. They verify JAX 64-bit mode,
 clear compilation caches between tests, and reject excessive retained memory.
 The collection hook serializes memory-intensive tests under pytest-xdist, and
 the random-key fixture supplies stable, worker-independent test randomness.
-
-Routine Listings
-----------------
-:func:`assert_x64_enabled`
-    Require JAX 64-bit precision for the complete test session.
-:func:`rss_leak_guard`
-    Bound the process RSS retained by each test.
-:func:`clear_jax_caches`
-    Clear JAX caches before RSS is measured after each test.
-:func:`pytest_collection_modifyitems`
-    Group memory-intensive tests on one xdist worker.
-:func:`rng_key`
-    Derive a deterministic random key from a test node identifier.
 """
 
 import hashlib
@@ -50,10 +37,10 @@ def assert_x64_enabled() -> Iterator[None]:
     None
         Control to the test session after validating the default JAX dtype.
 
-    Raises
-    ------
-    AssertionError
-        If importing diffpes did not enable JAX 64-bit precision.
+    Notes
+    -----
+    Asserts that importing diffpes selected ``jax.numpy.float64`` as the
+    default scalar dtype before the suite begins.
     """
     actual_dtype: jnp.dtype = jnp.zeros(()).dtype
     assert actual_dtype == jnp.float64, (
@@ -74,7 +61,7 @@ def rss_leak_guard(request: pytest.FixtureRequest) -> Iterator[None]:
 
     Parameters
     ----------
-    request
+    request : pytest.FixtureRequest
         Pytest request carrying the current test node and its markers.
 
     Yields
@@ -110,7 +97,7 @@ def clear_jax_caches(rss_leak_guard: None) -> Iterator[None]:
 
     Parameters
     ----------
-    rss_leak_guard
+    rss_leak_guard : None
         Dependency that orders cache clearing before the guard's teardown.
 
     Yields
@@ -131,13 +118,14 @@ def pytest_collection_modifyitems(
 
     Parameters
     ----------
-    config
+    config : pytest.Config
         Active pytest configuration. Required by the pytest hook contract.
-    items
+    items : list[pytest.Item]
         Collected test items to augment with xdist grouping metadata.
     """
     del config
     xdist_group: pytest.MarkDecorator = pytest.mark.xdist_group("big_mem")
+    item: pytest.Item
     for item in items:
         if item.get_closest_marker("big_mem") is not None:
             item.add_marker(xdist_group)
@@ -154,7 +142,7 @@ def rng_key(request: pytest.FixtureRequest) -> PRNGKeyArray:
 
     Parameters
     ----------
-    request
+    request : pytest.FixtureRequest
         Pytest request identifying the current test node.
 
     Returns

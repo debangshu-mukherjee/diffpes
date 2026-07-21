@@ -29,8 +29,6 @@ Routine Listings
 ----------------
 :obj:`GAUNT_TABLE`
     Module-level precomputed Gaunt coefficient table for l_max=4.
-:obj:`L_MAX`
-    Maximum angular momentum supported by the precomputed table.
 :func:`build_gaunt_table`
     Build the dipole Gaunt coefficient lookup table.
 :func:`dipole_intensities_all_orbitals`
@@ -54,7 +52,7 @@ Routine Listings
 :func:`safe_log`
     Evaluate log with a finite floor and zero gradients below it.
 :func:`safe_norm`
-    Calculate a Euclidean norm with a zero gradient at zero vectors.
+    Compute a Euclidean norm with a zero gradient at zero vectors.
 :func:`safe_power`
     Raise positive inputs to a power and return zero otherwise.
 :func:`safe_sqrt`
@@ -73,7 +71,7 @@ from .dipole import (
     dipole_intensity_orbital,
     dipole_matrix_element_single,
 )
-from .gaunt import GAUNT_TABLE, L_MAX, build_gaunt_table, gaunt_lookup
+from .gaunt import GAUNT_TABLE, build_gaunt_table, gaunt_lookup
 from .safe import (
     safe_arccos,
     safe_arctan2,
@@ -90,7 +88,6 @@ from .spherical_harmonics import (
 
 __all__: list[str] = [
     "GAUNT_TABLE",
-    "L_MAX",
     "build_gaunt_table",
     "dipole_intensities_all_orbitals",
     "dipole_intensity_orbital",

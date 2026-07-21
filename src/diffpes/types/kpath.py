@@ -10,7 +10,7 @@ line-mode segments/endpoints).
 Routine Listings
 ----------------
 :class:`KPathInfo`
-    PyTree for k-point path metadata.
+    Store k-point path metadata in a JAX PyTree.
 :func:`make_kpath_info`
     Create a validated KPathInfo instance.
 """
@@ -26,10 +26,8 @@ _KPATH_MODES: tuple[str, ...] = ("Automatic", "Line-mode", "Explicit")
 
 
 class KPathInfo(eqx.Module):
-    """PyTree for k-point path metadata.
+    """Store k-point path metadata in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores Brillouin-zone path information parsed from VASP KPOINTS
     files. Includes plotting fields (labels + label indices) and
     mode-specific metadata needed for full parser completeness:
@@ -39,6 +37,9 @@ class KPathInfo(eqx.Module):
     This class is registered as a JAX PyTree via
     as children. String metadata is stored as auxiliary data because
     JAX cannot trace Python strings.
+
+
+    :see: :class:`~.test_kpath.TestKPathInfo`
 
     Attributes
     ----------
@@ -64,15 +65,19 @@ class KPathInfo(eqx.Module):
     shift : Optional[Float[Array, " 3"]]
         Automatic-mode grid shift (None otherwise).
     mode : str
-        KPOINTS file mode (Automatic, Line-mode, Explicit). **Static**.
+        KPOINTS file mode (Automatic, Line-mode, Explicit; **static** -- a
+        compile-time constant; changing it triggers retracing).
     labels : tuple[str, ...]
-        Symmetry point labels (e.g., Gamma, M, K). **Static**.
+        Symmetry point labels (e.g., Gamma, M, K; **static** -- compile-time
+        constants; changing them triggers retracing).
     comment : str
-        Raw comment from KPOINTS line 1. **Static**.
+        Raw comment from KPOINTS line 1 (**static** -- a compile-time
+        constant; changing it triggers retracing).
     coordinate_mode : str
         Coordinate/scheme line metadata:
         line/explicit -> Reciprocal/Cartesian line,
-        automatic -> scheme line (e.g., Monkhorst-Pack). **Static**.
+        automatic -> scheme line (e.g., Monkhorst-Pack; **static** -- a
+        compile-time constant; changing it triggers retracing).
 
     Notes
     -----
@@ -102,7 +107,7 @@ class KPathInfo(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_kpath_info(  # noqa: PLR0913
+def make_kpath_info(  # noqa: DOC503, PLR0913
     num_kpoints: Union[int, Int[Array, " "]],
     label_indices: Union[Int[Array, " L"], "list[int]"],
     points_per_segment: Union[int, Int[Array, " "]] = 0,
@@ -118,8 +123,6 @@ def make_kpath_info(  # noqa: PLR0913
 ) -> KPathInfo:
     """Create a validated KPathInfo instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises raw k-path
     metadata before constructing a ``KPathInfo`` PyTree. Integer
     scalars and arrays are cast to ``int32``; float arrays are cast
@@ -138,20 +141,36 @@ def make_kpath_info(  # noqa: PLR0913
     modes (Line-mode, Explicit, Automatic) through the optional
     fields.
 
+    :see: :class:`~.test_kpath.TestMakeKPathInfo`
+
     Implementation Logic
     --------------------
-    1. **Cast integer fields** (``num_kpoints``, ``label_indices``,
-       ``points_per_segment``, ``segments``) to ``jnp.int32`` via
-       ``jnp.asarray``. Accepts both Python ints and JAX arrays.
-    2. **Cast optional float fields** (``kpoints``, ``weights``,
-       ``shift``) to ``jnp.float64`` when not ``None``.
-    3. **Cast optional int field** (``grid``) to ``jnp.int32`` when
-       not ``None``.
-    4. **Pass string metadata** (``mode``, ``labels``, ``comment``,
-       ``coordinate_mode``) through unchanged -- stored as auxiliary
-       data in the PyTree.
-    5. **Construct** the ``KPathInfo`` Equinox module from all validated
-       fields and return it.
+    1. **Prepare the normalized values**::
+
+           nkpts_arr = jnp.asarray(num_kpoints, dtype=jnp.int32)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           mode not in _KPATH_MODES
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~(nkpts_arr >= 0)
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return kpath
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -172,13 +191,17 @@ def make_kpath_info(  # noqa: PLR0913
     shift : Optional[Float[Array, " 3"]], optional
         Automatic-mode grid shift. Default is None.
     mode : str, optional
-        KPOINTS file mode. Default is ``"Line-mode"``.
+        KPOINTS file mode (**static** -- a compile-time constant; changing it
+        triggers retracing). Default is ``"Line-mode"``.
     labels : tuple[str, ...], optional
-        Symmetry point labels. Default is empty tuple.
+        Symmetry point labels (**static** -- compile-time constants; changing
+        them triggers retracing). Default is empty tuple.
     comment : str, optional
-        KPOINTS comment line. Default is empty string.
+        KPOINTS comment line (**static** -- a compile-time constant; changing
+        it triggers retracing). Default is empty string.
     coordinate_mode : str, optional
-        Coordinate/scheme line metadata. Default is empty string.
+        Coordinate/scheme line metadata (**static** -- a compile-time
+        constant; changing it triggers retracing). Default is empty string.
 
     Returns
     -------
@@ -191,21 +214,31 @@ def make_kpath_info(  # noqa: PLR0913
         If ``mode`` is unsupported, or if line mode has no label index,
         mismatched labels and label indices, or fewer than one segment.
     EquinoxRuntimeError
-        If a traced line-mode segment count is less than one, or if a
-        supplied segment array contains non-finite values.
+        If ``num_kpoints`` is negative, a traced line-mode segment count is
+        less than one, or supplied ``kpoints``, ``weights``, or ``shift``
+        values are non-finite.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the mode is unsupported, line-mode labels are absent or inconsistent, or
+    a concrete line-mode segment count is less than one. Traced validation
+    uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for negative
+    k-point counts, invalid traced segment counts, and non-finite optional
+    floating-point arrays.
 
     See Also
     --------
     KPathInfo : The PyTree class constructed by this factory.
     """
     if mode not in _KPATH_MODES:
-        msg = f"make_kpath_info: mode must be one of {_KPATH_MODES}"
+        msg: str = f"make_kpath_info: mode must be one of {_KPATH_MODES}"
         raise ValueError(msg)
     if mode == "Line-mode" and len(label_indices) < 1:
-        msg = "make_kpath_info: at least one label index is required"
+        msg: str = "make_kpath_info: at least one label index is required"
         raise ValueError(msg)
     if mode == "Line-mode" and labels and len(labels) != len(label_indices):
-        msg = "make_kpath_info: labels and label_indices must agree"
+        msg: str = "make_kpath_info: labels and label_indices must agree"
         raise ValueError(msg)
 
     nkpts_arr: Int[Array, " "] = jnp.asarray(num_kpoints, dtype=jnp.int32)
@@ -217,7 +250,7 @@ def make_kpath_info(  # noqa: PLR0913
         and not isinstance(segments_arr, Tracer)
         and int(segments_arr) < 1
     ):
-        msg = "make_kpath_info: line mode requires at least one segment"
+        msg: str = "make_kpath_info: line mode requires at least one segment"
         raise ValueError(msg)
     kpoints_arr: Optional[Float[Array, "K 3"]] = None
     if kpoints is not None:
@@ -263,7 +296,7 @@ def make_kpath_info(  # noqa: PLR0913
                 ~jnp.all(jnp.isfinite(shift_arr)),
                 "make_kpath_info: shift must be finite",
             )
-        return KPathInfo(
+        validated_kpath: KPathInfo = KPathInfo(
             num_kpoints=nkpts_arr,
             label_indices=indices_arr,
             points_per_segment=pps_arr,
@@ -277,6 +310,7 @@ def make_kpath_info(  # noqa: PLR0913
             comment=comment,
             coordinate_mode=coordinate_mode,
         )
+        return validated_kpath
 
     kpath: KPathInfo = validate_and_create()
     return kpath

@@ -15,9 +15,9 @@ parsed from VASP CHGCAR files. Two variants are provided:
 Routine Listings
 ----------------
 :class:`SOCVolumetricData`
-    PyTree for volumetric data from SOC CHGCAR files.
+    Store SOC CHGCAR volumetric-grid data in a JAX PyTree.
 :class:`VolumetricData`
-    PyTree for volumetric grid data from CHGCAR.
+    Store CHGCAR volumetric-grid data in a JAX PyTree.
 :func:`make_soc_volumetric_data`
     Create a validated ``SOCVolumetricData`` instance.
 :func:`make_volumetric_data`
@@ -40,10 +40,8 @@ from jaxtyping import Array, Float, Int, jaxtyped
 
 
 class VolumetricData(eqx.Module):
-    """PyTree for volumetric grid data from CHGCAR.
+    """Store CHGCAR volumetric-grid data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores the charge density on a 3-D real-space grid together with
     the crystal lattice needed to interpret the grid coordinates.
     An optional magnetization density grid is included when the
@@ -58,6 +56,9 @@ class VolumetricData(eqx.Module):
     (a Python tuple of ints) and ``symbols`` (a Python tuple of
     strings) are stored as auxiliary data because JAX cannot trace
     these types.
+
+
+    :see: :class:`~.test_volumetric.TestVolumetricData`
 
     Attributes
     ----------
@@ -81,12 +82,11 @@ class VolumetricData(eqx.Module):
         Number of atoms per species, with S = number of species.
         JAX-traced (differentiable, int32).
     grid_shape : tuple[int, int, int]
-        Grid dimensions ``(Nx, Ny, Nz)``. Stored as auxiliary data
-        (static) because these integers determine array shapes and
-        JAX requires them at compile time.
+        Grid dimensions ``(Nx, Ny, Nz)`` (**static** -- a compile-time
+        constant; changing it triggers retracing).
     symbols : tuple[str, ...]
         Element symbols for each species (e.g. ``("Bi", "Se")``).
-        Stored as auxiliary data (static).
+        **static** -- compile-time constants; changing them triggers retracing.
 
     Notes
     -----
@@ -114,7 +114,7 @@ class VolumetricData(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_volumetric_data(
+def make_volumetric_data(  # noqa: DOC503
     lattice: Float[Array, "3 3"],
     coords: Float[Array, "N 3"],
     charge: Float[Array, "Cx Cy Cz"],
@@ -125,8 +125,6 @@ def make_volumetric_data(
 ) -> VolumetricData:
     """Create a validated ``VolumetricData`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises CHGCAR volumetric
     data before constructing a ``VolumetricData`` PyTree. All numeric
     arrays are cast to ``float64`` (or ``int32`` for atom counts).
@@ -138,19 +136,36 @@ def make_volumetric_data(
     The function is decorated with ``@jaxtyped(typechecker=beartype)``
     so that shape and dtype constraints are checked at call time.
 
+    :see: :class:`~.test_volumetric.TestMakeVolumetricData`
+
     Implementation Logic
     --------------------
-    1. **Cast lattice** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast coords** to ``jnp.float64`` via ``jnp.asarray``.
-    3. **Cast charge** to ``jnp.float64`` via ``jnp.asarray``.
-    4. **Cast magnetization** to ``jnp.float64`` when not ``None``;
-       otherwise leave as ``None``.
-    5. **Default atom_counts**: if ``None``, create an empty int32
-       array ``jnp.zeros(0, dtype=jnp.int32)``; otherwise cast to
-       ``jnp.int32``.
-    6. **Pass through** ``grid_shape`` and ``symbols`` unchanged --
-       these become auxiliary data in the PyTree.
-    7. **Construct** the ``VolumetricData`` Equinox module and return it.
+    1. **Prepare the normalized values**::
+
+           lattice_arr = jnp.asarray(lattice, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           charge_arr.shape != grid_shape
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(lattice_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return vol
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -158,15 +173,17 @@ def make_volumetric_data(
         Real-space lattice vectors as rows, in Angstroms.
     coords : Float[Array, "N 3"]
         Fractional atomic coordinates.
-    charge : Float[Array, "Nx Ny Nz"]
+    charge : Float[Array, "Cx Cy Cz"]
         Charge density on 3-D grid (electrons per unit cell volume).
-    magnetization : Optional[Float[Array, "Nx Ny Nz"]], optional
+    magnetization : Optional[Float[Array, "Mx My Mz"]], optional
         Magnetization density (spin-up minus spin-down).
         Default is ``None`` (non-spin-polarized).
     grid_shape : tuple[int, int, int], optional
-        Grid dimensions ``(Nx, Ny, Nz)``. Default is ``(1, 1, 1)``.
+        Grid dimensions ``(Nx, Ny, Nz)`` (**static** -- a compile-time
+        constant; changing it triggers retracing). Default is ``(1, 1, 1)``.
     symbols : tuple[str, ...], optional
-        Element symbols per species. Default is empty tuple.
+        Element symbols per species (**static** -- compile-time constants;
+        changing them triggers retracing). Default is empty tuple.
     atom_counts : Optional[Int[Array, " S"]], optional
         Number of atoms per species. Default is ``None`` (replaced
         by an empty int32 array).
@@ -184,6 +201,13 @@ def make_volumetric_data(
     EquinoxRuntimeError
         If the lattice or any volumetric grid contains a non-finite
         value.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    ``grid_shape`` differs from the charge or magnetization shape. Traced
+    validation uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when
+    the lattice, charge, or present magnetization contains a non-finite value.
 
     See Also
     --------
@@ -207,7 +231,7 @@ def make_volumetric_data(
         msg: str = "grid_shape must match charge shape"
         raise ValueError(msg)
     if mag_arr is not None and mag_arr.shape != grid_shape:
-        msg = "grid_shape must match magnetization shape"
+        msg: str = "grid_shape must match magnetization shape"
         raise ValueError(msg)
 
     def validate_and_create() -> VolumetricData:
@@ -228,7 +252,7 @@ def make_volumetric_data(
                 ~(jnp.all(jnp.isfinite(mag_arr))),
                 "make_volumetric_data: magnetization finite",
             )
-        return VolumetricData(
+        validated_volume: VolumetricData = VolumetricData(
             lattice=lattice_arr,
             coords=coords_arr,
             charge=charge_arr,
@@ -237,16 +261,15 @@ def make_volumetric_data(
             symbols=symbols,
             atom_counts=counts_arr,
         )
+        return validated_volume
 
     vol: VolumetricData = validate_and_create()
     return vol
 
 
 class SOCVolumetricData(eqx.Module):
-    """PyTree for volumetric data from SOC CHGCAR files.
+    """Store SOC CHGCAR volumetric-grid data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Variant of :class:`VolumetricData` for spin-orbit coupling
     calculations where VASP writes 4 grid blocks in the CHGCAR:
     total charge, mx, my, mz magnetization components. The
@@ -259,6 +282,9 @@ class SOCVolumetricData(eqx.Module):
     fields are stored as
     children visible to JAX tracing, while ``grid_shape`` and
     ``symbols`` are stored as auxiliary data.
+
+
+    :see: :class:`~.test_volumetric.TestSOCVolumetricData`
 
     Attributes
     ----------
@@ -283,11 +309,11 @@ class SOCVolumetricData(eqx.Module):
     atom_counts : Int[Array, " S"]
         Number of atoms per species. JAX-traced (int32).
     grid_shape : tuple[int, int, int]
-        Grid dimensions ``(Nx, Ny, Nz)``. Stored as auxiliary data
-        (static).
+        Grid dimensions ``(Nx, Ny, Nz)`` (**static** -- a compile-time
+        constant; changing it triggers retracing).
     symbols : tuple[str, ...]
-        Element symbols per species. Stored as auxiliary data
-        (static).
+        Element symbols per species (**static** -- compile-time constants;
+        changing them triggers retracing).
 
     Notes
     -----
@@ -317,7 +343,7 @@ class SOCVolumetricData(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_soc_volumetric_data(
+def make_soc_volumetric_data(  # noqa: DOC503
     lattice: Float[Array, "3 3"],
     coords: Float[Array, "N 3"],
     charge: Float[Array, "Cx Cy Cz"],
@@ -329,8 +355,6 @@ def make_soc_volumetric_data(
 ) -> SOCVolumetricData:
     """Create a validated ``SOCVolumetricData`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises SOC CHGCAR
     volumetric data before constructing a ``SOCVolumetricData``
     PyTree. All numeric arrays are cast to ``float64`` (or ``int32``
@@ -343,17 +367,36 @@ def make_soc_volumetric_data(
     ``charge``, ``magnetization``, and ``magnetization_vector``) are
     checked at call time.
 
+    :see: :class:`~.test_volumetric.TestMakeSOCVolumetricData`
+
     Implementation Logic
     --------------------
-    1. **Default atom_counts**: if ``None``, create an empty int32
-       array ``jnp.zeros(0, dtype=jnp.int32)``; otherwise cast to
-       ``jnp.int32``.
-    2. **Cast all numeric fields** (``lattice``, ``coords``,
-       ``charge``, ``magnetization``, ``magnetization_vector``) to
-       ``jnp.float64`` via ``jnp.asarray``.
-    3. **Pass through** ``grid_shape`` and ``symbols`` unchanged --
-       these become auxiliary data in the PyTree.
-    4. **Construct** the ``SOCVolumetricData`` Equinox module and return.
+    1. **Prepare the normalized values**::
+
+           soc_lattice_arr = jnp.asarray(lattice, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           soc_charge_arr.shape != grid_shape
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(soc_lattice_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return vol
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -361,19 +404,21 @@ def make_soc_volumetric_data(
         Real-space lattice vectors as rows, in Angstroms.
     coords : Float[Array, "N 3"]
         Fractional atomic coordinates.
-    charge : Float[Array, "Nx Ny Nz"]
+    charge : Float[Array, "Cx Cy Cz"]
         Total charge density on 3-D grid (electrons per unit cell
         volume).
-    magnetization : Float[Array, "Nx Ny Nz"]
+    magnetization : Float[Array, "Mx My Mz"]
         Scalar magnetization density (mz component), for backward
         compatibility with ISPIN=2 consumers.
-    magnetization_vector : Float[Array, "Nx Ny Nz 3"]
+    magnetization_vector : Float[Array, "Vx Vy Vz 3"]
         Full vector magnetization ``(mx, my, mz)`` at each grid
         point.
     grid_shape : tuple[int, int, int], optional
-        Grid dimensions ``(Nx, Ny, Nz)``. Default is ``(1, 1, 1)``.
+        Grid dimensions ``(Nx, Ny, Nz)`` (**static** -- a compile-time
+        constant; changing it triggers retracing). Default is ``(1, 1, 1)``.
     symbols : tuple[str, ...], optional
-        Element symbols per species. Default is empty tuple.
+        Element symbols per species (**static** -- compile-time constants;
+        changing them triggers retracing). Default is empty tuple.
     atom_counts : Optional[Int[Array, " S"]], optional
         Number of atoms per species. Default is ``None`` (replaced
         by an empty int32 array).
@@ -392,6 +437,13 @@ def make_soc_volumetric_data(
     EquinoxRuntimeError
         If the lattice or any volumetric grid contains a non-finite
         value.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    ``grid_shape`` differs from a scalar or vector grid shape. Traced
+    validation uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when
+    the lattice or any charge or magnetization grid is non-finite.
 
     See Also
     --------
@@ -418,10 +470,10 @@ def make_soc_volumetric_data(
         msg: str = "grid_shape must match charge shape"
         raise ValueError(msg)
     if soc_mag_arr.shape != grid_shape:
-        msg = "grid_shape must match magnetization shape"
+        msg: str = "grid_shape must match magnetization shape"
         raise ValueError(msg)
     if soc_mag_vector_arr.shape[:3] != grid_shape:
-        msg = "grid_shape must match magnetization_vector spatial shape"
+        msg: str = "grid_shape must match magnetization_vector spatial shape"
         raise ValueError(msg)
 
     def validate_and_create() -> SOCVolumetricData:
@@ -447,7 +499,7 @@ def make_soc_volumetric_data(
             ~(jnp.all(jnp.isfinite(soc_mag_vector_arr))),
             "make_soc_volumetric_data: magnetization vector finite",
         )
-        return SOCVolumetricData(
+        validated_volume: SOCVolumetricData = SOCVolumetricData(
             lattice=soc_lattice_arr,
             coords=jnp.asarray(coords, dtype=jnp.float64),
             charge=soc_charge_arr,
@@ -457,6 +509,7 @@ def make_soc_volumetric_data(
             symbols=symbols,
             atom_counts=counts_arr,
         )
+        return validated_volume
 
     vol: SOCVolumetricData = validate_and_create()
     return vol

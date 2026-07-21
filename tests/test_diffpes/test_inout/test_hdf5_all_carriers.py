@@ -13,7 +13,10 @@ from pathlib import Path
 import chex
 import equinox as eqx
 import jax.numpy as jnp
+from beartype.typing import Any, Callable
+from jaxtyping import Array
 
+import diffpes
 from diffpes.inout import load_from_h5, save_to_h5
 from diffpes.types import (
     make_1d_chain_model,
@@ -40,6 +43,14 @@ from diffpes.types import (
 
 def _all_carriers() -> dict[str, eqx.Module]:
     """Construct one deterministic instance of every carrier class."""
+    energy: Array
+    kpoints: Array
+    bands: diffpes.types.BandStructure
+    projections: diffpes.types.OrbitalProjection
+    basis: diffpes.types.OrbitalBasis
+    diagonalized: diffpes.types.DiagonalizedBands
+    charge: Array
+
     energy = jnp.array([-1.0, 1.0], dtype=jnp.float64)
     kpoints = jnp.zeros((2, 3), dtype=jnp.float64)
     bands = make_band_structure(energy[:, None], kpoints)
@@ -114,6 +125,10 @@ def test_all_carriers_round_trip_bitwise() -> None:
     Uses :func:`equinox.tree_equal` for an exact recursive comparison after a
     single multi-group save/load cycle.
     """
+    temporary_directory: str
+    name: str
+    carrier: eqx.Module
+
     carriers: dict[str, eqx.Module] = _all_carriers()
     with tempfile.TemporaryDirectory() as temporary_directory:
         path: Path = Path(temporary_directory) / "all_carriers.h5"

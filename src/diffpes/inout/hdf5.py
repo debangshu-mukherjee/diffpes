@@ -23,16 +23,17 @@ are encoded as tuple-preserving JSON.
 """
 
 import json
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 import equinox as eqx
 import h5py
 import jax.numpy as jnp
 import numpy as np
 from beartype import beartype
-from beartype.typing import Any, Optional, Union
-from jaxtyping import Shaped
+from beartype.typing import Any, Mapping, Optional, Union
+from jaxtyping import Shaped, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
@@ -59,29 +60,6 @@ from diffpes.types import (
     VolumetricData,
     WorkflowContext,
 )
-
-
-@dataclass(frozen=True)
-class _PyTreeMeta:
-    """Serialization metadata for a registered PyTree type.
-
-    Stores the class reference, the ordered names of JAX-traced
-    array field names, static metadata field names, and encoder/decoder
-    callables for converting static metadata to and from JSON.
-
-    Attributes
-    ----------
-    cls : Any
-        The Equinox module class.
-    children_fields : tuple[str, ...]
-        Ordered field names of JAX array children.
-    static_fields : tuple[str, ...]
-        Ordered field names of static Equinox metadata.
-    """
-
-    cls: Any  # Equinox module class
-    children_fields: tuple[str, ...]
-    static_fields: tuple[str, ...]
 
 
 def _pytree_classes() -> tuple[type[eqx.Module], ...]:
@@ -112,42 +90,52 @@ def _pytree_classes() -> tuple[type[eqx.Module], ...]:
 
 def _encode_static(value: Any) -> Any:  # noqa: ANN401
     """Encode nested static Equinox metadata without losing tuple types."""
+    encoded: Any
     if isinstance(value, tuple):
-        return {"__tuple__": [_encode_static(item) for item in value]}
-    if isinstance(value, eqx.Module) and is_dataclass(value):
-        return {
+        encoded = {"__tuple__": [_encode_static(item) for item in value]}
+    elif isinstance(value, eqx.Module) and is_dataclass(value):
+        encoded = {
             "__module__": type(value).__name__,
             "fields": {
                 field.name: _encode_static(getattr(value, field.name))
                 for field in fields(value)
             },
         }
-    if isinstance(value, list):
-        return [_encode_static(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _encode_static(item) for key, item in value.items()}
-    if isinstance(value, np.generic):
-        return value.item()
-    return value
+    elif isinstance(value, list):
+        encoded = [_encode_static(item) for item in value]
+    elif isinstance(value, dict):
+        encoded = {
+            str(key): _encode_static(item) for key, item in value.items()
+        }
+    elif isinstance(value, np.generic):
+        encoded = value.item()
+    else:
+        encoded = value
+    return encoded
 
 
 def _decode_static(value: Any) -> Any:  # noqa: ANN401
     """Decode tuple-preserving and nested-module static metadata."""
+    decoded: Any
     if isinstance(value, dict) and "__tuple__" in value:
-        return tuple(_decode_static(item) for item in value["__tuple__"])
-    if isinstance(value, dict) and "__module__" in value:
+        decoded = tuple(_decode_static(item) for item in value["__tuple__"])
+    elif isinstance(value, dict) and "__module__" in value:
         class_name: str = str(value["__module__"])
-        module_class: type[eqx.Module] = _PYTREE_REGISTRY[class_name].cls
+        module_class: type[eqx.Module] = _PYTREE_REGISTRY[class_name]["cls"]
         module_fields: dict[str, Any] = {
             str(name): _decode_static(item)
             for name, item in value["fields"].items()
         }
-        return module_class(**module_fields)
-    if isinstance(value, list):
-        return [_decode_static(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _decode_static(item) for key, item in value.items()}
-    return value
+        decoded = module_class(**module_fields)
+    elif isinstance(value, list):
+        decoded = [_decode_static(item) for item in value]
+    elif isinstance(value, dict):
+        decoded = {
+            str(key): _decode_static(item) for key, item in value.items()
+        }
+    else:
+        decoded = value
+    return decoded
 
 
 def _decode_aux_data(type_name: str, value: Any) -> Any:  # noqa: ANN401
@@ -159,28 +147,31 @@ def _decode_aux_data(type_name: str, value: Any) -> Any:  # noqa: ANN401
     a per-carrier write registry.
     """
     decoded: Any = _decode_static(value)
+    auxiliary_data: Any
     if isinstance(value, dict) or value is None:
-        return decoded
-    if type_name == "CrystalGeometry":
-        return tuple(str(item) for item in value)
-    if type_name == "KPathInfo":
-        return (
+        auxiliary_data = decoded
+    elif type_name == "CrystalGeometry":
+        auxiliary_data = tuple(str(item) for item in value)
+    elif type_name == "KPathInfo":
+        auxiliary_data = (
             str(value[0]),
             tuple(str(item) for item in value[1]),
             str(value[2]),
             str(value[3]),
         )
-    if type_name in {"SOCVolumetricData", "VolumetricData"}:
-        return (
+    elif type_name in {"SOCVolumetricData", "VolumetricData"}:
+        auxiliary_data = (
             tuple(int(item) for item in value[0]),
             tuple(str(item) for item in value[1]),
         )
-    return decoded
+    else:
+        auxiliary_data = decoded
+    return auxiliary_data
 
 
-def _module_meta(module_class: type[eqx.Module]) -> _PyTreeMeta:
+def _module_meta(module_class: type[eqx.Module]) -> Mapping[str, Any]:
     """Build serialization metadata from Equinox dataclass fields."""
-    module_fields = fields(module_class)
+    module_fields: tuple[Any, ...] = fields(module_class)
     children_fields: tuple[str, ...] = tuple(
         field.name
         for field in module_fields
@@ -191,16 +182,19 @@ def _module_meta(module_class: type[eqx.Module]) -> _PyTreeMeta:
         for field in module_fields
         if bool(field.metadata.get("static", False))
     )
-    return _PyTreeMeta(
-        cls=module_class,
-        children_fields=children_fields,
-        static_fields=static_fields,
+    metadata: Mapping[str, Any] = MappingProxyType(
+        {
+            "cls": module_class,
+            "children_fields": children_fields,
+            "static_fields": static_fields,
+        }
     )
+    return metadata
 
 
-_PYTREE_REGISTRY: dict[str, _PyTreeMeta] = {
-    cls.__name__: _module_meta(cls) for cls in _pytree_classes()
-}
+_PYTREE_REGISTRY: Mapping[str, Mapping[str, Any]] = MappingProxyType(
+    {cls.__name__: _module_meta(cls) for cls in _pytree_classes()}
+)
 
 
 @beartype
@@ -232,7 +226,7 @@ def _dataset_write_kwargs(
 
     Parameters
     ----------
-    data : np.ndarray
+    data : Shaped[NDArray, "..."]
         The NumPy array to be written. Its ``ndim`` determines whether
         filters are applicable.
     compression : Optional[str]
@@ -253,25 +247,23 @@ def _dataset_write_kwargs(
         Keyword arguments to pass to ``h5py.Group.create_dataset``.
         Empty dict for scalar datasets.
     """
-    if data.ndim == 0:
-        return {}
-
     kwargs: dict[str, Any] = {}
-    if compression is not None:
-        kwargs["compression"] = compression
-    if compression_opts is not None:
-        kwargs["compression_opts"] = compression_opts
-    if shuffle:
-        kwargs["shuffle"] = True
-    if fletcher32:
-        kwargs["fletcher32"] = True
-    if chunks is not None:
-        kwargs["chunks"] = chunks
+    if data.ndim != 0:
+        if compression is not None:
+            kwargs["compression"] = compression
+        if compression_opts is not None:
+            kwargs["compression_opts"] = compression_opts
+        if shuffle:
+            kwargs["shuffle"] = True
+        if fletcher32:
+            kwargs["fletcher32"] = True
+        if chunks is not None:
+            kwargs["chunks"] = chunks
     return kwargs
 
 
-@beartype
-def save_to_h5(
+@jaxtyped(typechecker=beartype)
+def save_to_h5(  # noqa: DOC503 -- recursive helper raises TypeError.
     path: Union[str, Path],
     /,
     *,
@@ -289,32 +281,28 @@ def save_to_h5(
     Equinox field name), and static metadata is stored as a
     JSON-encoded group attribute.
 
+    :see: :class:`~.test_hdf5.TestSaveToH5`
+
     Implementation Logic
     --------------------
-    1. **Validate inputs**:
-       Ensure at least one PyTree is provided.
+    1. **Reject an empty save request**::
 
-    2. **Iterate over keyword arguments**:
-       For each ``(group_name, pytree)`` pair:
+           if not pytrees:
+               msg: str = "At least one PyTree must be provided."
+               raise ValueError(msg)
 
-       a. Look up ``type(pytree).__name__`` in
-          ``_PYTREE_REGISTRY`` to obtain serialization metadata.
+       This prevents creation of a file with no registered carrier groups.
 
-       b. Read child arrays and static metadata by registered field name.
+    2. **Write each carrier through the registry codec**::
 
-       c. Create an HDF5 group named ``group_name``.
+           file_path: Path = Path(path)
+           with h5py.File(file_path, "w") as f:
+               for group_name, pytree in pytrees.items():
+                   grp: h5py.Group = f.create_group(group_name)
+                   _write_module(grp, pytree)
 
-       d. Store the type name as ``_pytree_type`` attribute and
-          the JSON-encoded aux_data as ``_aux_data_json``.
-
-       e. For each child field: if the value is ``None``
-          (Optional field), record the field name in
-          ``_none_fields``; otherwise create an HDF5 dataset
-          from ``numpy.asarray(child)`` with optional storage
-          flags (compression/chunk/checksum) for non-scalar
-          datasets.
-
-       f. Store the ``_none_fields`` list as a JSON attribute.
+       The recursive writer preserves child arrays and static metadata.
+       It applies the storage flags under one group name.
 
     Parameters
     ----------
@@ -333,7 +321,7 @@ def save_to_h5(
     chunks : Optional[Union[bool, tuple[int, ...]]], optional
         Chunking policy for non-scalar datasets. ``True`` enables
         auto-chunking, or provide an explicit chunk-shape tuple.
-    **pytrees : PyTree
+    **pytrees : Any
         Named PyTree instances. Each keyword argument name
         becomes an HDF5 group name.
 
@@ -352,11 +340,15 @@ def save_to_h5(
     filter/chunk flags because those options are invalid for scalar
     dataspace in HDF5.
     """
+    f: h5py.File
+    group_name: str
+    pytree: eqx.Module
+
     if not pytrees:
-        msg = "At least one PyTree must be provided."
+        msg: str = "At least one PyTree must be provided."
         raise ValueError(msg)
     if compression is None and compression_opts is not None:
-        msg = "compression_opts requires compression to be set."
+        msg: str = "compression_opts requires compression to be set."
         raise ValueError(msg)
 
     def _write_module(
@@ -364,13 +356,15 @@ def save_to_h5(
         pytree: Any,  # noqa: ANN401
     ) -> None:
         """Write one Equinox module, recursively storing module children."""
+        field_name: str
+
         type_name: str = type(pytree).__name__
         if type_name not in _PYTREE_REGISTRY:
-            msg = f"Unsupported PyTree type: {type_name}"
+            msg: str = f"Unsupported PyTree type: {type_name}"
             raise TypeError(msg)
-        meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
+        meta: Mapping[str, Any] = _PYTREE_REGISTRY[type_name]
         static_values: tuple[Any, ...] = tuple(
-            getattr(pytree, field_name) for field_name in meta.static_fields
+            getattr(pytree, field_name) for field_name in meta["static_fields"]
         )
         aux_data: Any = None
         if len(static_values) == 1:
@@ -381,7 +375,7 @@ def save_to_h5(
         grp.attrs[ATTR_AUX] = json.dumps(_encode_static(aux_data))
 
         none_fields: list[str] = []
-        for field_name in meta.children_fields:
+        for field_name in meta["children_fields"]:
             child: Any = getattr(pytree, field_name)
             if child is None:
                 none_fields.append(field_name)
@@ -408,8 +402,8 @@ def save_to_h5(
             _write_module(grp, pytree)
 
 
-@beartype
-def load_from_h5(
+@jaxtyped(typechecker=beartype)
+def load_from_h5(  # noqa: DOC502 -- raises occur under the HDF5 context.
     path: Union[str, Path],
     name: Optional[str] = None,
 ) -> Any:  # noqa: ANN401
@@ -419,31 +413,29 @@ def load_from_h5(
     by reading datasets as JAX arrays and reconstructing the
     Equinox module with keyword arguments.
 
+    :see: :class:`~.test_hdf5.TestLoadFromH5`
+
     Implementation Logic
     --------------------
-    1. **Open the HDF5 file** for reading.
+    1. **Open the requested HDF5 path**::
 
-    2. **Select groups to load**:
-       If ``name`` is provided, load only that group. If
-       ``name`` is ``None``, load all top-level groups.
+           file_path: Path = Path(path)
+           with h5py.File(file_path, "r") as f:
 
-    3. **For each group**:
+       This gives named and all-group loads the same read-only file boundary.
 
-       a. Read ``_pytree_type`` attribute and look up the class
-          in ``_PYTREE_REGISTRY``.
+    2. **Reconstruct registered groups recursively**::
 
-       b. Read ``_aux_data_json`` attribute and decode it via
-          the type-specific ``aux_decoder``.
+           loaded: Any = _load_group(f[name])
 
-       c. Read ``_none_fields`` attribute (defaulting to empty
-          list).
+       The nested loader restores child arrays, optional fields, and metadata.
+       It then calls the registered Equinox carrier class.
 
-       d. For each children field name: if the name appears in
-          ``_none_fields``, set the child to ``None``;
-          otherwise read the HDF5 dataset and convert to a JAX
-          array via ``jnp.asarray``.
+    3. **Return the selected load result**::
 
-       e. Reconstruct the Equinox module with keyword arguments.
+           return loaded
+
+       A named request returns one carrier. Other requests return a mapping.
 
     Parameters
     ----------
@@ -455,7 +447,7 @@ def load_from_h5(
 
     Returns
     -------
-    result : PyTree or dict[str, PyTree]
+    loaded : PyTree or dict[str, PyTree]
         A single PyTree if ``name`` is given, otherwise a dict
         mapping group names to PyTree instances.
 
@@ -466,24 +458,29 @@ def load_from_h5(
     TypeError
         If a group's ``_pytree_type`` is not in the registry.
     """
+    f: h5py.File
+    group_name: str
+
     file_path: Path = Path(path)
 
     def _load_group(
         grp: h5py.Group,
     ) -> Any:  # noqa: ANN401
+        field_name: str
+
         type_name: str = str(grp.attrs[ATTR_TYPE])
         if type_name not in _PYTREE_REGISTRY:
-            msg = f"Unknown PyTree type: {type_name}"
+            msg: str = f"Unknown PyTree type: {type_name}"
             raise TypeError(msg)
 
-        meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
+        meta: Mapping[str, Any] = _PYTREE_REGISTRY[type_name]
         aux_json: Any = json.loads(str(grp.attrs[ATTR_AUX]))
         aux_data: Any = _decode_aux_data(type_name, aux_json)
 
         none_fields: list[str] = json.loads(str(grp.attrs[ATTR_NONE]))
 
         children: list[Any] = []
-        for field_name in meta.children_fields:
+        for field_name in meta["children_fields"]:
             if field_name in none_fields:
                 children.append(None)
             elif isinstance(grp[field_name], h5py.Group):
@@ -493,32 +490,35 @@ def load_from_h5(
                 children.append(jnp.asarray(arr))
 
         constructor_fields: dict[str, Any] = dict(
-            zip(meta.children_fields, children, strict=True)
+            zip(meta["children_fields"], children, strict=True)
         )
         static_values: tuple[Any, ...]
-        if not meta.static_fields:
+        if not meta["static_fields"]:
             static_values = ()
-        elif len(meta.static_fields) == 1:
+        elif len(meta["static_fields"]) == 1:
             static_values = (aux_data,)
         else:
             static_values = tuple(aux_data)
         constructor_fields.update(
-            zip(meta.static_fields, static_values, strict=True)
+            zip(meta["static_fields"], static_values, strict=True)
         )
-        loaded: Any = meta.cls(**constructor_fields)
+        module_class: type[eqx.Module] = meta["cls"]
+        loaded: Any = module_class(**constructor_fields)
         return loaded
 
     with h5py.File(file_path, "r") as f:
         if name is not None:
             if name not in f:
-                msg = f"Group '{name}' not found in {path}"
+                msg: str = f"Group '{name}' not found in {path}"
                 raise KeyError(msg)
-            return _load_group(f[name])
+            loaded: Any = _load_group(f[name])
+            return loaded
 
         result: dict[str, Any] = {}
         for group_name in f:
             result[group_name] = _load_group(f[group_name])
-        return result
+        loaded: dict[str, Any] = result
+        return loaded
 
 
 __all__: list[str] = [

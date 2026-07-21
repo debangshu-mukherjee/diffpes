@@ -2,9 +2,8 @@
 
 Extended Summary
 ----------------
-Reads VASP PROCAR files containing orbital-resolved band
-projections and returns an
-:class:`~diffpes.types.OrbitalProjection` PyTree. Supports
+Reads VASP PROCAR files containing orbital-resolved band projections and
+returns an :class:`~diffpes.types.OrbitalProjection` carrier. It supports
 non-spin, spin-polarized (ISPIN=2), and SOC layouts.
 
 Routine Listings
@@ -23,8 +22,9 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
-from beartype.typing import Literal, Optional, Union
-from jaxtyping import Array, Float
+from beartype import beartype
+from beartype.typing import Literal, Optional, TextIO, Union
+from jaxtyping import Array, Float, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
@@ -39,6 +39,7 @@ from diffpes.types import (
 )
 
 
+@jaxtyped(typechecker=beartype)
 def read_procar(
     filename: str = "PROCAR",
     return_mode: Literal["legacy", "full"] = "legacy",
@@ -55,8 +56,6 @@ def read_procar(
     - **SOC** (LSORBIT=.TRUE.): four consecutive blocks per k-point
       (total, Sx, Sy, Sz projections).
 
-    Extended Summary
-    ----------------
     The PROCAR file written by VASP (when ``LORBIT=11`` or ``12``)
     contains site- and orbital-resolved projections of each Kohn-Sham
     eigenstate. The file is organised into one or more *blocks*, each
@@ -76,44 +75,45 @@ def read_procar(
       block 1 = spin-down.
     * 4 blocks: spin-orbit coupling (SOC), blocks = total, Sx, Sy, Sz.
 
+    :see: :class:`~.test_procar.TestReadProcar`
+
     Implementation Logic
     --------------------
-    1. **Read entire file** into a single string and delegate to
-       :func:`_parse_procar_blocks` to extract structured block data.
+    1. **Parse the file blocks**::
 
-    2. **Determine spin layout** from the number of blocks.
+           content = fid.read()
+           blocks = _parse_procar_blocks(content)
 
-    3. **Legacy mode or non-spin**: return an ``OrbitalProjection``
-       wrapping only the first block's projection array (shape
-       ``(K, B, A, 9)``).
+       Each block carries one orbital projection table and its dimensions.
+    2. **Identify the spin layout**::
 
-    4. **Spin-polarized (ISPIN=2), full mode**:
+           is_spin_polarized = nblocks == ISPIN2_BLOCKS
+           is_soc = nblocks == SOC_BLOCKS
 
-       a. Average spin-up and spin-down projections to get a
-          spin-averaged orbital weight per atom.
-       b. Construct a ``(K, B, A, 6)`` spin texture array where
-          channels 4-5 encode ``Sz+`` and ``Sz-`` (the positive and
-          negative parts of the spin-up minus spin-down difference
-          summed over orbitals).
-       c. Return a ``SpinOrbitalProjection``.
+       The number of blocks distinguishes non-spin, ISPIN=2, and SOC data.
+    3. **Build the projection and spin arrays**::
 
-    5. **SOC (4 blocks), full mode**:
+           avg = (proj_up + proj_down) / 2.0
+           sx_sum = np.sum(proj_sx, axis=-1)
+           sy_sum = np.sum(proj_sy, axis=-1)
+           sz_sum = np.sum(proj_sz, axis=-1)
 
-       a. Use the total-projection block (block 0) as the orbital
-          weights.
-       b. Construct a ``(K, B, A, 6)`` spin texture array where
-          channels 0-1 encode ``Sx+`` / ``Sx-``, 2-3 encode
-          ``Sy+`` / ``Sy-``, and 4-5 encode ``Sz+`` / ``Sz-``.
-          Each component is the positive/negative part of the
-          orbital-summed projection from the corresponding
-          spin block.
-       c. Return a ``SpinOrbitalProjection``.
+       Full mode stores signed spin components as separate non-negative pairs.
+    4. **Construct the matching carrier**::
+
+           projection_result = make_orbital_projection(projections=proj_arr)
+           projection_result = make_spin_orbital_projection(
+               projections=proj_arr, spin=spin_arr
+           )
+
+       Legacy and non-spin data use the orbital carrier. Spin data uses the
+       mandatory-spin carrier.
 
     Parameters
     ----------
     filename : str, optional
         Path to PROCAR file. Default is ``"PROCAR"``.
-    return_mode : {"legacy", "full"}, optional
+    return_mode : Literal["legacy", "full"], optional
         ``"legacy"`` (default) returns an ``OrbitalProjection``
         from the first spin block only (backward-compatible).
         ``"full"`` returns a ``SpinOrbitalProjection`` (with
@@ -122,7 +122,7 @@ def read_procar(
 
     Returns
     -------
-    orb_proj : OrbitalProjection or SpinOrbitalProjection
+    projection_result : Union[OrbitalProjection, SpinOrbitalProjection]
         ``OrbitalProjection`` for legacy mode or non-spin data.
         ``SpinOrbitalProjection`` for full mode with spin data.
 
@@ -144,6 +144,8 @@ def read_procar(
     ``[Sx+, Sx-, Sy+, Sy-, Sz+, Sz-]`` following the convention used
     by the ARPES simulation pipeline.
     """
+    fid: TextIO
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         content: str = fid.read()
@@ -151,7 +153,7 @@ def read_procar(
     blocks: list[dict] = _parse_procar_blocks(content)
 
     if not blocks:
-        msg = "No valid PROCAR blocks found."
+        msg: str = "No valid PROCAR blocks found."
         raise ValueError(msg)
 
     nblocks: int = len(blocks)
@@ -166,9 +168,10 @@ def read_procar(
         proj_arr: Float[Array, " K B A 9"] = jnp.asarray(
             blocks[0]["projections"], dtype=jnp.float64
         )
-        return make_orbital_projection(projections=proj_arr)
-
-    if is_spin_polarized:
+        projection_result: Union[OrbitalProjection, SpinOrbitalProjection] = (
+            make_orbital_projection(projections=proj_arr)
+        )
+    elif is_spin_polarized:
         proj_up: Float[NDArray, "K B A O"] = blocks[0]["projections"]
         proj_down: Float[NDArray, "K B A O"] = blocks[1]["projections"]
         avg: Float[NDArray, "K B A O"] = (proj_up + proj_down) / 2.0
@@ -182,31 +185,33 @@ def read_procar(
         spin_arr: Float[Array, " K B A 6"] = jnp.asarray(
             spin_data, dtype=jnp.float64
         )
-        return make_spin_orbital_projection(
+        projection_result = make_spin_orbital_projection(
             projections=proj_arr, spin=spin_arr
         )
+    else:
+        proj_total: Float[NDArray, "K B A O"] = blocks[0]["projections"]
+        proj_sx: Float[NDArray, "K B A O"] = blocks[1]["projections"]
+        proj_sy: Float[NDArray, "K B A O"] = blocks[2]["projections"]
+        proj_sz: Float[NDArray, "K B A O"] = blocks[3]["projections"]
+        proj_arr = jnp.asarray(proj_total, dtype=jnp.float64)
 
-    # SOC: 4 blocks = total, Sx, Sy, Sz
-    proj_total: Float[NDArray, "K B A O"] = blocks[0]["projections"]
-    proj_sx: Float[NDArray, "K B A O"] = blocks[1]["projections"]
-    proj_sy: Float[NDArray, "K B A O"] = blocks[2]["projections"]
-    proj_sz: Float[NDArray, "K B A O"] = blocks[3]["projections"]
-    proj_arr = jnp.asarray(proj_total, dtype=jnp.float64)
-
-    spin_data = np.zeros(
-        (nkpts, nbands, natoms, N_SPIN_COMPONENTS), dtype=np.float64
-    )
-    sx_sum: Float[NDArray, "K B A"] = np.sum(proj_sx, axis=-1)
-    sy_sum: Float[NDArray, "K B A"] = np.sum(proj_sy, axis=-1)
-    sz_sum: Float[NDArray, "K B A"] = np.sum(proj_sz, axis=-1)
-    spin_data[:, :, :, 0] = np.maximum(sx_sum, 0.0)
-    spin_data[:, :, :, 1] = np.maximum(-sx_sum, 0.0)
-    spin_data[:, :, :, 2] = np.maximum(sy_sum, 0.0)
-    spin_data[:, :, :, 3] = np.maximum(-sy_sum, 0.0)
-    spin_data[:, :, :, 4] = np.maximum(sz_sum, 0.0)
-    spin_data[:, :, :, 5] = np.maximum(-sz_sum, 0.0)
-    spin_arr = jnp.asarray(spin_data, dtype=jnp.float64)
-    return make_spin_orbital_projection(projections=proj_arr, spin=spin_arr)
+        spin_data = np.zeros(
+            (nkpts, nbands, natoms, N_SPIN_COMPONENTS), dtype=np.float64
+        )
+        sx_sum: Float[NDArray, "K B A"] = np.sum(proj_sx, axis=-1)
+        sy_sum: Float[NDArray, "K B A"] = np.sum(proj_sy, axis=-1)
+        sz_sum: Float[NDArray, "K B A"] = np.sum(proj_sz, axis=-1)
+        spin_data[:, :, :, 0] = np.maximum(sx_sum, 0.0)
+        spin_data[:, :, :, 1] = np.maximum(-sx_sum, 0.0)
+        spin_data[:, :, :, 2] = np.maximum(sy_sum, 0.0)
+        spin_data[:, :, :, 3] = np.maximum(-sy_sum, 0.0)
+        spin_data[:, :, :, 4] = np.maximum(sz_sum, 0.0)
+        spin_data[:, :, :, 5] = np.maximum(-sz_sum, 0.0)
+        spin_arr = jnp.asarray(spin_data, dtype=jnp.float64)
+        projection_result = make_spin_orbital_projection(
+            projections=proj_arr, spin=spin_arr
+        )
+    return projection_result
 
 
 def _parse_procar_blocks(
@@ -272,6 +277,9 @@ def _parse_procar_blocks(
     than by parsed index. The ``tot`` column (column 10 in the PROCAR
     line) is not stored.
     """
+    b: int
+    a: int
+
     blocks: list[dict] = []
     lines: list[str] = content.splitlines()
     i: int = 0
@@ -304,14 +312,14 @@ def _parse_procar_blocks(
             for b in range(nbands):
                 while i < len(lines) and "band" not in lines[i]:
                     i += 1
-                i += 1  # skip band header
-                i += 1  # skip orbital-name header
+                i += 1
+                i += 1
                 for a in range(natoms):
                     vals: list[float] = [float(x) for x in lines[i].split()]
                     projections[k_idx, b, a, :] = vals[1 : N_ORBITALS + 1]
                     i += 1
-                i += 1  # skip tot line
-                i += 1  # skip blank line
+                i += 1
+                i += 1
             kpts_found += 1
 
         blocks.append(

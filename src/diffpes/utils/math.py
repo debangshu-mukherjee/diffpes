@@ -99,18 +99,27 @@ def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
         tuple[Complex[Array, " "], Complex[Array, " "]],
         Complex[Array, " "],
     ]:
+        c_prev: Complex[Array, " "]
+        c_curr: Complex[Array, " "]
         c_prev, c_curr = carry
         next_c: Complex[Array, " "] = (-2.0 * c_prev) / (
             jnp.asarray(n, dtype=jnp.float64) + 2.0
         )
-        return (c_curr, next_c), next_c
+        scan_output: tuple[
+            tuple[Complex[Array, " "], Complex[Array, " "]],
+            Complex[Array, " "],
+        ] = ((c_curr, next_c), next_c)
+        return scan_output
 
-    rest: Complex[Array, " N2"]
-    _, rest = jax.lax.scan(
+    scan_result: tuple[
+        tuple[Complex[Array, " "], Complex[Array, " "]],
+        Complex[Array, " N2"],
+    ] = jax.lax.scan(
         body,
         (c0, c1),
         jnp.arange(N_TAYLOR - 2, dtype=jnp.int32),
     )
+    rest: Complex[Array, " N2"] = scan_result[1]
     full: Complex[Array, " N"] = jnp.concatenate([c0[None], c1[None], rest])
     return full
 
@@ -124,8 +133,6 @@ def faddeeva(
 ) -> Complex[Array, " ..."]:
     r"""Evaluate the Faddeeva function w(z) = exp(-z^2) erfc(-iz).
 
-    Extended Summary
-    ----------------
     Computes the Faddeeva (scaled complex complementary error) function
     for arbitrary complex arrays using a precomputed Taylor polynomial
     evaluated via Horner's method.
@@ -161,6 +168,8 @@ def faddeeva(
     :math:`w'(z) = -2z w(z) + 2i/\sqrt{\pi}` and precomputed at
     module import time by `_faddeeva_taylor_coeffs`. See that
     function's docstring for the full recurrence derivation.
+
+    :see: :class:`~.test_math.TestFaddeeva`
 
     Parameters
     ----------
@@ -271,8 +280,6 @@ def zscore_normalize(
 ) -> Float[Array, " ..."]:
     r"""Apply z-score normalization (zero-mean, unit-variance).
 
-    Extended Summary
-    ----------------
     Transforms an arbitrary float array so that the output has zero mean
     and unit standard deviation, which is a common preprocessing step
     before comparing simulated and experimental ARPES spectra. The
@@ -300,6 +307,8 @@ def zscore_normalize(
 
     3. **Normalize** -- compute ``(data - mean) / safe_std`` element-wise
        and return.
+
+    :see: :class:`~.test_math.TestZscoreNormalize`
 
     Parameters
     ----------

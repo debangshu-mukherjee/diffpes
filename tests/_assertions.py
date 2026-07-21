@@ -6,17 +6,6 @@ Wraps Chex's PyTree assertions with the strict defaults used throughout the
 test suite and loads behavioral regression arrays from the reference-data
 directory established by WP6.1. It also provides the shared eager/JIT
 rejection contract used by factory validation tests.
-
-Routine Listings
-----------------
-:func:`assert_rejects`
-    Assert invalid inputs are rejected eagerly and under JIT.
-:func:`assert_matches_reference`
-    Compare a numerical tree with a stored regression artifact.
-:func:`assert_tree_finite`
-    Assert every numerical leaf is finite.
-:func:`assert_trees_close`
-    Compare corresponding numerical leaves with strict tolerances.
 """
 
 import re
@@ -42,6 +31,7 @@ def _assert_rejection(
     match: str,
 ) -> None:
     """Assert one callable invocation raises the expected validation error."""
+    error: ValueError | RuntimeError
     try:
         fn(*args, **kwargs)
     except (ValueError, RuntimeError) as error:
@@ -65,6 +55,8 @@ def assert_rejects(
 ) -> None:
     """Assert a factory rejects the same invalid input eagerly and under JIT.
 
+    :see: :class:`~.test_assertions.TestAssertRejects`
+
     Parameters
     ----------
     fn : Callable[..., Any]
@@ -79,11 +71,10 @@ def assert_rejects(
     **kwargs : Any
         Keyword arguments forwarded to ``fn``.
 
-    Raises
-    ------
-    AssertionError
-        If the callable accepts the invalid input or its error message does
-        not match ``match`` in either requested execution mode.
+    Notes
+    -----
+    The delegated eager and compiled checks raise ``AssertionError`` when the
+    callable accepts the invalid input or its message does not match.
     """
     _assert_rejection(fn, args, kwargs, match)
     if under_jit:
@@ -152,6 +143,7 @@ def assert_matches_reference(
         message: str = "name must be a bare reference filename stem"
         raise ValueError(message)
     reference_path: Path = _REFERENCE_DIRECTORY / f"{name}.npz"
+    archive: Any
     with np.load(reference_path, allow_pickle=False) as archive:
         desired_leaves: tuple[np.ndarray, ...] = tuple(
             archive[key] for key in archive.files

@@ -21,8 +21,6 @@ Routine Listings
 ----------------
 :obj:`GAUNT_TABLE`
     Module-level precomputed Gaunt coefficient table for l_max=4.
-:obj:`L_MAX`
-    Maximum angular momentum supported by the precomputed table.
 :func:`build_gaunt_table`
     Build the dipole Gaunt coefficient lookup table.
 :func:`gaunt_lookup`
@@ -34,7 +32,8 @@ from functools import cache
 
 import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float
+from beartype import beartype
+from jaxtyping import Array, Float, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import GAUNT_IMAG_TOL, L_MAX
@@ -95,22 +94,35 @@ def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
 
     Parameters
     ----------
-    j1, j2, j3 : int
-        Angular momentum quantum numbers (non-negative integers).
-    m1, m2, m3 : int
-        Magnetic quantum numbers satisfying :math:`|m_i| \le j_i`.
+    j1 : int
+        First angular momentum quantum number.
+    j2 : int
+        Second angular momentum quantum number.
+    j3 : int
+        Third angular momentum quantum number.
+    m1 : int
+        First magnetic quantum number.
+    m2 : int
+        Second magnetic quantum number.
+    m3 : int
+        Third magnetic quantum number.
 
     Returns
     -------
     value : float
         The Wigner 3-j symbol value.
     """
+    t: int
+
     if m1 + m2 + m3 != 0:
-        return 0.0
+        value: float = 0.0
+        return value  # noqa: RET504 -- assign-before-return is required.
     if abs(m1) > j1 or abs(m2) > j2 or abs(m3) > j3:
-        return 0.0
+        value = 0.0
+        return value  # noqa: RET504 -- assign-before-return is required.
     if j3 < abs(j1 - j2) or j3 > j1 + j2:
-        return 0.0
+        value = 0.0
+        return value  # noqa: RET504 -- assign-before-return is required.
 
     t_min: int = max(0, j2 - j3 - m1, j1 - j3 + m2)
     t_max: int = min(j1 + j2 - j3, j1 - m1, j2 + m2)
@@ -179,10 +191,18 @@ def _complex_gaunt(
 
     Parameters
     ----------
-    l1, l2, l3 : int
-        Angular momentum quantum numbers.
-    m1, m2, m3 : int
-        Magnetic quantum numbers.
+    l1 : int
+        First angular momentum quantum number.
+    m1 : int
+        First magnetic quantum number.
+    l2 : int
+        Second angular momentum quantum number.
+    m2 : int
+        Second magnetic quantum number.
+    l3 : int
+        Third angular momentum quantum number.
+    m3 : int
+        Third magnetic quantum number.
 
     Returns
     -------
@@ -191,10 +211,12 @@ def _complex_gaunt(
     """
     w3j_000: float = _wigner3j(l1, l2, l3, 0, 0, 0)
     if w3j_000 == 0.0:
-        return 0.0
+        value: float = 0.0
+        return value  # noqa: RET504 -- assign-before-return is required.
     w3j_mmm: float = _wigner3j(l1, l2, l3, m1, m2, -m3)
     if w3j_mmm == 0.0:
-        return 0.0
+        value = 0.0
+        return value  # noqa: RET504 -- assign-before-return is required.
 
     prefactor: float = (-1) ** m3 * math.sqrt(
         (2 * l1 + 1) * (2 * l2 + 1) * (2 * l3 + 1) / (4.0 * math.pi)
@@ -279,11 +301,21 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
     -------
     value : float
         The real Gaunt coefficient for the specified quantum numbers.
+
+    Raises
+    ------
+    ValueError
+        If numerical basis conversion leaves a non-negligible imaginary part.
     """
+    c_init: complex
+    mu: int
+    c_dip: complex
+    nu: int
+    c_final: complex
+    rho: int
+
     sqrt2: float = math.sqrt(2.0)
 
-    # Build transformation coefficients for Y_l^m(real)
-    # in terms of complex Y_l^mu: Y_l^m(real) = sum_mu U_{m,mu} Y_l^mu
     def _real_to_complex_coeffs(ll: int, mm: int) -> list[tuple[complex, int]]:
         r"""Return real-to-complex expansion coefficients.
 
@@ -307,51 +339,29 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
             List of ``(coefficient, mu)`` pairs.
         """
         if mm > 0:
-            return [
+            coeffs: list[tuple[complex, int]] = [
                 (complex(1.0 / sqrt2), mm),
                 (complex((-1) ** mm / sqrt2), -mm),
             ]
-        if mm == 0:
-            return [(1.0 + 0.0j, 0)]
-        am: int = abs(mm)
-        return [
-            (-1j * (-1) ** am / sqrt2, am),
-            (1j / sqrt2, -am),
-        ]
+        elif mm == 0:
+            coeffs = [(1.0 + 0.0j, 0)]
+        else:
+            am: int = abs(mm)
+            coeffs = [
+                (-1j * (-1) ** am / sqrt2, am),
+                (1j / sqrt2, -am),
+            ]
+        return coeffs
 
-    # The dipole operator r_q in terms of complex Y_1^mu:
-    # r_q is proportional to Y_1^q(complex)
-    # We need the complex m-value for the dipole component
-    # Convention: q=-1 -> m_dip=+1 (y), q=0 -> m_dip=0 (z),
-    # q=+1 -> m_dip=-1 (x)
-    # Actually, using the standard convention:
-    #   x = sqrt(4pi/3) * Y_1^{-1}(real)
-    #   y = sqrt(4pi/3) * Y_1^{+1}(real) ... but let's use complex:
-    #   r_{-1} = sqrt(2pi/3) (x - iy) / sqrt(2) ~ Y_1^{-1}(complex)
-    #   r_0    = sqrt(4pi/3) z ~ Y_1^0(complex)
-    #   r_{+1} = -sqrt(2pi/3) (x + iy) / sqrt(2) ~ Y_1^{+1}(complex)
-    #
-    # For the real dipole operator r_q (q index for the 3 Cartesian components
-    # mapped to real spherical harmonics of l=1):
-    #   r_q(real) corresponds to Y_1^q(real)
-    # Transform Y_1^q(real) to complex basis:
     dip_coeffs: list[tuple[complex, int]] = _real_to_complex_coeffs(1, q)
 
-    # Coefficients for initial state Y_l^m(real)
     init_coeffs: list[tuple[complex, int]] = _real_to_complex_coeffs(l, m)
-    # Coefficients for final state Y_{l'}^{m'}(real)
     final_coeffs: list[tuple[complex, int]] = _real_to_complex_coeffs(lp, mp)
 
-    # Real Gaunt integral: G_real = sum over (mu, nu, rho) of
-    # conj(U_final) * U_dip * U_init * complex Gaunt integral.
     total: complex = 0.0 + 0.0j
     for c_init, mu in init_coeffs:
         for c_dip, nu in dip_coeffs:
             for c_final, rho in final_coeffs:
-                # integral of Y_{lp}^{rho*} * Y_1^nu * Y_l^mu
-                # = (-1)^rho * integral Y_{lp}^{-rho} Y_1^nu Y_l^mu
-                # Using our _complex_gaunt which computes
-                # integral Y_{l1}^{m1} Y_{l2}^{m2} Y_{l3}^{m3}:
                 cg: float = _complex_gaunt(lp, -rho, 1, nu, l, mu)
                 coeff: complex = (
                     complex(c_final).conjugate()
@@ -367,13 +377,12 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
     return result
 
 
+@jaxtyped(typechecker=beartype)
 def build_gaunt_table(
     l_max: int = 4,
 ) -> Float[Array, "L_src M_src 3 L_dst M_dst"]:
     r"""Build the dipole Gaunt coefficient lookup table.
 
-    Extended Summary
-    ----------------
     Precomputes every non-zero real Gaunt coefficient for electric
     dipole transitions up to angular momentum ``l_max``. The table
     is stored as a dense 5-D NumPy array and then converted to a
@@ -400,6 +409,27 @@ def build_gaunt_table(
     ``GAUNT_TABLE[l, m + l_max, q + 1, lp, mp + l_max]``
     where q in {-1, 0, +1} indexes the three dipole components.
 
+    :see: :class:`~.test_gaunt.TestBuildGauntTable`
+
+    Implementation Logic
+    --------------------
+    1. **Allocate the dense coefficient table**::
+
+           table: Float[NDArray, "L1 M1 Q L2 M2"] = np.zeros(
+               (l_src_dim, m_src_dim, q_dim, l_dst_dim, m_dst_dim),
+               dtype=np.float64,
+           )
+
+       The dense layout gives constant-time lookup for valid quantum numbers.
+
+    2. **Convert the completed table to JAX**::
+
+           gaunt_table: Float[
+               Array, "L_src M_src 3 L_dst M_dst"
+           ] = jnp.asarray(table, dtype=jnp.float64)
+
+       The JAX constant can participate in differentiable forward models.
+
     Parameters
     ----------
     l_max : int
@@ -407,7 +437,7 @@ def build_gaunt_table(
 
     Returns
     -------
-    table : Float[Array, "..."]
+    gaunt_table : Float[Array, "..."]
         Dense array of Gaunt coefficients.
         Shape: ``(l_max+1, 2*l_max+1, 3, l_max+2, 2*(l_max+1)+1)``.
 
@@ -418,6 +448,12 @@ def build_gaunt_table(
     array constant, so it does not appear as a trainable parameter in
     any gradient computation.
     """
+    l: int
+    m: int
+    q: int
+    lp: int
+    mp: int
+
     l_src_dim: int = l_max + 1
     m_src_dim: int = 2 * l_max + 1
     q_dim: int = 3
@@ -439,18 +475,20 @@ def build_gaunt_table(
                         val: float = _real_gaunt_dipole(l, m, lp, mp, q)
                         table[l, m + l_max, q + 1, lp, mp + l_max] = val
 
-    return jnp.asarray(table, dtype=jnp.float64)
+    gaunt_table: Float[Array, "L_src M_src 3 L_dst M_dst"] = jnp.asarray(
+        table, dtype=jnp.float64
+    )
+    return gaunt_table
 
 
 GAUNT_TABLE: Float[Array, "..."] = build_gaunt_table(l_max=L_MAX)
 """Module-level precomputed Gaunt coefficient table for l_max=4."""
 
 
+@jaxtyped(typechecker=beartype)
 def gaunt_lookup(l: int, m: int, q: int, lp: int, mp: int) -> float:
     r"""Look up a single Gaunt coefficient from the precomputed table.
 
-    Extended Summary
-    ----------------
     Provides a convenience accessor for the module-level ``GAUNT_TABLE``
     array, converting the physical quantum numbers (l, m, q, l', m')
     into the offset indices used by the dense storage layout. The
@@ -467,6 +505,18 @@ def gaunt_lookup(l: int, m: int, q: int, lp: int, mp: int) -> float:
     non-JAX contexts. For JAX-traced code, direct indexing into
     ``GAUNT_TABLE`` is preferred to avoid Python-level overhead.
 
+    :see: :class:`~.test_gaunt.TestGauntLookup`
+
+    Implementation Logic
+    --------------------
+    1. **Index and convert the coefficient**::
+
+           coefficient: float = float(
+               GAUNT_TABLE[l, m + L_MAX, q + 1, lp, mp + L_MAX]
+           )
+
+       The offsets map signed quantum numbers to dense array indices.
+
     Parameters
     ----------
     l : int
@@ -482,15 +532,17 @@ def gaunt_lookup(l: int, m: int, q: int, lp: int, mp: int) -> float:
 
     Returns
     -------
-    coeff : float
+    coefficient : float
         The Gaunt coefficient.
     """
-    return float(GAUNT_TABLE[l, m + L_MAX, q + 1, lp, mp + L_MAX])
+    coefficient: float = float(
+        GAUNT_TABLE[l, m + L_MAX, q + 1, lp, mp + L_MAX]
+    )
+    return coefficient
 
 
 __all__: list[str] = [
     "GAUNT_TABLE",
-    "L_MAX",
     "build_gaunt_table",
     "gaunt_lookup",
 ]

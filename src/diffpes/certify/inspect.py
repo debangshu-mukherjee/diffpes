@@ -10,83 +10,37 @@ claim or loads the associated forward result.
 
 Routine Listings
 ----------------
-:class:`CertificateDiff`
-    Categorized differences between two forward certificates.
 :func:`diff_certificates`
-    Compare scientific, numerical, environment, and audit records.
+    Compare two certificates by scientific meaning and record class.
 :func:`explain_claim`
-    Explain one claim and its registered evidence.
+    Explain one claim and the numerical evidence supporting it.
 :func:`summarize_certificate`
-    Render a stable compact overview of a certificate.
+    Return a deterministic human-readable certificate summary.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
 import numpy as np
+from beartype import beartype
+from beartype.typing import Any
+from jaxtyping import jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
-from diffpes.types import ForwardCertificate
+from diffpes.types import (
+    CERTIFICATE_ARRAY_PREVIEW_ITEMS,
+    CertificateDiff,
+    ForwardCertificate,
+    make_certificate_diff,
+)
 
 from .canonical import canonical_pytree
-
-_ARRAY_PREVIEW_ITEMS: int = 8
-
-
-@dataclass(frozen=True)
-class CertificateDiff:
-    """Categorized differences between two certificates.
-
-    Attributes
-    ----------
-    scientific : tuple[str, ...]
-        Model, semantics, inputs, transformations, and policy differences.
-    numerical : tuple[str, ...]
-        Claim outcome and numerical-evidence differences.
-    environment : tuple[str, ...]
-        Package, source, backend, precision, and environment differences.
-    audit : tuple[str, ...]
-        Execution identifier and audit timestamp differences.
-    """
-
-    scientific: tuple[str, ...]
-    numerical: tuple[str, ...]
-    environment: tuple[str, ...]
-    audit: tuple[str, ...]
-
-    @property
-    def identical(self) -> bool:
-        """Return whether no categorized difference was found."""
-        result: bool = not any(
-            (self.scientific, self.numerical, self.environment, self.audit)
-        )
-        return result
-
-    @property
-    def summary(self) -> str:
-        """Return a one-line categorized comparison summary."""
-        if self.identical:
-            return "Certificates are identical."
-        parts: list[str] = []
-        for label, values in (
-            ("scientific", self.scientific),
-            ("numerical", self.numerical),
-            ("environment", self.environment),
-            ("audit", self.audit),
-        ):
-            if values:
-                parts.append(f"{label}: {', '.join(values)}")
-        result: str = "; ".join(parts)
-        return result
 
 
 def _scalar_bool(value: Any) -> bool:
     """Convert one concrete scalar array to ``bool`` for display."""
     array: NDArray = np.asarray(value)
     if array.shape != ():
-        msg = (
+        msg: str = (
             f"expected scalar certificate field, received shape {array.shape}"
         )
         raise ValueError(msg)
@@ -98,11 +52,14 @@ def _scalar_text(value: Any) -> str:
     """Format one concrete scalar numerical certificate field."""
     array: NDArray = np.asarray(value)
     if array.shape != ():
-        return f"array(shape={array.shape}, dtype={array.dtype})"
+        text: str = f"array(shape={array.shape}, dtype={array.dtype})"
+        return text  # noqa: RET504
     item: Any = array.item()
     if isinstance(item, float):
-        return f"{item:.8g}"
-    return str(item)
+        text = f"{item:.8g}"
+        return text  # noqa: RET504
+    text: str = str(item)
+    return text  # noqa: RET504
 
 
 def _array_text(value: Any) -> str:
@@ -110,32 +67,38 @@ def _array_text(value: Any) -> str:
     array: NDArray = np.asarray(value)
     flat: NDArray = array.reshape(-1)
     preview: str = np.array2string(
-        flat[:_ARRAY_PREVIEW_ITEMS],
+        flat[:CERTIFICATE_ARRAY_PREVIEW_ITEMS],
         separator=", ",
         precision=8,
         suppress_small=False,
     )
-    if flat.size > _ARRAY_PREVIEW_ITEMS:
+    if flat.size > CERTIFICATE_ARRAY_PREVIEW_ITEMS:
         preview = f"{preview[:-1]}, ...]"
-    return f"shape={array.shape}, values={preview}"
+    text: str = f"shape={array.shape}, values={preview}"
+    return text  # noqa: RET504
 
 
 def _claim_status(claim: Any) -> str:
     """Return the bounded status label for one claim."""
     if not _scalar_bool(claim.checked):
-        return "not_checked"
+        status: str = "not_checked"
+        return status  # noqa: RET504
     if not _scalar_bool(claim.in_domain):
-        return "out_of_domain"
+        status = "out_of_domain"
+        return status  # noqa: RET504
     if _scalar_bool(claim.passed):
-        return "passed"
-    return "failed"
+        status = "passed"
+        return status  # noqa: RET504
+    status: str = "failed"
+    return status  # noqa: RET504
 
 
 def _optional_static_tuple(value: object, name: str) -> tuple[str, ...]:
     """Read an optional tuple-valued static inspection field."""
     field_value: object = getattr(value, name, ())
     if not isinstance(field_value, tuple):
-        return ()
+        result: tuple[str, ...] = ()
+        return result
     result: tuple[str, ...] = tuple(str(item) for item in field_value)
     return result
 
@@ -152,14 +115,30 @@ def _append_tuple(
     lines.extend(f"  - {value}" for value in values)
 
 
+@jaxtyped(typechecker=beartype)
 def summarize_certificate(certificate: ForwardCertificate) -> str:
-    """Return a deterministic human-readable certificate summary.
+    r"""Return a deterministic human-readable certificate summary.
+
+    The inspection result answers a bounded scientific question without loading
+    the associated result arrays. It excludes private source locators.
+
+    :see: :class:`~.test_inspect.TestSummarizeCertificate`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           summary: str = "\n".join(lines)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
     certificate : ForwardCertificate
-        Certificate to summarize. Associated result arrays are neither needed
-        nor loaded.
+        Certificate to summarize. The function does not need or load the
+        associated result arrays.
 
     Returns
     -------
@@ -167,6 +146,8 @@ def summarize_certificate(certificate: ForwardCertificate) -> str:
         Compact multiline summary of identity, semantics, provenance, claim
         status, and derivative diagnostics.
     """
+    item: Any
+    claim: Any
     model: Any = certificate.model
     manifest: Any = certificate.manifest
     lines: list[str] = [
@@ -312,11 +293,27 @@ def summarize_certificate(certificate: ForwardCertificate) -> str:
     return summary
 
 
+@jaxtyped(typechecker=beartype)
 def explain_claim(
     certificate: ForwardCertificate,
     claim_id: str,
 ) -> str:
-    """Explain one claim and the numerical evidence supporting it.
+    r"""Explain one claim and the numerical evidence supporting it.
+
+    The inspection result answers a bounded scientific question without loading
+    the associated result arrays. It excludes private source locators.
+
+    :see: :class:`~.test_inspect.TestExplainClaim`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           explanation: str = "\n".join(lines)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -335,11 +332,12 @@ def explain_claim(
     KeyError
         If the certificate does not contain ``claim_id``.
     """
+    evidence_id: Any
     matching: tuple[Any, ...] = tuple(
         claim for claim in certificate.claims if claim.claim_id == claim_id
     )
     if not matching:
-        msg = f"Claim '{claim_id}' is not present in this certificate."
+        msg: str = f"Claim '{claim_id}' is not present in this certificate."
         raise KeyError(msg)
     claim: Any = matching[0]
     evidence_by_id: dict[str, Any] = {
@@ -414,11 +412,36 @@ def _artifact_identity(certificate: ForwardCertificate) -> tuple[object, ...]:
     return result
 
 
+@jaxtyped(typechecker=beartype)
 def diff_certificates(
     left: ForwardCertificate,
     right: ForwardCertificate,
 ) -> CertificateDiff:
     """Compare two certificates by scientific meaning and record class.
+
+    The inspection result answers a bounded scientific question without loading
+    the associated result arrays. It excludes private source locators.
+
+    :see: :class:`~.test_inspect.TestDiffCertificates`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           difference: CertificateDiff = make_certificate_diff(
+                   scientific=tuple(scientific),
+                   numerical=_field_differences(left, right, numerical_names),
+                   environment=_field_differences(
+                       left.manifest,
+                       right.manifest,
+                       environment_names,
+                   ),
+                   audit=tuple(audit),
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -480,7 +503,7 @@ def diff_certificates(
     )
     if _different(left_locators, right_locators):
         audit.append("artifact_locators")
-    difference = CertificateDiff(
+    difference: CertificateDiff = make_certificate_diff(
         scientific=tuple(scientific),
         numerical=_field_differences(left, right, numerical_names),
         environment=_field_differences(
@@ -490,11 +513,10 @@ def diff_certificates(
         ),
         audit=tuple(audit),
     )
-    return difference  # noqa: RET504
+    return difference
 
 
 __all__: list[str] = [
-    "CertificateDiff",
     "diff_certificates",
     "explain_claim",
     "summarize_certificate",

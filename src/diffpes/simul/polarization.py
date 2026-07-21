@@ -14,8 +14,6 @@ Routine Listings
     Construct s- and p-polarization basis vectors.
 :func:`dipole_matrix_elements`
     Compute dipole matrix elements for all 9 orbitals.
-:obj:`ORBITAL_DIRS_NORMALIZED`
-    Unit-normalized orbital direction vectors in VASP ordering.
 :func:`photon_wavevector`
     Build the unit photon wavevector from incidence angles.
 
@@ -50,6 +48,8 @@ def build_polarization_vectors(
     from the photon incidence angles, defining the s-polarization
     (perpendicular to the incidence plane) and p-polarization (in
     the incidence plane, perpendicular to the wavevector).
+
+    :see: :class:`~.test_polarization.TestBuildPolarizationVectors`
 
     Implementation Logic
     --------------------
@@ -106,8 +106,8 @@ def build_polarization_vectors(
         p-polarization unit vector (in incidence plane,
         perpendicular to photon wavevector).
 
-    Notes
-    -----
+    Implementation Logic
+    --------------------
     The reference-axis choice at the collinearity threshold is a deliberately
     hard geometric selector. Its branch-choice gradient is zero away from the
     threshold and undefined at it, so it cannot supply a continuous
@@ -135,7 +135,11 @@ def build_polarization_vectors(
     e_s: Float[Array, " 3"] = e_s_raw / jnp.linalg.norm(e_s_raw)
     e_p_raw: Float[Array, " 3"] = jnp.cross(e_s, k_photon)
     e_p: Float[Array, " 3"] = e_p_raw / jnp.linalg.norm(e_p_raw)
-    return e_s, e_p
+    polarization_vectors: Tuple[Float[Array, " 3"], Float[Array, " 3"]] = (
+        e_s,
+        e_p,
+    )
+    return polarization_vectors
 
 
 @jaxtyped(typechecker=beartype)
@@ -150,6 +154,13 @@ def photon_wavevector(
     azimuthal): k = [sin(theta)*cos(phi), sin(theta)*sin(phi),
     cos(theta)] / ||...||. Used in spin-orbit ARPES simulations
     to form the S·k_photon correction for circular dichroism.
+
+    :see: :class:`~.test_polarization.TestPhotonWavevector`
+
+    Notes
+    -----
+    Form the Cartesian spherical-coordinate vector, normalize it with its
+    Euclidean norm, bind the unit result to ``k_hat``, and return it.
 
     Parameters
     ----------
@@ -190,55 +201,31 @@ def build_efield(
     Constructs the complex electric field polarization vector for the
     specified photon geometry and polarization type.
 
+    :see: :class:`~.test_polarization.TestBuildEfield`
+
     Implementation Logic
     --------------------
     1. **Build s- and p-polarization basis**::
 
-           e_s, e_p = build_polarization_vectors(theta, phi)
+           e_s, e_p = build_polarization_vectors(
+               config.theta, config.phi
+           )
 
-       Computes the real-valued orthonormal basis vectors from the
-       incidence angles in the config. Both are cast to complex128
-       for compatibility with circular polarization states.
+       This computes the real orthonormal basis from the incidence angles.
 
-    2. **Dispatch on polarization type**:
-       The ``polarization_type`` string (case-insensitive) selects
-       the electric field vector:
+    2. **Select the static polarization branch**::
 
-       - **"lvp"** (linear vertical polarization):
-         efield = e_s
-         Pure s-polarization.
+           index: int = pol_index_map.get(pol_type, 5)
 
-       - **"lhp"** (linear horizontal polarization):
-         efield = e_p
-         Pure p-polarization.
+       The string configuration selects one branch before JAX execution.
 
-       - **"lap"** (linear arbitrary polarization):
-         efield = cos(angle) * e_s + sin(angle) * e_p
-         Linear combination at the angle specified by
-         ``config.polarization_angle``.
+    3. **Evaluate the selected branch with JAX**::
 
-       - **"rcp"** (right circular polarization):
-         efield = (e_s + i * e_p) / sqrt(2)
-         Right-handed circular polarization with equal s and p
-         amplitudes and 90-degree phase shift.
+           efield: Complex[Array, " 3"] = jax.lax.switch(
+               index, branches, operand
+           )
 
-       - **"lcp"** (left circular polarization):
-         efield = (e_s - i * e_p) / sqrt(2)
-         Left-handed circular polarization with equal s and p
-         amplitudes and -90-degree phase shift.
-
-       - **else** (fallback / unpolarized):
-         efield = e_s
-         Defaults to s-polarization. Unpolarized averaging is
-         handled externally in the simulation loop.
-
-    3. **JAX switch over branches**:
-       An operand tuple (e_s_c, e_p_c, polarization_angle) is built so
-       that all branch functions receive the same traced inputs. The
-       polarization type is mapped to an integer index (lvp=0, lhp=1,
-       lap=2, rcp=3, lcp=4, default=5). ``jax.lax.switch(index, branches,
-       operand)`` invokes the corresponding branch function on the
-       operand and returns the resulting electric field vector.
+       The JAX switch preserves differentiation through the selected field.
 
     Parameters
     ----------
@@ -278,7 +265,8 @@ def build_efield(
         Complex[Array, " 3"]
             The s-polarization complex electric field vector.
         """
-        return op[0]
+        branch_efield: Complex[Array, " 3"] = op[0]
+        return branch_efield
 
     def branch_lhp(op: Tuple) -> Complex[Array, " 3"]:
         """Linear horizontal: electric field equals p-polarization basis.
@@ -293,7 +281,8 @@ def build_efield(
         Complex[Array, " 3"]
             The p-polarization complex electric field vector.
         """
-        return op[1]
+        branch_efield: Complex[Array, " 3"] = op[1]
+        return branch_efield
 
     def branch_lap(op: Tuple) -> Complex[Array, " 3"]:
         """Linear arbitrary: cos(angle)*e_s + sin(angle)*e_p.
@@ -309,7 +298,10 @@ def build_efield(
         Complex[Array, " 3"]
             The linear combination of s- and p-polarization vectors.
         """
-        return jnp.cos(op[2]) * op[0] + jnp.sin(op[2]) * op[1]
+        branch_efield: Complex[Array, " 3"] = (
+            jnp.cos(op[2]) * op[0] + jnp.sin(op[2]) * op[1]
+        )
+        return branch_efield
 
     def branch_rcp(op: Tuple) -> Complex[Array, " 3"]:
         """Right circular polarization: (e_s + i*e_p)/sqrt(2).
@@ -324,7 +316,10 @@ def build_efield(
         Complex[Array, " 3"]
             Right-handed circular polarization electric field.
         """
-        return (op[0] + 1j * op[1]) / jnp.sqrt(2.0)
+        branch_efield: Complex[Array, " 3"] = (op[0] + 1j * op[1]) / jnp.sqrt(
+            2.0
+        )
+        return branch_efield
 
     def branch_lcp(op: Tuple) -> Complex[Array, " 3"]:
         """Left circular polarization: (e_s - i*e_p)/sqrt(2).
@@ -339,7 +334,10 @@ def build_efield(
         Complex[Array, " 3"]
             Left-handed circular polarization electric field.
         """
-        return (op[0] - 1j * op[1]) / jnp.sqrt(2.0)
+        branch_efield: Complex[Array, " 3"] = (op[0] - 1j * op[1]) / jnp.sqrt(
+            2.0
+        )
+        return branch_efield
 
     def branch_default(op: Tuple) -> Complex[Array, " 3"]:
         """Fallback for unknown or unpolarized type: return s-polarization.
@@ -354,7 +352,8 @@ def build_efield(
         Complex[Array, " 3"]
             The s-polarization vector as the default.
         """
-        return op[0]
+        branch_efield: Complex[Array, " 3"] = op[0]
+        return branch_efield
 
     pol_index_map: dict[str, int] = {
         "lvp": 0,
@@ -389,6 +388,8 @@ def dipole_matrix_elements(
 
     where e is the electric field polarization vector and d_i is
     the normalized direction vector of orbital i.
+
+    :see: :class:`~.test_polarization.TestDipoleMatrixElements`
 
     Implementation Logic
     --------------------
@@ -441,6 +442,5 @@ __all__: list[str] = [
     "build_efield",
     "build_polarization_vectors",
     "dipole_matrix_elements",
-    "ORBITAL_DIRS_NORMALIZED",
     "photon_wavevector",
 ]

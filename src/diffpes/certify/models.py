@@ -19,20 +19,25 @@ Routine Listings
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Any
+from jaxtyping import Array, jaxtyped
 
-from diffpes.simul.forward import simulate_tb_radial
-from diffpes.types import ArpesSpectrum
-from diffpes.types.certification import (
+from diffpes.simul import simulate_tb_radial
+from diffpes.types import (
+    TB_RADIAL_INPUT_COUNT,
+    TB_RADIAL_MODEL_ID,
+    TB_RADIAL_MODEL_VERSION,
+    ArpesSpectrum,
     DomainResult,
     ForwardModelSpec,
+    TransformationContract,
     make_convention_ref,
     make_domain_predicate,
     make_domain_result,
     make_forward_model_spec,
+    make_transformation_contract,
 )
 
 from .checks import list_checks, register_check
-from .contracts import make_transformation_contract
 from .registry import (
     list_models,
     list_transformations,
@@ -40,32 +45,67 @@ from .registry import (
     register_transformation,
 )
 
-TB_RADIAL_MODEL_ID: str = "org.diffpes.model.arpes.tb_radial"
-TB_RADIAL_MODEL_VERSION: str = "0.1.0"
-_TB_RADIAL_INPUT_COUNT: int = 8
 
-
-@beartype
+@jaxtyped(typechecker=beartype)
 def execute_tb_radial(inputs: tuple[Any, ...]) -> ArpesSpectrum:
     """Execute the radial ARPES model from one certification input PyTree.
 
     The tuple order is ``(bands, radial, simulation, polarization,
     work_function, self_energy, radial_grid, momentum_width)``. Optional
     entries use ``None`` and therefore become empty JAX subtrees.
+
+    :see: :class:`~.test_models.TestExecuteTbRadial`
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           spectrum: ArpesSpectrum = simulate_tb_radial(
+                   bands,
+                   radial,
+                   simulation,
+                   polarization,
+                   work_function=work_function,
+                   self_energy=self_energy,
+                   r_grid=grid,
+                   dk=dk,
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
+    Parameters
+    ----------
+    inputs : tuple[Any, ...]
+        Eight-position radial-model input PyTree. Its tuple structure is
+        **static**; a change to the structure triggers retracing.
+
+    Returns
+    -------
+    spectrum : ArpesSpectrum
+        Simulated ARPES intensity and axes in their declared physical units.
+
+    Raises
+    ------
+    ValueError
+        If ``inputs`` does not contain exactly eight entries.
+
+    Notes
+    -----
+    Gradients pass through every numerical input accepted by
+    :func:`~diffpes.simul.simulate_tb_radial`.
     """
-    if len(inputs) != _TB_RADIAL_INPUT_COUNT:
+    if len(inputs) != TB_RADIAL_INPUT_COUNT:
         msg: str = "tb_radial certification inputs must contain eight entries"
         raise ValueError(msg)
-    (
-        bands,
-        radial,
-        simulation,
-        polarization,
-        work_function,
-        self_energy,
-        grid,
-        dk,
-    ) = inputs
+    bands: Any = inputs[0]
+    radial: Any = inputs[1]
+    simulation: Any = inputs[2]
+    polarization: Any = inputs[3]
+    work_function: Any = inputs[4]
+    self_energy: Any = inputs[5]
+    grid: Any = inputs[6]
+    dk: Any = inputs[7]
     spectrum: ArpesSpectrum = simulate_tb_radial(
         bands,
         radial,
@@ -79,10 +119,27 @@ def execute_tb_radial(inputs: tuple[Any, ...]) -> ArpesSpectrum:
     return spectrum
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def tb_radial_model_spec() -> ForwardModelSpec:
-    """Return the stable scientific specification for radial ARPES."""
-    conventions = (
+    """Return the stable scientific specification for radial ARPES.
+
+    The operation uses the built-in radial ARPES adapter and its declared
+    conventions. It preserves JAX differentiation through numerical model
+    inputs.
+
+    :see: :class:`~.test_models.TestTbRadialModelSpec`
+
+    Returns
+    -------
+    spec : ForwardModelSpec
+        Versioned assumptions, conventions, domain, and differentiable paths.
+
+    Notes
+    -----
+    The specification identifies the current tight-binding plus radial
+    dipole model. It does not itself evaluate or certify a numerical result.
+    """
+    conventions: tuple = (
         make_convention_ref(
             "org.diffpes.convention.energy.fermi_referenced_ev",
             "1.0.0",
@@ -99,7 +156,7 @@ def tb_radial_model_spec() -> ForwardModelSpec:
             "{}",
         ),
     )
-    domain = (
+    domain: tuple = (
         make_domain_predicate(
             "org.diffpes.domain.photon_energy.positive",
             "photon_energy_ev > 0",
@@ -117,7 +174,7 @@ def tb_radial_model_spec() -> ForwardModelSpec:
         model_id=TB_RADIAL_MODEL_ID,
         model_version=TB_RADIAL_MODEL_VERSION,
         observable_id="org.diffpes.observable.arpes.intensity",
-        implementation_ref="diffpes.simul.forward.simulate_tb_radial",
+        implementation_ref="diffpes.simul.simulate_tb_radial",
         assumptions=(
             "dipole_approximation",
             "independent_particle_initial_state",
@@ -150,7 +207,8 @@ def tb_radial_model_spec() -> ForwardModelSpec:
 
 def _register_transformations() -> None:
     """Register built-in semantic and information-loss contracts."""
-    contracts = (
+    contract: Any
+    contracts: tuple[TransformationContract, ...] = (
         make_transformation_contract(
             "org.diffpes.transform.amplitude.intensity",
             "1.0.0",
@@ -205,8 +263,8 @@ def _register_transformations() -> None:
 
 def _check_positive_photon_energy(inputs: tuple[Any, ...]) -> DomainResult:
     """Check that the radial model uses a positive photon energy."""
-    photon_energy = inputs[2].photon_energy
-    margin = photon_energy
+    photon_energy: Array = inputs[2].photon_energy
+    margin: Array = photon_energy
     result: DomainResult = make_domain_result(
         predicate_id="org.diffpes.domain.photon_energy.positive",
         measured=photon_energy,
@@ -223,8 +281,8 @@ def _check_positive_photon_energy(inputs: tuple[Any, ...]) -> DomainResult:
 
 def _check_positive_radial_grid(inputs: tuple[Any, ...]) -> DomainResult:
     """Check that every explicit radial-grid point is positive."""
-    radial_grid = inputs[6]
-    margin = (
+    radial_grid: Any = inputs[6]
+    margin: Array = (
         jnp.asarray(1e-6, dtype=jnp.float64)
         if radial_grid is None
         else jnp.min(radial_grid)
@@ -245,6 +303,8 @@ def _check_positive_radial_grid(inputs: tuple[Any, ...]) -> DomainResult:
 
 def _register_checks() -> None:
     """Register built-in radial-model domain checks idempotently."""
+    check_id: Any
+    check_fn: Any
     registered: set[str] = set(list_checks())
     checks: tuple[tuple[str, Any], ...] = (
         (
@@ -261,9 +321,21 @@ def _register_checks() -> None:
             register_check(check_id, check_fn)
 
 
-@beartype
+@jaxtyped(typechecker=beartype)
 def register_builtin_models() -> None:
-    """Register built-in models and information-loss transformations."""
+    """Register built-in models and information-loss transformations.
+
+    The operation uses the built-in radial ARPES adapter and its declared
+    conventions. It preserves JAX differentiation through numerical model
+    inputs.
+
+    :see: :class:`~.test_models.TestRegisterBuiltinModels`
+
+    Notes
+    -----
+    Registration is explicit and idempotent at the eager application boundary.
+    Numerical model execution and domain predicates remain pure JAX programs.
+    """
     existing: set[tuple[str, str]] = {
         (item.model_id, item.model_version) for item in list_models()
     }
@@ -277,7 +349,5 @@ def register_builtin_models() -> None:
 __all__: list[str] = [
     "execute_tb_radial",
     "register_builtin_models",
-    "TB_RADIAL_MODEL_ID",
-    "TB_RADIAL_MODEL_VERSION",
     "tb_radial_model_spec",
 ]

@@ -19,7 +19,7 @@ evidence is computed with JVPs and VJPs. The discrete pass/fail fields are views
 of those continuous quantities.
 
 This separation matters during optimization. A policy may report that a point
-is outside a verified photon-energy domain, while the signed domain margin
+is outside a verified photon-energy domain, while the algebraic domain margin
 still supplies a useful gradient back toward the domain. Likewise, a small VJP
 reports local first-order insensitivity at the evaluation point; it is not
 treated as proof of global independence.
@@ -79,7 +79,7 @@ from diffpes.certify import (
 )
 
 print(summarize_certificate(certificate))
-print(explain_claim(certificate, "org.diffpes.claim.output.finite"))
+print(explain_claim(certificate, "claim.output.finite"))
 comparison = diff_certificates(reference, candidate)
 ```
 
@@ -109,11 +109,11 @@ attach_certificate_h5("spectrum.h5", "spectrum", certificate)
 restored_from_h5 = load_certificate_h5("spectrum.h5", "spectrum")
 ```
 
-The record includes a non-security consistency checksum to detect accidental
-storage mismatches. It establishes neither authenticity nor physical validity.
-Unknown schema major versions are rejected. Unknown minor extension data is
-retained in the certificate's extension object so a load/save cycle does not
-silently discard it.
+The record includes a consistency marker that detects accidental storage
+mismatches. This bookkeeping value provides no security, authenticity, or
+physical-validity claim. Unknown schema major versions are rejected. Unknown
+minor extension data is retained in the certificate's extension object so a
+load/save cycle does not silently discard it.
 
 ## Reading claims responsibly
 

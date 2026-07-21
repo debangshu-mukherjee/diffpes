@@ -13,24 +13,27 @@ differentiability with respect to Slater exponents and hopping parameters
 via ``jax.grad``. The graphene model test verifies a multi-orbital,
 multi-atom system runs end-to-end without error.
 
-Routine Listings
-----------------
-:func:`chain_setup`
-    Pytest fixture providing a 1D chain tight-binding model.
-:class:`TestSimulateTBRadial`
-    Tests for simulate_tb_radial.
 """
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype import beartype
+from jaxtyping import Array, Float, jaxtyped
 
-from diffpes.simul.forward import simulate_tb_radial
+import diffpes
+from diffpes.simul import simulate_tb_radial
 from diffpes.tightb import (
     diagonalize_tb,
 )
 from diffpes.types import (
+    DiagonalizedBands,
+    OrbitalBasis,
+    PolarizationConfig,
+    SimulationParams,
+    SlaterParams,
+    TBModel,
     make_1d_chain_model,
     make_graphene_model,
     make_orbital_basis,
@@ -42,7 +45,13 @@ from diffpes.types import (
 
 
 @pytest.fixture
-def chain_setup():
+@jaxtyped(typechecker=beartype)
+def chain_setup() -> tuple[
+    DiagonalizedBands,
+    SlaterParams,
+    SimulationParams,
+    PolarizationConfig,
+]:
     """Provide a 1D chain tight-binding model with a single Slater s-orbital.
 
     Constructs the simplest possible tight-binding system: a 1D chain with
@@ -71,22 +80,22 @@ def chain_setup():
     pol : PolarizationConfig
         LHP polarization configuration.
     """
-    model = make_1d_chain_model(t=-1.0)
-    kpoints = jnp.linspace(-0.4, 0.4, 10)[:, None] * jnp.array(
-        [[1.0, 0.0, 0.0]]
-    )
-    diag = diagonalize_tb(model, kpoints)
-    basis = make_orbital_basis(
+    model: TBModel = make_1d_chain_model(t=-1.0)
+    kpoints: Float[Array, "10 3"] = jnp.linspace(-0.4, 0.4, 10)[
+        :, None
+    ] * jnp.array([[1.0, 0.0, 0.0]])
+    diag: DiagonalizedBands = diagonalize_tb(model, kpoints)
+    basis: OrbitalBasis = make_orbital_basis(
         n_values=(1,),
         l_values=(0,),
         m_values=(0,),
         labels=("1s",),
     )
-    slater = make_slater_params(
+    slater: SlaterParams = make_slater_params(
         zeta=jnp.array([1.0]),
         orbital_basis=basis,
     )
-    params = make_simulation_params(
+    params: SimulationParams = make_simulation_params(
         energy_min=-3.0,
         energy_max=3.0,
         fidelity=500,
@@ -95,8 +104,14 @@ def chain_setup():
         temperature=30.0,
         photon_energy=21.2,
     )
-    pol = make_polarization_config(polarization_type="LHP")
-    return diag, slater, params, pol
+    pol: PolarizationConfig = make_polarization_config(polarization_type="LHP")
+    result: tuple[
+        DiagonalizedBands,
+        SlaterParams,
+        SimulationParams,
+        PolarizationConfig,
+    ] = (diag, slater, params, pol)
+    return result
 
 
 class TestSimulateTBRadial:
@@ -110,13 +125,18 @@ class TestSimulateTBRadial:
     importantly -- end-to-end differentiability via ``jax.grad`` with respect
     to both Slater exponents (zeta) and tight-binding hopping parameters.
     A graphene test confirms multi-orbital, multi-atom generality.
+
+    :see: :func:`~diffpes.simul.simulate_tb_radial`
     """
 
-    def test_output_shape(self, chain_setup):
+    def test_output_shape(self, chain_setup) -> None:
         """Verify that the spectrum intensity and energy axis have expected shapes.
 
-        Test Logic
-        ----------
+        This case establishes the output shape contract for simulate t b radial with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture (10 k-points,
            fidelity=500, 1D chain with one s-orbital, LHP polarization).
         2. **Simulate**: Call ``simulate_tb_radial`` with the fixture
@@ -124,22 +144,31 @@ class TestSimulateTBRadial:
         3. **Check shapes**: Assert ``intensity`` shape is ``(10, 500)``
            (n_kpoints x fidelity) and ``energy_axis`` shape is ``(500,)``.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         The intensity has shape ``(n_kpoints, fidelity)`` and the energy
         axis has length ``fidelity``, confirming that the forward model
         correctly maps k-points and energy grid dimensions.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         spectrum = simulate_tb_radial(diag, slater, params, pol)
         assert spectrum.intensity.shape == (10, 500)
         assert spectrum.energy_axis.shape == (500,)
 
-    def test_output_finite(self, chain_setup):
+    def test_output_finite(self, chain_setup) -> None:
         """Verify that all intensity and energy axis values are finite.
 
-        Test Logic
-        ----------
+        This case establishes the output finite contract for simulate t b radial with
+        the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture (1D chain, LHP).
         2. **Simulate**: Call ``simulate_tb_radial`` to produce a spectrum.
         3. **Check finiteness**: Assert every element of both ``intensity``
@@ -147,42 +176,60 @@ class TestSimulateTBRadial:
            from overflow in the Slater radial integration or division by
            zero in the Voigt profile evaluation.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All elements of ``intensity`` and ``energy_axis`` are finite,
         confirming numerical stability of the radial integration, dipole
         matrix element computation, and broadening stages.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         spectrum = simulate_tb_radial(diag, slater, params, pol)
         assert jnp.all(jnp.isfinite(spectrum.intensity))
         assert jnp.all(jnp.isfinite(spectrum.energy_axis))
 
-    def test_output_non_negative(self, chain_setup):
+    def test_output_non_negative(self, chain_setup) -> None:
         """Verify that the simulated ARPES intensity is non-negative.
 
-        Test Logic
-        ----------
+        This case establishes the output non negative contract for simulate t b radial
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture (1D chain, LHP).
         2. **Simulate**: Call ``simulate_tb_radial`` to produce a spectrum.
         3. **Check non-negativity**: Assert all intensity values are
            >= -1e-15 (allowing negligible floating-point undershoot).
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All intensity values are effectively non-negative, consistent with
         the physical interpretation of ARPES intensity as a squared
         matrix element weighted by spectral function and occupation.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         spectrum = simulate_tb_radial(diag, slater, params, pol)
         assert jnp.all(spectrum.intensity >= -1e-15)
 
-    def test_unpolarized(self, chain_setup):
+    def test_unpolarized(self, chain_setup) -> None:
         """Verify that unpolarized light mode produces finite intensity.
 
-        Test Logic
-        ----------
+        This case establishes the unpolarized contract for simulate t b radial with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture but override the
            polarization config to ``"unpolarized"``, which averages
            contributions from orthogonal s- and p-polarization vectors.
@@ -190,23 +237,32 @@ class TestSimulateTBRadial:
            configuration.
         3. **Check finiteness**: Assert all intensity values are finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All intensity values are finite under the unpolarized code path,
         confirming that the polarization-averaging branch does not
         introduce numerical instabilities in the dipole matrix element
         computation.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, _ = chain_setup
         pol = make_polarization_config(polarization_type="unpolarized")
         spectrum = simulate_tb_radial(diag, slater, params, pol)
         assert jnp.all(jnp.isfinite(spectrum.intensity))
 
-    def test_with_self_energy(self, chain_setup):
+    def test_with_self_energy(self, chain_setup) -> None:
         """Verify that the optional self-energy extension produces finite output.
 
-        Test Logic
-        ----------
+        This case establishes the with self energy contract for simulate t b radial with
+        the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture and create a
            constant-mode self-energy config with gamma=0.15 eV, which
            adds an energy-independent imaginary part to the Green's
@@ -215,12 +271,19 @@ class TestSimulateTBRadial:
            ``self_energy`` keyword argument.
         3. **Check finiteness**: Assert all intensity values are finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All intensity values are finite when a constant self-energy is
         applied, confirming that the self-energy evaluation integrates
         correctly with the forward model pipeline.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        se: diffpes.types.SelfEnergyConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         se = make_self_energy_config(gamma=0.15, mode="constant")
         spectrum = simulate_tb_radial(
@@ -228,11 +291,14 @@ class TestSimulateTBRadial:
         )
         assert jnp.all(jnp.isfinite(spectrum.intensity))
 
-    def test_with_momentum_broadening(self, chain_setup):
+    def test_with_momentum_broadening(self, chain_setup) -> None:
         """Verify that the optional momentum-broadening extension produces finite output.
 
-        Test Logic
-        ----------
+        This case establishes the with momentum broadening contract for simulate t b
+        radial with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture and pass dk=0.05
            (inverse angstroms), which applies Gaussian broadening along
            the k-axis to simulate finite angular resolution of the
@@ -241,21 +307,30 @@ class TestSimulateTBRadial:
            keyword argument.
         3. **Check finiteness**: Assert all intensity values are finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All intensity values are finite when momentum broadening is
         applied, confirming that ``apply_momentum_broadening`` integrates
         correctly with the forward model without introducing NaN or Inf.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         spectrum = simulate_tb_radial(diag, slater, params, pol, dk=0.05)
         assert jnp.all(jnp.isfinite(spectrum.intensity))
 
-    def test_work_function_effect(self, chain_setup):
+    def test_work_function_effect(self, chain_setup) -> None:
         """Verify that different work function values produce different spectra.
 
-        Test Logic
-        ----------
+        This case establishes the work function effect contract for simulate t b radial
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture and run the
            simulation twice with work_function=4.0 eV and
            work_function=6.0 eV. The work function enters the
@@ -268,13 +343,20 @@ class TestSimulateTBRadial:
         3. **Compare**: Assert the two intensity arrays are not
            element-wise close (``jnp.allclose`` returns False).
 
-        Asserts
-        -------
+        **Expected assertions**
+
         The intensity maps differ for different work functions,
         confirming that the work function parameter propagates through
         the radial matrix element calculation and affects the final
         ARPES intensity.
         """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spec1: diffpes.types.ArpesSpectrum
+        spec2: diffpes.types.ArpesSpectrum
+
         diag, slater, params, pol = chain_setup
         spec1 = simulate_tb_radial(
             diag, slater, params, pol, work_function=4.0
@@ -282,14 +364,17 @@ class TestSimulateTBRadial:
         spec2 = simulate_tb_radial(
             diag, slater, params, pol, work_function=6.0
         )
-        # Intensities should differ
+
         assert not jnp.allclose(spec1.intensity, spec2.intensity)
 
-    def test_gradient_wrt_zeta(self, chain_setup):
+    def test_gradient_wrt_zeta(self, chain_setup) -> None:
         """Verify that the gradient of total intensity w.r.t. Slater exponent is finite.
 
-        Test Logic
-        ----------
+        This case establishes the gradient wrt zeta contract for simulate t b radial
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Use the ``chain_setup`` fixture (discarding its
            slater params) and define a scalar loss function that creates
            new ``SlaterParams`` from a single zeta value, runs
@@ -300,14 +385,20 @@ class TestSimulateTBRadial:
            the gradient of the loss with respect to the Slater exponent.
         3. **Check finiteness**: Assert the gradient is finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         The gradient w.r.t. the Slater exponent zeta is finite, proving
         that the radial integration (Slater wavefunction times spherical
         Bessel function) is differentiable through JAX and that no
         numerical singularities arise during backpropagation. This is
         essential for inverse fitting of orbital parameters.
         """
+        diag: diffpes.types.DiagonalizedBands
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        basis: diffpes.types.OrbitalBasis
+        grad: Array
+
         diag, _, params, pol = chain_setup
         basis = make_orbital_basis(
             n_values=(1,),
@@ -316,6 +407,9 @@ class TestSimulateTBRadial:
         )
 
         def loss(zeta_val):
+            sp: diffpes.types.SlaterParams
+            spectrum: diffpes.types.ArpesSpectrum
+
             sp = make_slater_params(
                 zeta=jnp.array([zeta_val]),
                 orbital_basis=basis,
@@ -332,11 +426,14 @@ class TestSimulateTBRadial:
         grad = jax.grad(loss)(jnp.array(1.0))
         assert jnp.isfinite(grad), f"Gradient w.r.t. zeta is {grad}"
 
-    def test_gradient_wrt_hopping(self):
+    def test_gradient_wrt_hopping(self) -> None:
         """Verify end-to-end gradient through TB diagonalization and simulation.
 
-        Test Logic
-        ----------
+        This case establishes the gradient wrt hopping contract for simulate t b radial
+        with the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Build a fresh 1D chain model (t=-1.0), 5 k-points,
            a single 1s Slater orbital (zeta=1.0), simulation params with
            fidelity=200, and LHP polarization. Define a scalar loss
@@ -348,8 +445,8 @@ class TestSimulateTBRadial:
            the tight-binding hopping parameter(s).
         3. **Check finiteness**: Assert all gradient components are finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         All gradient components w.r.t. hopping parameters are finite,
         demonstrating that the full pipeline -- Hamiltonian construction,
         eigenvalue decomposition via ``diagonalize_tb``, radial matrix
@@ -357,6 +454,14 @@ class TestSimulateTBRadial:
         differentiable through JAX. This is the core requirement for
         inverse tight-binding fitting.
         """
+        model: diffpes.types.TBModel
+        kpoints: Array
+        basis: diffpes.types.OrbitalBasis
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        grad: Array
+
         model = make_1d_chain_model(t=-1.0)
         kpoints = jnp.linspace(-0.3, 0.3, 5)[:, None] * jnp.array(
             [[1.0, 0.0, 0.0]]
@@ -382,6 +487,10 @@ class TestSimulateTBRadial:
         pol = make_polarization_config(polarization_type="LHP")
 
         def loss(hop):
+            m: Array
+            diag: diffpes.types.DiagonalizedBands
+            spec: diffpes.types.ArpesSpectrum
+
             m = eqx.tree_at(lambda item: item.hopping_params, model, hop)
             diag = diagonalize_tb(m, kpoints)
             spec = simulate_tb_radial(
@@ -398,11 +507,14 @@ class TestSimulateTBRadial:
             f"Gradient w.r.t. hopping is {grad}"
         )
 
-    def test_graphene_runs(self):
+    def test_graphene_runs(self) -> None:
         """Verify that a graphene model with two pz orbitals runs end-to-end.
 
-        Test Logic
-        ----------
+        This case establishes the graphene runs contract for simulate t b radial with
+        the concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Build a graphene tight-binding model with
            nearest-neighbour hopping t=-2.7 eV (standard graphene value).
            Use 3 high-symmetry k-points (Gamma, K, M) and define two
@@ -417,14 +529,23 @@ class TestSimulateTBRadial:
         3. **Check shape and finiteness**: Assert intensity shape is
            ``(3, 300)`` and all values are finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         The intensity has shape ``(n_kpoints, fidelity)`` and is
         entirely finite, confirming that the forward model generalizes
         beyond the single-orbital 1D chain to a multi-atom, multi-orbital
         system with known physical relevance (graphene's Dirac cone band
         structure).
         """
+        model: diffpes.types.TBModel
+        kpoints: Array
+        diag: diffpes.types.DiagonalizedBands
+        basis: diffpes.types.OrbitalBasis
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        spectrum: diffpes.types.ArpesSpectrum
+
         model = make_graphene_model(t=-2.7)
         kpoints = jnp.array(
             [

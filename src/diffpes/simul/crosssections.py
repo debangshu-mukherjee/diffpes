@@ -44,6 +44,8 @@ def heuristic_weights(
     photoionization cross-sections. This is a coarse approximation
     useful when tabulated cross-section data is unavailable.
 
+    :see: :class:`~.test_crosssections.TestHeuristicWeights`
+
     Implementation Logic
     --------------------
     The function selects between two pre-defined weight vectors
@@ -154,6 +156,8 @@ def yeh_lindau_weights(
     Interpolates tabulated photoionization cross-sections from
     Yeh & Lindau (1985) [2]_ to produce orbital-resolved weights
     at the specified photon energy.
+
+    :see: :class:`~.test_crosssections.TestYehLindauWeights`
 
     Implementation Logic
     --------------------

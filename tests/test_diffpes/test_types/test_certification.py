@@ -1,10 +1,16 @@
-"""Test the JAX-native certification carrier contract."""
+"""Test the JAX-native certification carrier contract.
+
+The tests cover public behavior, differentiability, validation, and stable
+scientific identity in the supported certification regime.
+"""
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype.typing import Any
 
+import diffpes.types
 from diffpes.types import (
     CertifiedResult,
     ForwardCertificate,
@@ -31,6 +37,20 @@ from tests._assertions import assert_rejects, assert_trees_close
 
 def _certificate() -> ForwardCertificate:
     """Build one complete, small certificate for carrier tests."""
+    convention: Any
+    predicate: Any
+    model: Any
+    manifest: Any
+    artifact: Any
+    transformation: Any
+    evidence: Any
+    claim: Any
+    domain: Any
+    derivatives: Any
+    dependencies: Any
+    sensitivities: Any
+    information: Any
+    policy: Any
     convention = make_convention_ref(
         "org.diffpes.convention.energy-fermi", "1", '{"unit":"eV"}'
     )
@@ -178,214 +198,1429 @@ def _certificate() -> ForwardCertificate:
     )
 
 
-def test_static_vocabulary_is_absent_from_numerical_leaves() -> None:
-    """Keep identifiers static while retaining all numerical evidence."""
-    certificate = _certificate()
-    leaves = jax.tree.leaves(certificate)
-    assert leaves
-    assert all(isinstance(leaf, jax.Array) for leaf in leaves)
-    assert not any(isinstance(leaf, str) for leaf in leaves)
-    assert certificate.model.model_id == "org.diffpes.model.toy"
-    assert certificate.extensions_json == '{"future_field":1}'
+class TestArtifactref:
+    """Verify :class:`~diffpes.types.ArtifactRef`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ArtifactRef`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ArtifactRef`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ArtifactRef")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
 
 
-def test_complete_result_round_trips_through_filter_jit() -> None:
-    """Preserve the complete nested PyTree through compiled execution."""
-    result = make_certified_result(jnp.array([2.0, 3.0]), _certificate())
-    compiled = eqx.filter_jit(lambda item: item)(result)
-    assert isinstance(compiled, CertifiedResult)
-    assert compiled.certificate.model == result.certificate.model
-    assert_trees_close(
-        jax.tree.leaves(compiled),
-        jax.tree.leaves(result),
-        rtol=0.0,
-        atol=0.0,
-    )
+class TestCertificationclaim:
+    """Verify :class:`~diffpes.types.CertificationClaim`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.CertificationClaim`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``CertificationClaim`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "CertificationClaim")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
 
 
-def test_continuous_claim_evidence_is_differentiable() -> None:
-    """Differentiate a smooth residual and margin through its factory."""
+class TestCertificationcontext:
+    """Verify :class:`~diffpes.types.CertificationContext`.
 
-    def objective(value: jax.Array) -> jax.Array:
-        claim = make_certification_claim(
-            claim_id="claim",
-            subject_id="subject",
-            predicate_id="agreement",
-            evidence_ids=(),
-            measured=value[None],
-            reference=jnp.ones(1),
-            residual=(value - 1.0)[None],
-            tolerance=jnp.full(1, 0.1),
-            passed=jnp.abs(value - 1.0) <= 0.1,
-            margin=0.1 - jnp.abs(value - 1.0),
-        )
-        return jnp.sum(claim.residual**2) + claim.margin
+    The cases cover the public carrier or factory contract in JAX PyTrees.
 
-    value = jnp.asarray(1.25)
-    expected = 2.0 * (value - 1.0) - 1.0
-    assert_trees_close(jax.grad(objective)(value), expected)
-    assert_trees_close(eqx.filter_jit(jax.grad(objective))(value), expected)
+    :see: :class:`~diffpes.types.CertificationContext`
+    """
 
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``CertificationContext`` through its canonical types package path.
 
-def test_domain_results_vmap_with_traced_status_and_margin() -> None:
-    """Batch domain checks without concretizing status arrays."""
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
 
-    def evaluate(value: jax.Array):
-        margin = 1.0 - jnp.abs(value)
-        return make_domain_result(
-            "bounded",
-            measured=value,
-            reference=0.0,
-            residual=value,
-            tolerance=0.0,
-            margin=margin,
-            passed=margin >= 0.0,
-            in_domain=margin >= 0.0,
-        )
-
-    result = eqx.filter_jit(jax.vmap(evaluate))(jnp.array([-0.5, 1.5]))
-    assert_trees_close(result.margin, jnp.array([0.5, -0.5]))
-    assert jnp.array_equal(result.passed, jnp.array([True, False]))
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "CertificationContext")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
 
 
-def test_certified_envelope_preserves_primal_jvp_and_vjp() -> None:
-    """Show that attaching a certificate does not alter model derivatives."""
-    certificate = _certificate()
+class TestCheckfunction:
+    """Verify :obj:`~diffpes.types.CheckFunction`.
 
-    def ordinary(value: jax.Array) -> jax.Array:
-        return jnp.sin(value) + value**2
+    The cases cover the public carrier or factory contract in JAX PyTrees.
 
-    def certified(value: jax.Array) -> jax.Array:
-        return make_certified_result(ordinary(value), certificate).value
+    :see: :obj:`~diffpes.types.CheckFunction`
+    """
 
-    point = jnp.asarray(0.4)
-    tangent = jnp.asarray(1.7)
-    ordinary_primal, ordinary_jvp = jax.jvp(ordinary, (point,), (tangent,))
-    certified_primal, certified_jvp = jax.jvp(certified, (point,), (tangent,))
-    assert_trees_close(certified_primal, ordinary_primal, rtol=0.0, atol=0.0)
-    assert_trees_close(certified_jvp, ordinary_jvp, rtol=0.0, atol=0.0)
-    _, ordinary_pullback = jax.vjp(ordinary, point)
-    _, certified_pullback = jax.vjp(certified, point)
-    cotangent = jnp.asarray(2.0)
-    assert_trees_close(
-        certified_pullback(cotangent),
-        ordinary_pullback(cotangent),
-        rtol=0.0,
-        atol=0.0,
-    )
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``CheckFunction`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "CheckFunction")
+        assert symbol is not None
 
 
-def test_context_cross_validates_model_identity() -> None:
-    """Reject prepared contexts that combine different model identities."""
-    certificate = _certificate()
-    context = make_certification_context(
-        certificate.manifest,
-        certificate.model,
-        certificate.artifacts,
-        certificate.transformations,
-        certificate.evidence,
-        certificate.policy_id,
-        ("domain", "output"),
-        ("semantic-1",),
-    )
-    assert context.model is certificate.model
-    bad_manifest = make_execution_manifest(
-        execution_id=certificate.manifest.execution_id,
-        model_ref="org.diffpes.model.other",
-        schema_version=certificate.manifest.schema_version,
-        package_version=certificate.manifest.package_version,
-        source_checksum=certificate.manifest.source_checksum,
-        environment_checksum=certificate.manifest.environment_checksum,
-        backend=certificate.manifest.backend,
-        precision_policy=certificate.manifest.precision_policy,
-        deterministic=certificate.manifest.deterministic,
-        started_at_utc=certificate.manifest.started_at_utc,
-    )
-    with pytest.raises(ValueError, match="model_ref does not match"):
-        make_certification_context(bad_manifest, certificate.model)
+class TestCertifiedresult:
+    """Verify :class:`~diffpes.types.CertifiedResult`.
 
+    The cases cover the public carrier or factory contract in JAX PyTrees.
 
-def test_factories_reject_malformed_static_structure() -> None:
-    """Reject empty identities, invalid JSON, and overlapping path classes."""
-    with pytest.raises(ValueError, match="artifact_id must be non-empty"):
-        make_artifact_ref("", "text/plain", None, "a", "b", None, "input")
-    with pytest.raises(ValueError, match="valid JSON"):
-        make_convention_ref("convention", "1", "{")
-    with pytest.raises(ValueError, match="must be disjoint"):
-        make_forward_model_spec(
-            "model",
-            "1",
-            "observable",
-            "implementation",
-            (),
-            (),
-            (),
-            ("x",),
-            ("x",),
+    :see: :class:`~diffpes.types.CertifiedResult`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``CertifiedResult`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "CertifiedResult")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+    def test_complete_result_round_trips_through_filter_jit(self) -> None:
+        """Preserve the complete nested PyTree through compiled execution.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        result: Any
+        compiled: Any
+        result = make_certified_result(jnp.array([2.0, 3.0]), _certificate())
+        compiled = eqx.filter_jit(lambda item: item)(result)
+        assert isinstance(compiled, CertifiedResult)
+        assert compiled.certificate.model == result.certificate.model
+        assert_trees_close(
+            jax.tree.leaves(compiled),
+            jax.tree.leaves(result),
+            rtol=0.0,
+            atol=0.0,
         )
 
 
-def test_factories_reject_bad_numerical_shapes_and_tolerances() -> None:
-    """Reject malformed evidence eagerly and through compiled execution."""
-    with pytest.raises(ValueError, match="equal shapes"):
-        make_evidence_ref(
-            "evidence",
-            "method",
-            (),
-            "analytic",
-            True,
-            jnp.ones(2),
-            jnp.ones(1),
-            jnp.ones(2),
-            jnp.ones(2),
+class TestConventionref:
+    """Verify :class:`~diffpes.types.ConventionRef`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ConventionRef`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ConventionRef`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ConventionRef")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestDependencymap:
+    """Verify :class:`~diffpes.types.DependencyMap`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.DependencyMap`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``DependencyMap`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "DependencyMap")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestDerivativeevidence:
+    """Verify :class:`~diffpes.types.DerivativeEvidence`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.DerivativeEvidence`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``DerivativeEvidence`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "DerivativeEvidence")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestDomainpredicate:
+    """Verify :class:`~diffpes.types.DomainPredicate`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.DomainPredicate`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``DomainPredicate`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "DomainPredicate")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestDomainresult:
+    """Verify :class:`~diffpes.types.DomainResult`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.DomainResult`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``DomainResult`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "DomainResult")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestEvidenceref:
+    """Verify :class:`~diffpes.types.EvidenceRef`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.EvidenceRef`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``EvidenceRef`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "EvidenceRef")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestEvidencereport:
+    """Verify :class:`~diffpes.types.EvidenceReport`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.EvidenceReport`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``EvidenceReport`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "EvidenceReport")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestExecutionmanifest:
+    """Verify :class:`~diffpes.types.ExecutionManifest`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ExecutionManifest`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ExecutionManifest`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ExecutionManifest")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestForwardcertificate:
+    """Verify :class:`~diffpes.types.ForwardCertificate`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ForwardCertificate`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ForwardCertificate`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ForwardCertificate")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+    def test_complete_graph_has_traced_numerical_leaves(self) -> None:
+        """Verify every dynamic leaf in a complete certificate is a JAX array.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        Constructs the shared complete fixture and inspects its flattened JAX
+        leaves while static vocabulary remains outside the numerical tree.
+        """
+        certificate: ForwardCertificate = _certificate()
+        leaves: list[jax.Array] = jax.tree.leaves(certificate)
+        assert leaves
+        assert all(isinstance(leaf, jax.Array) for leaf in leaves)
+
+    def test_static_vocabulary_is_absent_from_numerical_leaves(self) -> None:
+        """Keep identifiers static while retaining all numerical evidence.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        certificate: Any
+        leaves: Any
+        certificate = _certificate()
+        leaves = jax.tree.leaves(certificate)
+        assert leaves
+        assert all(isinstance(leaf, jax.Array) for leaf in leaves)
+        assert not any(isinstance(leaf, str) for leaf in leaves)
+        assert certificate.model.model_id == "org.diffpes.model.toy"
+        assert certificate.extensions_json == '{"future_field":1}'
+
+
+class TestForwardmodelspec:
+    """Verify :class:`~diffpes.types.ForwardModelSpec`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ForwardModelSpec`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ForwardModelSpec`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ForwardModelSpec")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestInformationspectrum:
+    """Verify :class:`~diffpes.types.InformationSpectrum`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.InformationSpectrum`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``InformationSpectrum`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "InformationSpectrum")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestPolicyreport:
+    """Verify :class:`~diffpes.types.PolicyReport`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.PolicyReport`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``PolicyReport`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "PolicyReport")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestRegisteredmodel:
+    """Verify :class:`~diffpes.types.RegisteredModel`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.RegisteredModel`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``RegisteredModel`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "RegisteredModel")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestRegisteredtransformation:
+    """Verify :class:`~diffpes.types.RegisteredTransformation`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.RegisteredTransformation`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``RegisteredTransformation`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "RegisteredTransformation")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestRegistryreport:
+    """Verify :class:`~diffpes.types.RegistryReport`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.RegistryReport`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``RegistryReport`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "RegistryReport")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestRegistrysnapshot:
+    """Verify :class:`~diffpes.types.RegistrySnapshot`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.RegistrySnapshot`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``RegistrySnapshot`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "RegistrySnapshot")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestReproductionreport:
+    """Verify :class:`~diffpes.types.ReproductionReport`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.ReproductionReport`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``ReproductionReport`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "ReproductionReport")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestSensitivitymap:
+    """Verify :class:`~diffpes.types.SensitivityMap`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.SensitivityMap`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``SensitivityMap`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "SensitivityMap")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestTransformationrecord:
+    """Verify :class:`~diffpes.types.TransformationRecord`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.TransformationRecord`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``TransformationRecord`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "TransformationRecord")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestVerificationreport:
+    """Verify :class:`~diffpes.types.VerificationReport`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :class:`~diffpes.types.VerificationReport`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``VerificationReport`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "VerificationReport")
+        assert isinstance(symbol, type)
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestMakeArtifactRef:
+    """Verify :func:`~diffpes.types.make_artifact_ref`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_artifact_ref`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_artifact_ref`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_artifact_ref")
+        assert callable(symbol)
+
+
+class TestMakeCertificationClaim:
+    """Verify :func:`~diffpes.types.make_certification_claim`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_certification_claim`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_certification_claim`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_certification_claim")
+        assert callable(symbol)
+
+    def test_continuous_claim_evidence_is_differentiable(self) -> None:
+        """Differentiate a smooth residual and margin through its factory.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        value: Any
+        expected: Any
+
+        def objective(value: jax.Array) -> jax.Array:
+            claim: Any
+            claim = make_certification_claim(
+                claim_id="claim",
+                subject_id="subject",
+                predicate_id="agreement",
+                evidence_ids=(),
+                measured=value[None],
+                reference=jnp.ones(1),
+                residual=(value - 1.0)[None],
+                tolerance=jnp.full(1, 0.1),
+                passed=jnp.abs(value - 1.0) <= 0.1,
+                margin=0.1 - jnp.abs(value - 1.0),
+            )
+            return jnp.sum(claim.residual**2) + claim.margin
+
+        value = jnp.asarray(1.25)
+        expected = 2.0 * (value - 1.0) - 1.0
+        assert_trees_close(jax.grad(objective)(value), expected)
+        assert_trees_close(
+            eqx.filter_jit(jax.grad(objective))(value), expected
         )
-    assert_rejects(
-        make_domain_result,
-        "domain",
-        0.0,
-        0.0,
-        0.0,
-        -1.0,
-        0.0,
-        False,
-        match="tolerance must be finite and nonnegative",
-    )
 
 
-def test_certificate_rejects_cross_record_inconsistency() -> None:
-    """Reject policy, dependency, and duplicate identity mismatches."""
-    certificate = _certificate()
-    with pytest.raises(ValueError, match="policy_report policy_id"):
-        make_forward_certificate(
+class TestMakeCertificationContext:
+    """Verify :func:`~diffpes.types.make_certification_context`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_certification_context`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_certification_context`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_certification_context")
+        assert callable(symbol)
+
+    def test_context_cross_validates_model_identity(self) -> None:
+        """Reject prepared contexts that combine different model identities.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        certificate: Any
+        context: Any
+        bad_manifest: Any
+        certificate = _certificate()
+        context = make_certification_context(
             certificate.manifest,
             certificate.model,
             certificate.artifacts,
             certificate.transformations,
             certificate.evidence,
-            certificate.claims,
-            certificate.domains,
-            certificate.derivatives,
-            certificate.dependencies,
-            certificate.sensitivities,
-            certificate.information,
-            certificate.policy_report,
-            "org.diffpes.policy.other.v1",
-            certificate.certificate_checksum,
-        )
-    with pytest.raises(ValueError, match="duplicate artifact_id"):
-        make_forward_certificate(
-            certificate.manifest,
-            certificate.model,
-            certificate.artifacts * 2,
-            certificate.transformations,
-            certificate.evidence,
-            certificate.claims,
-            certificate.domains,
-            certificate.derivatives,
-            certificate.dependencies,
-            certificate.sensitivities,
-            certificate.information,
-            certificate.policy_report,
             certificate.policy_id,
-            certificate.certificate_checksum,
+            ("domain", "output"),
+            ("semantic-1",),
         )
+        assert context.model is certificate.model
+        bad_manifest = make_execution_manifest(
+            execution_id=certificate.manifest.execution_id,
+            model_ref="org.diffpes.model.other",
+            schema_version=certificate.manifest.schema_version,
+            package_version=certificate.manifest.package_version,
+            source_checksum=certificate.manifest.source_checksum,
+            environment_checksum=certificate.manifest.environment_checksum,
+            backend=certificate.manifest.backend,
+            precision_policy=certificate.manifest.precision_policy,
+            deterministic=certificate.manifest.deterministic,
+            started_at_utc=certificate.manifest.started_at_utc,
+        )
+        with pytest.raises(ValueError, match="model_ref does not match"):
+            make_certification_context(bad_manifest, certificate.model)
+
+
+class TestMakeCertifiedResult:
+    """Verify :func:`~diffpes.types.make_certified_result`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_certified_result`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_certified_result`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_certified_result")
+        assert callable(symbol)
+
+    def test_certified_envelope_preserves_primal_jvp_and_vjp(self) -> None:
+        """Show that attaching a certificate does not alter model derivatives.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        certificate: Any
+        point: Any
+        tangent: Any
+        ordinary_primal: Any
+        ordinary_jvp: Any
+        certified_primal: Any
+        certified_jvp: Any
+        _: Any
+        ordinary_pullback: Any
+        certified_pullback: Any
+        cotangent: Any
+        certificate = _certificate()
+
+        def ordinary(value: jax.Array) -> jax.Array:
+            return jnp.sin(value) + value**2
+
+        def certified(value: jax.Array) -> jax.Array:
+            return make_certified_result(ordinary(value), certificate).value
+
+        point = jnp.asarray(0.4)
+        tangent = jnp.asarray(1.7)
+        ordinary_primal, ordinary_jvp = jax.jvp(ordinary, (point,), (tangent,))
+        certified_primal, certified_jvp = jax.jvp(
+            certified, (point,), (tangent,)
+        )
+        assert_trees_close(
+            certified_primal, ordinary_primal, rtol=0.0, atol=0.0
+        )
+        assert_trees_close(certified_jvp, ordinary_jvp, rtol=0.0, atol=0.0)
+        _, ordinary_pullback = jax.vjp(ordinary, point)
+        _, certified_pullback = jax.vjp(certified, point)
+        cotangent = jnp.asarray(2.0)
+        assert_trees_close(
+            certified_pullback(cotangent),
+            ordinary_pullback(cotangent),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+class TestMakeConventionRef:
+    """Verify :func:`~diffpes.types.make_convention_ref`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_convention_ref`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_convention_ref`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_convention_ref")
+        assert callable(symbol)
+
+
+class TestMakeDependencyMap:
+    """Verify :func:`~diffpes.types.make_dependency_map`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_dependency_map`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_dependency_map`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_dependency_map")
+        assert callable(symbol)
+
+
+class TestMakeDerivativeEvidence:
+    """Verify :func:`~diffpes.types.make_derivative_evidence`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_derivative_evidence`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_derivative_evidence`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_derivative_evidence")
+        assert callable(symbol)
+
+
+class TestMakeDomainPredicate:
+    """Verify :func:`~diffpes.types.make_domain_predicate`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_domain_predicate`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_domain_predicate`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_domain_predicate")
+        assert callable(symbol)
+
+
+class TestMakeDomainResult:
+    """Verify :func:`~diffpes.types.make_domain_result`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_domain_result`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_domain_result`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_domain_result")
+        assert callable(symbol)
+
+    def test_domain_results_vmap_with_traced_status_and_margin(self) -> None:
+        """Batch domain checks without concretizing status arrays.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        result: Any
+
+        def evaluate(value: jax.Array) -> Any:
+            margin: Any
+            margin = 1.0 - jnp.abs(value)
+            return make_domain_result(
+                "bounded",
+                measured=value,
+                reference=0.0,
+                residual=value,
+                tolerance=0.0,
+                margin=margin,
+                passed=margin >= 0.0,
+                in_domain=margin >= 0.0,
+            )
+
+        result = eqx.filter_jit(jax.vmap(evaluate))(jnp.array([-0.5, 1.5]))
+        assert_trees_close(result.margin, jnp.array([0.5, -0.5]))
+        assert jnp.array_equal(result.passed, jnp.array([True, False]))
+
+
+class TestMakeEvidenceRef:
+    """Verify :func:`~diffpes.types.make_evidence_ref`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_evidence_ref`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_evidence_ref`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_evidence_ref")
+        assert callable(symbol)
+
+    def test_factories_reject_bad_numerical_shapes_and_tolerances(
+        self,
+    ) -> None:
+        """Reject malformed evidence eagerly and through compiled execution.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        with pytest.raises(ValueError, match="equal shapes"):
+            make_evidence_ref(
+                "evidence",
+                "method",
+                (),
+                "analytic",
+                True,
+                jnp.ones(2),
+                jnp.ones(1),
+                jnp.ones(2),
+                jnp.ones(2),
+            )
+        assert_rejects(
+            make_domain_result,
+            "domain",
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            False,
+            match="tolerance must be finite and nonnegative",
+        )
+
+
+class TestMakeEvidenceReport:
+    """Verify :func:`~diffpes.types.make_evidence_report`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_evidence_report`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_evidence_report`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_evidence_report")
+        assert callable(symbol)
+
+
+class TestMakeExecutionManifest:
+    """Verify :func:`~diffpes.types.make_execution_manifest`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_execution_manifest`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_execution_manifest`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_execution_manifest")
+        assert callable(symbol)
+
+
+class TestMakeForwardCertificate:
+    """Verify :func:`~diffpes.types.make_forward_certificate`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_forward_certificate`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_forward_certificate`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_forward_certificate")
+        assert callable(symbol)
+
+    def test_certificate_rejects_cross_record_inconsistency(self) -> None:
+        """Reject policy, dependency, and duplicate identity mismatches.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        certificate: Any
+        certificate = _certificate()
+        with pytest.raises(ValueError, match="policy_report policy_id"):
+            make_forward_certificate(
+                certificate.manifest,
+                certificate.model,
+                certificate.artifacts,
+                certificate.transformations,
+                certificate.evidence,
+                certificate.claims,
+                certificate.domains,
+                certificate.derivatives,
+                certificate.dependencies,
+                certificate.sensitivities,
+                certificate.information,
+                certificate.policy_report,
+                "org.diffpes.policy.other.v1",
+                certificate.certificate_checksum,
+            )
+        with pytest.raises(ValueError, match="duplicate artifact_id"):
+            make_forward_certificate(
+                certificate.manifest,
+                certificate.model,
+                certificate.artifacts * 2,
+                certificate.transformations,
+                certificate.evidence,
+                certificate.claims,
+                certificate.domains,
+                certificate.derivatives,
+                certificate.dependencies,
+                certificate.sensitivities,
+                certificate.information,
+                certificate.policy_report,
+                certificate.policy_id,
+                certificate.certificate_checksum,
+            )
+
+
+class TestMakeForwardModelSpec:
+    """Verify :func:`~diffpes.types.make_forward_model_spec`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_forward_model_spec`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_forward_model_spec`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_forward_model_spec")
+        assert callable(symbol)
+
+    def test_factories_reject_malformed_static_structure(self) -> None:
+        """Reject empty identities, invalid JSON, and overlapping path classes.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        with pytest.raises(ValueError, match="artifact_id must be non-empty"):
+            make_artifact_ref("", "text/plain", None, "a", "b", None, "input")
+        with pytest.raises(ValueError, match="valid JSON"):
+            make_convention_ref("convention", "1", "{")
+        with pytest.raises(ValueError, match="must be disjoint"):
+            make_forward_model_spec(
+                "model",
+                "1",
+                "observable",
+                "implementation",
+                (),
+                (),
+                (),
+                ("x",),
+                ("x",),
+            )
+
+
+class TestMakeInformationSpectrum:
+    """Verify :func:`~diffpes.types.make_information_spectrum`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_information_spectrum`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_information_spectrum`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_information_spectrum")
+        assert callable(symbol)
+
+
+class TestMakePolicyReport:
+    """Verify :func:`~diffpes.types.make_policy_report`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_policy_report`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_policy_report`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_policy_report")
+        assert callable(symbol)
+
+
+class TestMakeRegisteredModel:
+    """Verify :func:`~diffpes.types.make_registered_model`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_registered_model`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_registered_model`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_registered_model")
+        assert callable(symbol)
+
+
+class TestMakeRegisteredTransformation:
+    """Verify :func:`~diffpes.types.make_registered_transformation`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_registered_transformation`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_registered_transformation`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(
+            diffpes.types, "make_registered_transformation"
+        )
+        assert callable(symbol)
+
+
+class TestMakeRegistryReport:
+    """Verify :func:`~diffpes.types.make_registry_report`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_registry_report`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_registry_report`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_registry_report")
+        assert callable(symbol)
+
+
+class TestMakeRegistrySnapshot:
+    """Verify :func:`~diffpes.types.make_registry_snapshot`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_registry_snapshot`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_registry_snapshot`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_registry_snapshot")
+        assert callable(symbol)
+
+
+class TestMakeReproductionReport:
+    """Verify :func:`~diffpes.types.make_reproduction_report`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_reproduction_report`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_reproduction_report`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_reproduction_report")
+        assert callable(symbol)
+
+
+class TestMakeSensitivityMap:
+    """Verify :func:`~diffpes.types.make_sensitivity_map`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_sensitivity_map`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_sensitivity_map`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_sensitivity_map")
+        assert callable(symbol)
+
+
+class TestMakeTransformationRecord:
+    """Verify :func:`~diffpes.types.make_transformation_record`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_transformation_record`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_transformation_record`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_transformation_record")
+        assert callable(symbol)
+
+
+class TestMakeVerificationReport:
+    """Verify :func:`~diffpes.types.make_verification_report`.
+
+    The cases cover the public carrier or factory contract in JAX PyTrees.
+
+    :see: :func:`~diffpes.types.make_verification_report`
+    """
+
+    def test_public_symbol_has_expected_kind(self) -> None:
+        """Expose ``make_verification_report`` through its canonical types package path.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        symbol: object = getattr(diffpes.types, "make_verification_report")
+        assert callable(symbol)

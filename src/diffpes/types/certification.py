@@ -1,11 +1,114 @@
 """JAX-native carriers for certified forward-model executions.
 
+Extended Summary
+----------------
 The classes in this module separate static scientific vocabulary from traced
 numerical evidence.  Identifiers, conventions, paths, and schema selections
 are Equinox static fields; measurements, residuals, margins, sensitivities,
 and status arrays remain ordinary JAX leaves.  This lets certification travel
 through ``filter_jit``, ``vmap``, JVP, and VJP without moving bookkeeping into
 the forward-model kernel.
+
+Routine Listings
+----------------
+:class:`ArtifactRef`
+    Store static identity and role for one source or derived artifact.
+:class:`CertificationClaim`
+    Store a named claim and its continuous numerical evidence.
+:class:`CertificationContext`
+    Store prepared selections and references for compiled certification.
+:class:`CertifiedResult`
+    Store a numerical result paired with its differentiable certificate.
+:obj:`CheckFunction`
+    Callable signature for a pure JAX certification check.
+:class:`ConventionRef`
+    Store a versioned semantic convention used by a scientific model.
+:class:`DependencyMap`
+    Store declared and JAXPR-observed dependency relations.
+:class:`DerivativeEvidence`
+    Store JVP, VJP, reference, and information-spectrum evidence.
+:class:`DomainPredicate`
+    Store a static declaration of one model-domain predicate.
+:class:`DomainResult`
+    Store the traced evaluation of one declared domain predicate.
+:class:`EvidenceRef`
+    Store numerical evidence with static method and source identity.
+:class:`EvidenceReport`
+    Store the offline consistency outcome for one evidence record.
+:class:`ExecutionManifest`
+    Store software and execution identity prepared at the I/O boundary.
+:class:`ForwardCertificate`
+    Store the complete assurance record for one forward execution.
+:class:`ForwardModelSpec`
+    Store the identity of a differentiable forward model.
+:class:`InformationSpectrum`
+    Store a matrix-free information spectrum in input coordinates.
+:class:`PolicyReport`
+    Store a traced policy truth table for derived certification levels.
+:class:`RegisteredModel`
+    Store a frozen binding between a model spec and its executor.
+:class:`RegisteredTransformation`
+    Store a frozen transformation and its consistency checksum.
+:class:`RegistryReport`
+    Store the structural validation result for one registry snapshot.
+:class:`RegistrySnapshot`
+    Store an immutable deterministic snapshot of registry entries.
+:class:`ReproductionReport`
+    Store a numerical comparison from deliberate forward re-execution.
+:class:`SensitivityMap`
+    Store scaled sensitivities from inputs to output projections.
+:class:`TransformationRecord`
+    Store one transformation and its semantic information effects.
+:class:`VerificationReport`
+    Store an offline certificate-verification outcome.
+:func:`make_artifact_ref`
+    Create a validated artifact reference.
+:func:`make_certification_claim`
+    Create a claim retaining both continuous and discrete evidence.
+:func:`make_certification_context`
+    Create a prepared certification context.
+:func:`make_certified_result`
+    Pair any JAX-compatible result value with a forward certificate.
+:func:`make_convention_ref`
+    Create a validated convention reference.
+:func:`make_dependency_map`
+    Create a structural dependency map.
+:func:`make_derivative_evidence`
+    Create validated derivative and local-information evidence.
+:func:`make_domain_predicate`
+    Create a validated domain-predicate declaration.
+:func:`make_domain_result`
+    Create one traced domain evaluation.
+:func:`make_evidence_ref`
+    Create validated vector-valued numerical evidence.
+:func:`make_evidence_report`
+    Create an offline evidence-verification report.
+:func:`make_execution_manifest`
+    Create a validated execution manifest.
+:func:`make_forward_certificate`
+    Create and cross-validate a complete forward certificate.
+:func:`make_forward_model_spec`
+    Create a validated stable forward-model specification.
+:func:`make_information_spectrum`
+    Create a validated local information spectrum.
+:func:`make_policy_report`
+    Create a validated policy truth table.
+:func:`make_registered_model`
+    Create a validated model-registry binding.
+:func:`make_registered_transformation`
+    Create a validated transformation-registry binding.
+:func:`make_registry_report`
+    Create a validated structural registry report.
+:func:`make_registry_snapshot`
+    Create an immutable registry snapshot.
+:func:`make_reproduction_report`
+    Create a report comparing a result with its re-execution.
+:func:`make_sensitivity_map`
+    Create a named, scaled local-sensitivity map.
+:func:`make_transformation_record`
+    Create a validated information-aware transformation record.
+:func:`make_verification_report`
+    Create an offline certificate-verification report.
 """
 
 import json
@@ -13,12 +116,44 @@ import json
 import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import Any, Optional
-from jaxtyping import Array, Bool, Float, Int, jaxtyped
+from beartype.typing import Any, Callable, Optional
+from jaxtyping import Array, Bool, Float, Int, PyTree, jaxtyped
+
+from .contracts import TransformationContract
 
 
 class ArtifactRef(eqx.Module):
-    """Static identity and role of one source or derived artifact."""
+    """Store static identity and role for one source or derived artifact.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestArtifactref`
+
+    Attributes
+    ----------
+    artifact_id : str
+        Artifact id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    media_type : str
+        Media type (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    byte_checksum : Optional[str]
+        Byte checksum (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    content_checksum : str
+        Content checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    semantic_checksum : str
+        Semantic checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    locator : Optional[str]
+        Locator (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    role : str
+        Role (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    """
 
     artifact_id: str = eqx.field(static=True)
     media_type: str = eqx.field(static=True)
@@ -30,7 +165,25 @@ class ArtifactRef(eqx.Module):
 
 
 class ConventionRef(eqx.Module):
-    """Versioned semantic convention used by a scientific model."""
+    """Store a versioned semantic convention used by a scientific model.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestConventionref`
+
+    Attributes
+    ----------
+    convention_id : str
+        Convention id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    version : str
+        Version (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    parameters_json : str
+        Parameters json (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
 
     convention_id: str = eqx.field(static=True)
     version: str = eqx.field(static=True)
@@ -38,7 +191,28 @@ class ConventionRef(eqx.Module):
 
 
 class DomainPredicate(eqx.Module):
-    """Static declaration of one model-domain predicate."""
+    """Store a static declaration of one model-domain predicate.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestDomainpredicate`
+
+    Attributes
+    ----------
+    predicate_id : str
+        Predicate id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    expression_id : str
+        Expression id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    units : Optional[str]
+        Units (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    severity : str
+        Severity (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    """
 
     predicate_id: str = eqx.field(static=True)
     expression_id: str = eqx.field(static=True)
@@ -47,7 +221,46 @@ class DomainPredicate(eqx.Module):
 
 
 class DomainResult(eqx.Module):
-    """Traced evaluation of one declared domain predicate."""
+    """Store the traced evaluation of one declared domain predicate.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestDomainresult`
+
+    Attributes
+    ----------
+    predicate_id : str
+        Predicate id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    measured : Float[Array, ""]
+        Measured retained as a differentiable JAX leaf in the declared
+        physical units.
+    reference : Float[Array, ""]
+        Reference retained as a differentiable JAX leaf in the declared
+        physical units.
+    residual : Float[Array, ""]
+        Residual retained as a differentiable JAX leaf in the declared
+        physical units.
+    tolerance : Float[Array, ""]
+        Tolerance retained as a differentiable JAX leaf in the declared
+        physical units.
+    margin : Float[Array, ""]
+        Margin retained as a differentiable JAX leaf in the declared
+        physical units.
+    passed : Bool[Array, ""]
+        Passed retained as a differentiable JAX leaf in the declared
+        physical units.
+    checked : Bool[Array, ""]
+        Checked retained as a differentiable JAX leaf in the declared
+        physical units.
+    in_domain : Bool[Array, ""]
+        In domain retained as a differentiable JAX leaf in the declared
+        physical units.
+    severity_code : Int[Array, ""]
+        Severity code retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     predicate_id: str = eqx.field(static=True)
     measured: Float[Array, ""]
@@ -61,8 +274,47 @@ class DomainResult(eqx.Module):
     severity_code: Int[Array, ""]
 
 
+type CheckFunction = Callable[[PyTree], DomainResult]
+
+
 class ForwardModelSpec(eqx.Module):
-    """Stable scientific and differentiability identity of a forward model."""
+    """Store the identity of a differentiable forward model.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestForwardmodelspec`
+
+    Attributes
+    ----------
+    model_id : str
+        Model id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    model_version : str
+        Model version (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    observable_id : str
+        Observable id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    implementation_ref : str
+        Implementation ref (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    assumptions : tuple[str, ...]
+        Assumptions (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    conventions : tuple[ConventionRef, ...]
+        Conventions (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    domain : tuple[DomainPredicate, ...]
+        Domain (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    differentiable_paths : tuple[str, ...]
+        Differentiable paths (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    nondifferentiable_paths : tuple[str, ...]
+        Nondifferentiable paths (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
 
     model_id: str = eqx.field(static=True)
     model_version: str = eqx.field(static=True)
@@ -75,8 +327,156 @@ class ForwardModelSpec(eqx.Module):
     nondifferentiable_paths: tuple[str, ...] = eqx.field(static=True)
 
 
+class RegisteredModel(eqx.Module):
+    """Store a frozen binding between a model spec and its executor.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestRegisteredmodel`
+
+    Attributes
+    ----------
+    spec : ForwardModelSpec
+        Spec retained as a differentiable JAX leaf in the declared
+        physical units.
+    executor : Callable[..., Any]
+        Executor (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    registration_checksum : str
+        Registration checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
+
+    spec: ForwardModelSpec
+    executor: Callable[..., Any] = eqx.field(static=True)
+    registration_checksum: str = eqx.field(static=True)
+
+
+class RegisteredTransformation(eqx.Module):
+    """Store a frozen transformation and its consistency checksum.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestRegisteredtransformation`
+
+    Attributes
+    ----------
+    contract : TransformationContract
+        Contract retained as a differentiable JAX leaf in the declared
+        physical units.
+    registration_checksum : str
+        Registration checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
+
+    contract: TransformationContract
+    registration_checksum: str = eqx.field(static=True)
+
+
+class RegistrySnapshot(eqx.Module):
+    """Store an immutable deterministic snapshot of registry entries.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestRegistrysnapshot`
+
+    Attributes
+    ----------
+    models : tuple[RegisteredModel, ...]
+        Models retained as a differentiable JAX leaf in the declared
+        physical units.
+    transformations : tuple[RegisteredTransformation, ...]
+        Transformations retained as a differentiable JAX leaf in the
+        declared physical units.
+    checksum : str
+        Checksum (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    """
+
+    models: tuple[RegisteredModel, ...]
+    transformations: tuple[RegisteredTransformation, ...]
+    checksum: str = eqx.field(static=True)
+
+
+class RegistryReport(eqx.Module):
+    """Store the structural validation result for one registry snapshot.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestRegistryreport`
+
+    Attributes
+    ----------
+    valid : bool
+        Valid (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    errors : tuple[str, ...]
+        Errors (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    model_count : int
+        Model count (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    transformation_count : int
+        Transformation count (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    checksum : str
+        Checksum (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    frozen : bool
+        Frozen (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    """
+
+    valid: bool = eqx.field(static=True)
+    errors: tuple[str, ...] = eqx.field(static=True)
+    model_count: int = eqx.field(static=True)
+    transformation_count: int = eqx.field(static=True)
+    checksum: str = eqx.field(static=True)
+    frozen: bool = eqx.field(static=True)
+
+
 class TransformationRecord(eqx.Module):
-    """One ordered transformation and its semantic information effects."""
+    """Store one transformation and its semantic information effects.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestTransformationrecord`
+
+    Attributes
+    ----------
+    transformation_id : str
+        Transformation id (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    transformation_version : str
+        Transformation version (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    parent_ids : tuple[str, ...]
+        Parent ids (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    output_ids : tuple[str, ...]
+        Output ids (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    preserves : tuple[str, ...]
+        Preserves (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    introduces : tuple[str, ...]
+        Introduces (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    destroys : tuple[str, ...]
+        Destroys (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    invalidates_claims : tuple[str, ...]
+        Invalidates claims (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    parameters_checksum : str
+        Parameters checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
 
     transformation_id: str = eqx.field(static=True)
     transformation_version: str = eqx.field(static=True)
@@ -90,7 +490,43 @@ class TransformationRecord(eqx.Module):
 
 
 class EvidenceRef(eqx.Module):
-    """Numerical evidence with a static method and source identity."""
+    """Store numerical evidence with static method and source identity.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestEvidenceref`
+
+    Attributes
+    ----------
+    evidence_id : str
+        Evidence id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    method_id : str
+        Method id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    artifact_refs : tuple[str, ...]
+        Artifact refs (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    source_type : str
+        Source type (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    independent : bool
+        Independent (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    measured : Float[Array, " n_measure"]
+        Measured retained as a differentiable JAX leaf in the declared
+        physical units.
+    reference : Float[Array, " n_measure"]
+        Reference retained as a differentiable JAX leaf in the declared
+        physical units.
+    residual : Float[Array, " n_measure"]
+        Residual retained as a differentiable JAX leaf in the declared
+        physical units.
+    tolerance : Float[Array, " n_measure"]
+        Tolerance retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     evidence_id: str = eqx.field(static=True)
     method_id: str = eqx.field(static=True)
@@ -104,7 +540,55 @@ class EvidenceRef(eqx.Module):
 
 
 class CertificationClaim(eqx.Module):
-    """A named assurance claim and its continuous numerical evidence."""
+    """Store a named claim and its continuous numerical evidence.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestCertificationclaim`
+
+    Attributes
+    ----------
+    claim_id : str
+        Claim id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    subject_id : str
+        Subject id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    predicate_id : str
+        Predicate id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    evidence_ids : tuple[str, ...]
+        Evidence ids (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    measured : Float[Array, " n_measure"]
+        Measured retained as a differentiable JAX leaf in the declared
+        physical units.
+    reference : Float[Array, " n_measure"]
+        Reference retained as a differentiable JAX leaf in the declared
+        physical units.
+    residual : Float[Array, " n_measure"]
+        Residual retained as a differentiable JAX leaf in the declared
+        physical units.
+    tolerance : Float[Array, " n_measure"]
+        Tolerance retained as a differentiable JAX leaf in the declared
+        physical units.
+    passed : Bool[Array, ""]
+        Passed retained as a differentiable JAX leaf in the declared
+        physical units.
+    checked : Bool[Array, ""]
+        Checked retained as a differentiable JAX leaf in the declared
+        physical units.
+    in_domain : Bool[Array, ""]
+        In domain retained as a differentiable JAX leaf in the declared
+        physical units.
+    margin : Float[Array, ""]
+        Margin retained as a differentiable JAX leaf in the declared
+        physical units.
+    severity_code : Int[Array, ""]
+        Severity code retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     claim_id: str = eqx.field(static=True)
     subject_id: str = eqx.field(static=True)
@@ -122,7 +606,55 @@ class CertificationClaim(eqx.Module):
 
 
 class DerivativeEvidence(eqx.Module):
-    """JVP, VJP, reference, and local information-spectrum evidence."""
+    """Store JVP, VJP, reference, and information-spectrum evidence.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestDerivativeevidence`
+
+    Attributes
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    output_projection_ids : tuple[str, ...]
+        Output projection ids (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    method : str
+        Method (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    scales : Float[Array, " n_input"]
+        Scales retained as a differentiable JAX leaf in the declared
+        physical units.
+    jvp_probes : Float[Array, "n_probe n_output"]
+        Jvp probes retained as a differentiable JAX leaf in the
+        declared physical units.
+    vjp_probes : Float[Array, "n_probe n_input"]
+        Vjp probes retained as a differentiable JAX leaf in the
+        declared physical units.
+    reference_derivatives : Float[Array, "n_probe n_deriv"]
+        Reference derivatives retained as a differentiable JAX leaf in
+        the declared physical units.
+    derivative_residuals : Float[Array, "n_probe n_deriv"]
+        Derivative residuals retained as a differentiable JAX leaf in
+        the declared physical units.
+    singular_values : Float[Array, " n_sv"]
+        Singular values retained as a differentiable JAX leaf in the
+        declared physical units.
+    effective_rank : Int[Array, ""]
+        Effective rank retained as a differentiable JAX leaf in the
+        declared physical units.
+    condition_estimate : Float[Array, ""]
+        Condition estimate retained as a differentiable JAX leaf in the
+        declared physical units.
+    finite : Bool[Array, ""]
+        Finite retained as a differentiable JAX leaf in the declared
+        physical units.
+    fd_correct : Bool[Array, ""]
+        Fd correct retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     input_paths: tuple[str, ...] = eqx.field(static=True)
     output_projection_ids: tuple[str, ...] = eqx.field(static=True)
@@ -140,7 +672,31 @@ class DerivativeEvidence(eqx.Module):
 
 
 class DependencyMap(eqx.Module):
-    """Declared and JAXPR-observed structural dependency relations."""
+    """Store declared and JAXPR-observed dependency relations.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestDependencymap`
+
+    Attributes
+    ----------
+    model_id : str
+        Model id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    input_paths : tuple[str, ...]
+        Input paths (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    output_paths : tuple[str, ...]
+        Output paths (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    structural : Bool[Array, "n_output n_input"]
+        Structural retained as a differentiable JAX leaf in the
+        declared physical units.
+    traced : Bool[Array, "n_output n_input"]
+        Traced retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     model_id: str = eqx.field(static=True)
     input_paths: tuple[str, ...] = eqx.field(static=True)
@@ -150,7 +706,34 @@ class DependencyMap(eqx.Module):
 
 
 class SensitivityMap(eqx.Module):
-    """Scaled local sensitivities from named inputs to output projections."""
+    """Store scaled sensitivities from inputs to output projections.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestSensitivitymap`
+
+    Attributes
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    output_projection_ids : tuple[str, ...]
+        Output projection ids (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    scales : Float[Array, " n_input"]
+        Scales retained as a differentiable JAX leaf in the declared
+        physical units.
+    sensitivities : Float[Array, "n_output n_input"]
+        Sensitivities retained as a differentiable JAX leaf in the
+        declared physical units.
+    threshold : Float[Array, ""]
+        Threshold retained as a differentiable JAX leaf in the declared
+        physical units.
+    active : Bool[Array, "n_output n_input"]
+        Active retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     input_paths: tuple[str, ...] = eqx.field(static=True)
     output_projection_ids: tuple[str, ...] = eqx.field(static=True)
@@ -161,7 +744,34 @@ class SensitivityMap(eqx.Module):
 
 
 class InformationSpectrum(eqx.Module):
-    """Matrix-free local information spectrum in named input coordinates."""
+    """Store a matrix-free information spectrum in input coordinates.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestInformationspectrum`
+
+    Attributes
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    singular_values : Float[Array, " n_sv"]
+        Singular values retained as a differentiable JAX leaf in the
+        declared physical units.
+    right_singular_vectors : Float[Array, "n_sv n_input"]
+        Right singular vectors retained as a differentiable JAX leaf in
+        the declared physical units.
+    effective_rank : Int[Array, ""]
+        Effective rank retained as a differentiable JAX leaf in the
+        declared physical units.
+    condition_estimate : Float[Array, ""]
+        Condition estimate retained as a differentiable JAX leaf in the
+        declared physical units.
+    threshold : Float[Array, ""]
+        Threshold retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     input_paths: tuple[str, ...] = eqx.field(static=True)
     singular_values: Float[Array, " n_sv"]
@@ -172,7 +782,46 @@ class InformationSpectrum(eqx.Module):
 
 
 class ExecutionManifest(eqx.Module):
-    """Static software and execution identity prepared at the I/O boundary."""
+    """Store software and execution identity prepared at the I/O boundary.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestExecutionmanifest`
+
+    Attributes
+    ----------
+    execution_id : str
+        Execution id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    model_ref : str
+        Model ref (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    schema_version : str
+        Schema version (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    package_version : str
+        Package version (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    source_checksum : str
+        Source checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    environment_checksum : str
+        Environment checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    backend : str
+        Backend (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    precision_policy : str
+        Precision policy (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    deterministic : bool
+        Deterministic (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    started_at_utc : str
+        Started at utc (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    """
 
     execution_id: str = eqx.field(static=True)
     model_ref: str = eqx.field(static=True)
@@ -187,7 +836,37 @@ class ExecutionManifest(eqx.Module):
 
 
 class PolicyReport(eqx.Module):
-    """Traced policy truth table from which achieved levels are derived."""
+    """Store a traced policy truth table for derived certification levels.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestPolicyreport`
+
+    Attributes
+    ----------
+    policy_id : str
+        Policy id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    level_ids : tuple[str, ...]
+        Level ids (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    required_claim_ids : tuple[str, ...]
+        Required claim ids (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    claim_passed : Bool[Array, " n_claim"]
+        Claim passed retained as a differentiable JAX leaf in the
+        declared physical units.
+    claim_checked : Bool[Array, " n_claim"]
+        Claim checked retained as a differentiable JAX leaf in the
+        declared physical units.
+    claim_in_domain : Bool[Array, " n_claim"]
+        Claim in domain retained as a differentiable JAX leaf in the
+        declared physical units.
+    achieved : Bool[Array, " n_level"]
+        Achieved retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     policy_id: str = eqx.field(static=True)
     level_ids: tuple[str, ...] = eqx.field(static=True)
@@ -199,7 +878,40 @@ class PolicyReport(eqx.Module):
 
 
 class CertificationContext(eqx.Module):
-    """Prepared static selections and references for compiled certification."""
+    """Store prepared selections and references for compiled certification.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestCertificationcontext`
+
+    Attributes
+    ----------
+    manifest : ExecutionManifest
+        Manifest retained as a differentiable JAX leaf in the declared
+        physical units.
+    model : ForwardModelSpec
+        Model retained as a differentiable JAX leaf in the declared
+        physical units.
+    artifacts : tuple[ArtifactRef, ...]
+        Artifacts retained as a differentiable JAX leaf in the declared
+        physical units.
+    transformations : tuple[TransformationRecord, ...]
+        Transformations retained as a differentiable JAX leaf in the
+        declared physical units.
+    evidence : tuple[EvidenceRef, ...]
+        Evidence retained as a differentiable JAX leaf in the declared
+        physical units.
+    policy_id : str
+        Policy id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    check_ids : tuple[str, ...]
+        Check ids (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    input_checksums : tuple[str, ...]
+        Input checksums (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
 
     manifest: ExecutionManifest
     model: ForwardModelSpec
@@ -212,7 +924,61 @@ class CertificationContext(eqx.Module):
 
 
 class ForwardCertificate(eqx.Module):
-    """Complete scientific-assurance record for one forward execution."""
+    """Store the complete assurance record for one forward execution.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestForwardcertificate`
+
+    Attributes
+    ----------
+    manifest : ExecutionManifest
+        Manifest retained as a differentiable JAX leaf in the declared
+        physical units.
+    model : ForwardModelSpec
+        Model retained as a differentiable JAX leaf in the declared
+        physical units.
+    artifacts : tuple[ArtifactRef, ...]
+        Artifacts retained as a differentiable JAX leaf in the declared
+        physical units.
+    transformations : tuple[TransformationRecord, ...]
+        Transformations retained as a differentiable JAX leaf in the
+        declared physical units.
+    evidence : tuple[EvidenceRef, ...]
+        Evidence retained as a differentiable JAX leaf in the declared
+        physical units.
+    claims : tuple[CertificationClaim, ...]
+        Claims retained as a differentiable JAX leaf in the declared
+        physical units.
+    domains : tuple[DomainResult, ...]
+        Domains retained as a differentiable JAX leaf in the declared
+        physical units.
+    derivatives : DerivativeEvidence
+        Derivatives retained as a differentiable JAX leaf in the
+        declared physical units.
+    dependencies : DependencyMap
+        Dependencies retained as a differentiable JAX leaf in the
+        declared physical units.
+    sensitivities : SensitivityMap
+        Sensitivities retained as a differentiable JAX leaf in the
+        declared physical units.
+    information : InformationSpectrum
+        Information retained as a differentiable JAX leaf in the
+        declared physical units.
+    policy_report : PolicyReport
+        Policy report retained as a differentiable JAX leaf in the
+        declared physical units.
+    policy_id : str
+        Policy id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    certificate_checksum : str
+        Certificate checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    extensions_json : str
+        Extensions json (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    """
 
     manifest: ExecutionManifest
     model: ForwardModelSpec
@@ -232,14 +998,53 @@ class ForwardCertificate(eqx.Module):
 
 
 class CertifiedResult(eqx.Module):
-    """A numerical result paired with its differentiable certificate."""
+    """Store a numerical result paired with its differentiable certificate.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestCertifiedresult`
+
+    Attributes
+    ----------
+    value : Any
+        Value retained as a differentiable JAX leaf in the declared
+        physical units.
+    certificate : ForwardCertificate
+        Certificate retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     value: Any
     certificate: ForwardCertificate
 
 
 class EvidenceReport(eqx.Module):
-    """Offline resolution and consistency outcome for one evidence record."""
+    """Store the offline consistency outcome for one evidence record.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestEvidencereport`
+
+    Attributes
+    ----------
+    evidence_id : str
+        Evidence id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    resolved : Bool[Array, ""]
+        Resolved retained as a differentiable JAX leaf in the declared
+        physical units.
+    compatible : Bool[Array, ""]
+        Compatible retained as a differentiable JAX leaf in the
+        declared physical units.
+    passed : Bool[Array, ""]
+        Passed retained as a differentiable JAX leaf in the declared
+        physical units.
+    residual_norm : Float[Array, ""]
+        Residual norm retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     evidence_id: str = eqx.field(static=True)
     resolved: Bool[Array, ""]
@@ -249,7 +1054,31 @@ class EvidenceReport(eqx.Module):
 
 
 class VerificationReport(eqx.Module):
-    """Offline structural, evidence, and policy verification outcome."""
+    """Store an offline certificate-verification outcome.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestVerificationreport`
+
+    Attributes
+    ----------
+    certificate_checksum : str
+        Certificate checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    policy_id : str
+        Policy id (**static** -- a compile-time constant; changing it
+        triggers retracing).
+    structure_valid : Bool[Array, ""]
+        Structure valid retained as a differentiable JAX leaf in the
+        declared physical units.
+    evidence_valid : Bool[Array, ""]
+        Evidence valid retained as a differentiable JAX leaf in the
+        declared physical units.
+    policy_report : PolicyReport
+        Policy report retained as a differentiable JAX leaf in the
+        declared physical units.
+    """
 
     certificate_checksum: str = eqx.field(static=True)
     policy_id: str = eqx.field(static=True)
@@ -259,7 +1088,34 @@ class VerificationReport(eqx.Module):
 
 
 class ReproductionReport(eqx.Module):
-    """Numerical comparison from a deliberate forward re-execution."""
+    """Store a numerical comparison from deliberate forward re-execution.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    so the record remains stable under JIT, VMAP, JVP, and VJP transforms.
+
+    :see: :class:`~.test_certification.TestReproductionreport`
+
+    Attributes
+    ----------
+    execution_id : str
+        Execution id (**static** -- a compile-time constant; changing
+        it triggers retracing).
+    result_checksum : str
+        Result checksum (**static** -- a compile-time constant;
+        changing it triggers retracing).
+    reproduced : Bool[Array, ""]
+        Reproduced retained as a differentiable JAX leaf in the
+        declared physical units.
+    max_abs_error : Float[Array, ""]
+        Max abs error retained as a differentiable JAX leaf in the
+        declared physical units.
+    max_rel_error : Float[Array, ""]
+        Max rel error retained as a differentiable JAX leaf in the
+        declared physical units.
+    tolerance : Float[Array, ""]
+        Tolerance retained as a differentiable JAX leaf in the declared
+        physical units.
+    """
 
     execution_id: str = eqx.field(static=True)
     result_checksum: str = eqx.field(static=True)
@@ -279,13 +1135,16 @@ def _require_text(value: str, name: str) -> str:
 def _require_optional_text(value: Optional[str], name: str) -> Optional[str]:
     """Reject an explicitly supplied empty optional string."""
     if value is not None:
-        return _require_text(value, name)
+        result: Optional[str] = _require_text(value, name)
+        return result
     return value
 
 
 def _text_tuple(values: tuple[str, ...], name: str) -> tuple[str, ...]:
     """Normalize and validate a tuple of identifiers."""
-    result = tuple(_require_text(value, name) for value in values)
+    result: tuple[str, ...] = tuple(
+        _require_text(value, name) for value in values
+    )
     if len(result) != len(set(result)):
         raise ValueError(f"{name} must not contain duplicates")
     return result
@@ -293,8 +1152,9 @@ def _text_tuple(values: tuple[str, ...], name: str) -> tuple[str, ...]:
 
 def _json_object(value: str, name: str) -> str:
     """Require a JSON object while preserving the supplied representation."""
+    error: json.JSONDecodeError
     try:
-        decoded = json.loads(value)
+        decoded: Any = json.loads(value)
     except json.JSONDecodeError as error:
         raise ValueError(f"{name} must be valid JSON") from error
     if not isinstance(decoded, dict):
@@ -304,7 +1164,7 @@ def _json_object(value: str, name: str) -> str:
 
 def _float(value: Any, name: str, ndim: int) -> Array:
     """Cast a numerical value to float64 and enforce its rank."""
-    array = jnp.asarray(value, dtype=jnp.float64)
+    array: Array = jnp.asarray(value, dtype=jnp.float64)
     if array.ndim != ndim:
         raise ValueError(f"{name} must have rank {ndim}")
     return array
@@ -312,7 +1172,7 @@ def _float(value: Any, name: str, ndim: int) -> Array:
 
 def _bool(value: Any, name: str, ndim: int) -> Array:
     """Cast a logical value to bool and enforce its rank."""
-    array = jnp.asarray(value, dtype=jnp.bool_)
+    array: Array = jnp.asarray(value, dtype=jnp.bool_)
     if array.ndim != ndim:
         raise ValueError(f"{name} must have rank {ndim}")
     return array
@@ -320,7 +1180,7 @@ def _bool(value: Any, name: str, ndim: int) -> Array:
 
 def _int(value: Any, name: str, ndim: int) -> Array:
     """Cast an integer value to int32 and enforce its rank."""
-    array = jnp.asarray(value, dtype=jnp.int32)
+    array: Array = jnp.asarray(value, dtype=jnp.int32)
     if array.ndim != ndim:
         raise ValueError(f"{name} must have rank {ndim}")
     return array
@@ -328,20 +1188,22 @@ def _int(value: Any, name: str, ndim: int) -> Array:
 
 def _nonnegative(array: Array, name: str) -> Array:
     """Require finite, nonnegative tolerance-like leaves under JIT."""
-    return eqx.error_if(
+    result: Array = eqx.error_if(
         array,
         ~jnp.all(jnp.isfinite(array) & (array >= 0.0)),
         f"{name} must be finite and nonnegative",
     )
+    return result
 
 
 def _positive(array: Array, name: str) -> Array:
     """Require finite, positive scale leaves under JIT."""
-    return eqx.error_if(
+    result: Array = eqx.error_if(
         array,
         ~jnp.all(jnp.isfinite(array) & (array > 0.0)),
         f"{name} must be finite and positive",
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -354,8 +1216,51 @@ def make_artifact_ref(
     locator: Optional[str],
     role: str,
 ) -> ArtifactRef:
-    """Create a validated artifact reference."""
-    return ArtifactRef(
+    """Create a validated artifact reference.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeArtifactRef`
+
+    Parameters
+    ----------
+    artifact_id : str
+        Artifact id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    media_type : str
+        Media type used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    byte_checksum : Optional[str]
+        Byte checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    content_checksum : str
+        Content checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    semantic_checksum : str
+        Semantic checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    locator : Optional[str]
+        Locator used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    role : str
+        Role used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+
+    Returns
+    -------
+    result : ArtifactRef
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: ArtifactRef = ArtifactRef(
         artifact_id=_require_text(artifact_id, "artifact_id"),
         media_type=_require_text(media_type, "media_type"),
         byte_checksum=_require_optional_text(byte_checksum, "byte_checksum"),
@@ -366,6 +1271,7 @@ def make_artifact_ref(
         locator=_require_optional_text(locator, "locator"),
         role=_require_text(role, "role"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -374,12 +1280,43 @@ def make_convention_ref(
     version: str,
     parameters_json: str = "{}",
 ) -> ConventionRef:
-    """Create a validated convention reference."""
-    return ConventionRef(
+    """Create a validated convention reference.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeConventionRef`
+
+    Parameters
+    ----------
+    convention_id : str
+        Convention id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    version : str
+        Version used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    parameters_json : str
+        Parameters json used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : ConventionRef
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: ConventionRef = ConventionRef(
         convention_id=_require_text(convention_id, "convention_id"),
         version=_require_text(version, "version"),
         parameters_json=_json_object(parameters_json, "parameters_json"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -389,13 +1326,47 @@ def make_domain_predicate(
     units: Optional[str] = None,
     severity: str = "error",
 ) -> DomainPredicate:
-    """Create a validated domain-predicate declaration."""
-    return DomainPredicate(
+    """Create a validated domain-predicate declaration.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeDomainPredicate`
+
+    Parameters
+    ----------
+    predicate_id : str
+        Predicate id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    expression_id : str
+        Expression id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    units : Optional[str]
+        Units used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    severity : str
+        Severity used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+
+    Returns
+    -------
+    result : DomainPredicate
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: DomainPredicate = DomainPredicate(
         predicate_id=_require_text(predicate_id, "predicate_id"),
         expression_id=_require_text(expression_id, "expression_id"),
         units=_require_optional_text(units, "units"),
         severity=_require_text(severity, "severity"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -411,8 +1382,58 @@ def make_domain_result(
     in_domain: Any = True,
     severity_code: Any = 0,
 ) -> DomainResult:
-    """Create one traced domain evaluation."""
-    return DomainResult(
+    """Create one traced domain evaluation.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeDomainResult`
+
+    Parameters
+    ----------
+    predicate_id : str
+        Predicate id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    measured : Any
+        Measured used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    reference : Any
+        Reference used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    residual : Any
+        Residual used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    tolerance : Any
+        Tolerance used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    margin : Any
+        Margin used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    passed : Any
+        Passed used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    checked : Any
+        Checked used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    in_domain : Any
+        In domain used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    severity_code : Any
+        Severity code used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : DomainResult
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: DomainResult = DomainResult(
         predicate_id=_require_text(predicate_id, "predicate_id"),
         measured=_float(measured, "measured", 0),
         reference=_float(reference, "reference", 0),
@@ -424,6 +1445,7 @@ def make_domain_result(
         in_domain=_bool(in_domain, "in_domain", 0),
         severity_code=_int(severity_code, "severity_code", 0),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -438,21 +1460,84 @@ def make_forward_model_spec(
     differentiable_paths: tuple[str, ...] = (),
     nondifferentiable_paths: tuple[str, ...] = (),
 ) -> ForwardModelSpec:
-    """Create a validated stable forward-model specification."""
-    diff_paths = _text_tuple(differentiable_paths, "differentiable_paths")
-    nondiff_paths = _text_tuple(
+    """Create a validated stable forward-model specification.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeForwardModelSpec`
+
+    Parameters
+    ----------
+    model_id : str
+        Model id used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    model_version : str
+        Model version used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    observable_id : str
+        Observable id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    implementation_ref : str
+        Implementation ref used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    assumptions : tuple[str, ...]
+        Assumptions used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    conventions : tuple[ConventionRef, ...]
+        Conventions used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    domain : tuple[DomainPredicate, ...]
+        Domain used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    differentiable_paths : tuple[str, ...]
+        Differentiable paths used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    nondifferentiable_paths : tuple[str, ...]
+        Nondifferentiable paths used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : ForwardModelSpec
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    diff_paths: tuple[str, ...] = _text_tuple(
+        differentiable_paths,
+        "differentiable_paths",
+    )
+    nondiff_paths: tuple[str, ...] = _text_tuple(
         nondifferentiable_paths, "nondifferentiable_paths"
     )
-    overlap = set(diff_paths).intersection(nondiff_paths)
+    overlap: set[str] = set(diff_paths).intersection(nondiff_paths)
     if overlap:
         raise ValueError(
             "differentiable_paths and nondifferentiable_paths must be disjoint"
         )
-    convention_ids = tuple(item.convention_id for item in conventions)
-    predicate_ids = tuple(item.predicate_id for item in domain)
+    convention_ids: tuple[str, ...] = tuple(
+        item.convention_id for item in conventions
+    )
+    predicate_ids: tuple[str, ...] = tuple(
+        item.predicate_id for item in domain
+    )
     _text_tuple(convention_ids, "convention ids")
     _text_tuple(predicate_ids, "domain predicate ids")
-    return ForwardModelSpec(
+    result: ForwardModelSpec = ForwardModelSpec(
         model_id=_require_text(model_id, "model_id"),
         model_version=_require_text(model_version, "model_version"),
         observable_id=_require_text(observable_id, "observable_id"),
@@ -465,6 +1550,220 @@ def make_forward_model_spec(
         differentiable_paths=diff_paths,
         nondifferentiable_paths=nondiff_paths,
     )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_registered_model(
+    spec: ForwardModelSpec,
+    executor: Callable[..., Any],
+    registration_checksum: str,
+) -> RegisteredModel:
+    """Create a validated model-registry binding.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeRegisteredModel`
+
+    Parameters
+    ----------
+    spec : ForwardModelSpec
+        Spec used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    executor : Callable[..., Any]
+        Executor used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    registration_checksum : str
+        Registration checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : RegisteredModel
+        Validated immutable carrier.
+
+    Raises
+    ------
+    TypeError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    if not callable(executor):
+        raise TypeError("model executor must be callable")
+    result: RegisteredModel = RegisteredModel(
+        spec=spec,
+        executor=executor,
+        registration_checksum=_require_text(
+            registration_checksum,
+            "registration_checksum",
+        ),
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_registered_transformation(
+    contract: TransformationContract,
+    registration_checksum: str,
+) -> RegisteredTransformation:
+    """Create a validated transformation-registry binding.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeRegisteredTransformation`
+
+    Parameters
+    ----------
+    contract : TransformationContract
+        Contract used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    registration_checksum : str
+        Registration checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : RegisteredTransformation
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    if contract is None:
+        raise ValueError("contract must not be None")
+    result: RegisteredTransformation = RegisteredTransformation(
+        contract=contract,
+        registration_checksum=_require_text(
+            registration_checksum,
+            "registration_checksum",
+        ),
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_registry_snapshot(
+    models: tuple[RegisteredModel, ...],
+    transformations: tuple[RegisteredTransformation, ...],
+    checksum: str,
+) -> RegistrySnapshot:
+    """Create an immutable registry snapshot.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeRegistrySnapshot`
+
+    Parameters
+    ----------
+    models : tuple[RegisteredModel, ...]
+        Models used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    transformations : tuple[RegisteredTransformation, ...]
+        Transformations used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    checksum : str
+        Checksum used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+
+    Returns
+    -------
+    result : RegistrySnapshot
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: RegistrySnapshot = RegistrySnapshot(
+        models=tuple(models),
+        transformations=tuple(transformations),
+        checksum=_require_text(checksum, "checksum"),
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_registry_report(
+    valid: bool,
+    errors: tuple[str, ...],
+    model_count: int,
+    transformation_count: int,
+    checksum: str,
+    frozen: bool,
+) -> RegistryReport:
+    """Create a validated structural registry report.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeRegistryReport`
+
+    Parameters
+    ----------
+    valid : bool
+        Valid used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    errors : tuple[str, ...]
+        Errors used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    model_count : int
+        Model count used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    transformation_count : int
+        Transformation count used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    checksum : str
+        Checksum used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    frozen : bool
+        Frozen used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+
+    Returns
+    -------
+    result : RegistryReport
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    if model_count < 0 or transformation_count < 0:
+        raise ValueError("registry entry counts must be nonnegative")
+    result: RegistryReport = RegistryReport(
+        valid=valid,
+        errors=tuple(errors),
+        model_count=model_count,
+        transformation_count=transformation_count,
+        checksum=_require_text(checksum, "checksum"),
+        frozen=frozen,
+    )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -479,10 +1778,65 @@ def make_transformation_record(
     invalidates_claims: tuple[str, ...] = (),
     parameters_checksum: str = "none",
 ) -> TransformationRecord:
-    """Create a validated information-aware transformation record."""
+    """Create a validated information-aware transformation record.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeTransformationRecord`
+
+    Parameters
+    ----------
+    transformation_id : str
+        Transformation id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    transformation_version : str
+        Transformation version used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    parent_ids : tuple[str, ...]
+        Parent ids used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    output_ids : tuple[str, ...]
+        Output ids used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    preserves : tuple[str, ...]
+        Preserves used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    introduces : tuple[str, ...]
+        Introduces used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    destroys : tuple[str, ...]
+        Destroys used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    invalidates_claims : tuple[str, ...]
+        Invalidates claims used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    parameters_checksum : str
+        Parameters checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : TransformationRecord
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
     if not output_ids:
         raise ValueError("output_ids must be non-empty")
-    return TransformationRecord(
+    result: TransformationRecord = TransformationRecord(
         transformation_id=_require_text(
             transformation_id, "transformation_id"
         ),
@@ -501,6 +1855,7 @@ def make_transformation_record(
             parameters_checksum, "parameters_checksum"
         ),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -515,14 +1870,66 @@ def make_evidence_ref(
     residual: Any,
     tolerance: Any,
 ) -> EvidenceRef:
-    """Create validated vector-valued numerical evidence."""
-    measured_array = _float(measured, "measured", 1)
-    reference_array = _float(reference, "reference", 1)
-    residual_array = _float(residual, "residual", 1)
-    tolerance_array = _nonnegative(
+    """Create validated vector-valued numerical evidence.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeEvidenceRef`
+
+    Parameters
+    ----------
+    evidence_id : str
+        Evidence id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    method_id : str
+        Method id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    artifact_refs : tuple[str, ...]
+        Artifact refs used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    source_type : str
+        Source type used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    independent : bool
+        Independent used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    measured : Any
+        Measured used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    reference : Any
+        Reference used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    residual : Any
+        Residual used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    tolerance : Any
+        Tolerance used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : EvidenceRef
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    measured_array: Array = _float(measured, "measured", 1)
+    reference_array: Array = _float(reference, "reference", 1)
+    residual_array: Array = _float(residual, "residual", 1)
+    tolerance_array: Array = _nonnegative(
         _float(tolerance, "tolerance", 1), "tolerance"
     )
-    shape = measured_array.shape
+    shape: tuple[int, ...] = measured_array.shape
     if not (
         reference_array.shape
         == residual_array.shape
@@ -530,7 +1937,7 @@ def make_evidence_ref(
         == shape
     ):
         raise ValueError("evidence numerical arrays must have equal shapes")
-    return EvidenceRef(
+    result: EvidenceRef = EvidenceRef(
         evidence_id=_require_text(evidence_id, "evidence_id"),
         method_id=_require_text(method_id, "method_id"),
         artifact_refs=_text_tuple(artifact_refs, "artifact_refs"),
@@ -541,6 +1948,7 @@ def make_evidence_ref(
         residual=residual_array,
         tolerance=tolerance_array,
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -559,14 +1967,79 @@ def make_certification_claim(  # noqa: PLR0913
     margin: Any = 0.0,
     severity_code: Any = 0,
 ) -> CertificationClaim:
-    """Create a claim retaining both continuous and discrete evidence."""
-    measured_array = _float(measured, "measured", 1)
-    reference_array = _float(reference, "reference", 1)
-    residual_array = _float(residual, "residual", 1)
-    tolerance_array = _nonnegative(
+    """Create a claim retaining both continuous and discrete evidence.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeCertificationClaim`
+
+    Parameters
+    ----------
+    claim_id : str
+        Claim id used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    subject_id : str
+        Subject id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    predicate_id : str
+        Predicate id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    evidence_ids : tuple[str, ...]
+        Evidence ids used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    measured : Any
+        Measured used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    reference : Any
+        Reference used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    residual : Any
+        Residual used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    tolerance : Any
+        Tolerance used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    passed : Any
+        Passed used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    checked : Any
+        Checked used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    in_domain : Any
+        In domain used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    margin : Any
+        Margin used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    severity_code : Any
+        Severity code used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : CertificationClaim
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    measured_array: Array = _float(measured, "measured", 1)
+    reference_array: Array = _float(reference, "reference", 1)
+    residual_array: Array = _float(residual, "residual", 1)
+    tolerance_array: Array = _nonnegative(
         _float(tolerance, "tolerance", 1), "tolerance"
     )
-    shape = measured_array.shape
+    shape: tuple[int, ...] = measured_array.shape
     if not (
         reference_array.shape
         == residual_array.shape
@@ -574,7 +2047,7 @@ def make_certification_claim(  # noqa: PLR0913
         == shape
     ):
         raise ValueError("claim numerical arrays must have equal shapes")
-    return CertificationClaim(
+    result: CertificationClaim = CertificationClaim(
         claim_id=_require_text(claim_id, "claim_id"),
         subject_id=_require_text(subject_id, "subject_id"),
         predicate_id=_require_text(predicate_id, "predicate_id"),
@@ -589,6 +2062,7 @@ def make_certification_claim(  # noqa: PLR0913
         margin=_float(margin, "margin", 0),
         severity_code=_int(severity_code, "severity_code", 0),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -607,15 +2081,90 @@ def make_derivative_evidence(  # noqa: PLR0913
     finite: Any,
     fd_correct: Any,
 ) -> DerivativeEvidence:
-    """Create validated derivative and local-information evidence."""
-    paths = _text_tuple(input_paths, "input_paths")
-    projections = _text_tuple(output_projection_ids, "output_projection_ids")
-    scales_array = _positive(_float(scales, "scales", 1), "scales")
-    jvp_array = _float(jvp_probes, "jvp_probes", 2)
-    vjp_array = _float(vjp_probes, "vjp_probes", 2)
-    reference_array = _float(reference_derivatives, "reference_derivatives", 2)
-    residual_array = _float(derivative_residuals, "derivative_residuals", 2)
-    singular_array = _nonnegative(
+    """Create validated derivative and local-information evidence.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeDerivativeEvidence`
+
+    Parameters
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    output_projection_ids : tuple[str, ...]
+        Output projection ids used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    method : str
+        Method used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    scales : Any
+        Scales used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    jvp_probes : Any
+        Jvp probes used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    vjp_probes : Any
+        Vjp probes used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    reference_derivatives : Any
+        Reference derivatives used to construct the validated carrier
+        as a traced numerical value in the declared physical units.
+    derivative_residuals : Any
+        Derivative residuals used to construct the validated carrier as
+        a traced numerical value in the declared physical units.
+    singular_values : Any
+        Singular values used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    effective_rank : Any
+        Effective rank used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    condition_estimate : Any
+        Condition estimate used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    finite : Any
+        Finite used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    fd_correct : Any
+        Fd correct used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : DerivativeEvidence
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    paths: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
+    projections: tuple[str, ...] = _text_tuple(
+        output_projection_ids,
+        "output_projection_ids",
+    )
+    scales_array: Array = _positive(_float(scales, "scales", 1), "scales")
+    jvp_array: Array = _float(jvp_probes, "jvp_probes", 2)
+    vjp_array: Array = _float(vjp_probes, "vjp_probes", 2)
+    reference_array: Array = _float(
+        reference_derivatives,
+        "reference_derivatives",
+        2,
+    )
+    residual_array: Array = _float(
+        derivative_residuals,
+        "derivative_residuals",
+        2,
+    )
+    singular_array: Array = _nonnegative(
         _float(singular_values, "singular_values", 1), "singular_values"
     )
     if scales_array.shape[0] != len(paths):
@@ -628,7 +2177,7 @@ def make_derivative_evidence(  # noqa: PLR0913
         raise ValueError("reference and derivative residual shapes must agree")
     if reference_array.shape[0] != jvp_array.shape[0]:
         raise ValueError("reference derivative probe count must agree")
-    return DerivativeEvidence(
+    result: DerivativeEvidence = DerivativeEvidence(
         input_paths=paths,
         output_projection_ids=projections,
         method=_require_text(method, "method"),
@@ -643,6 +2192,7 @@ def make_derivative_evidence(  # noqa: PLR0913
         finite=_bool(finite, "finite", 0),
         fd_correct=_bool(fd_correct, "fd_correct", 0),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -653,23 +2203,64 @@ def make_dependency_map(
     structural: Any,
     traced: Any,
 ) -> DependencyMap:
-    """Create a structural dependency map."""
-    inputs = _text_tuple(input_paths, "input_paths")
-    outputs = _text_tuple(output_paths, "output_paths")
-    structural_array = _bool(structural, "structural", 2)
-    traced_array = _bool(traced, "traced", 2)
-    expected = (len(outputs), len(inputs))
+    """Create a structural dependency map.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeDependencyMap`
+
+    Parameters
+    ----------
+    model_id : str
+        Model id used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    input_paths : tuple[str, ...]
+        Input paths used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    output_paths : tuple[str, ...]
+        Output paths used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    structural : Any
+        Structural used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    traced : Any
+        Traced used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : DependencyMap
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    inputs: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
+    outputs: tuple[str, ...] = _text_tuple(output_paths, "output_paths")
+    structural_array: Array = _bool(structural, "structural", 2)
+    traced_array: Array = _bool(traced, "traced", 2)
+    expected: tuple[int, int] = (len(outputs), len(inputs))
     if structural_array.shape != expected or traced_array.shape != expected:
         raise ValueError(
             "dependency matrices must have shape (outputs, inputs)"
         )
-    return DependencyMap(
+    result: DependencyMap = DependencyMap(
         model_id=_require_text(model_id, "model_id"),
         input_paths=inputs,
         output_paths=outputs,
         structural=structural_array,
         traced=traced_array,
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -681,20 +2272,70 @@ def make_sensitivity_map(
     threshold: Any,
     active: Any,
 ) -> SensitivityMap:
-    """Create a named, scaled local-sensitivity map."""
-    inputs = _text_tuple(input_paths, "input_paths")
-    outputs = _text_tuple(output_projection_ids, "output_projection_ids")
-    scales_array = _positive(_float(scales, "scales", 1), "scales")
-    sensitivities_array = _float(sensitivities, "sensitivities", 2)
-    active_array = _bool(active, "active", 2)
-    expected = (len(outputs), len(inputs))
+    """Create a named, scaled local-sensitivity map.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeSensitivityMap`
+
+    Parameters
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    output_projection_ids : tuple[str, ...]
+        Output projection ids used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    scales : Any
+        Scales used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    sensitivities : Any
+        Sensitivities used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    threshold : Any
+        Threshold used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    active : Any
+        Active used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : SensitivityMap
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    inputs: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
+    outputs: tuple[str, ...] = _text_tuple(
+        output_projection_ids,
+        "output_projection_ids",
+    )
+    scales_array: Array = _positive(_float(scales, "scales", 1), "scales")
+    sensitivities_array: Array = _float(
+        sensitivities,
+        "sensitivities",
+        2,
+    )
+    active_array: Array = _bool(active, "active", 2)
+    expected: tuple[int, int] = (len(outputs), len(inputs))
     if sensitivities_array.shape != expected or active_array.shape != expected:
         raise ValueError(
             "sensitivity matrices must have shape (outputs, inputs)"
         )
     if scales_array.shape != (len(inputs),):
         raise ValueError("scales length must equal input_paths length")
-    return SensitivityMap(
+    result: SensitivityMap = SensitivityMap(
         input_paths=inputs,
         output_projection_ids=outputs,
         scales=scales_array,
@@ -702,6 +2343,7 @@ def make_sensitivity_map(
         threshold=_nonnegative(_float(threshold, "threshold", 0), "threshold"),
         active=active_array,
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -713,17 +2355,63 @@ def make_information_spectrum(
     condition_estimate: Any,
     threshold: Any,
 ) -> InformationSpectrum:
-    """Create a validated local information spectrum."""
-    paths = _text_tuple(input_paths, "input_paths")
-    singular_array = _nonnegative(
+    """Create a validated local information spectrum.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeInformationSpectrum`
+
+    Parameters
+    ----------
+    input_paths : tuple[str, ...]
+        Input paths used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    singular_values : Any
+        Singular values used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    right_singular_vectors : Any
+        Right singular vectors used to construct the validated carrier
+        as a traced numerical value in the declared physical units.
+    effective_rank : Any
+        Effective rank used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    condition_estimate : Any
+        Condition estimate used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    threshold : Any
+        Threshold used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : InformationSpectrum
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    paths: tuple[str, ...] = _text_tuple(input_paths, "input_paths")
+    singular_array: Array = _nonnegative(
         _float(singular_values, "singular_values", 1), "singular_values"
     )
-    vectors_array = _float(right_singular_vectors, "right_singular_vectors", 2)
+    vectors_array: Array = _float(
+        right_singular_vectors,
+        "right_singular_vectors",
+        2,
+    )
     if vectors_array.shape != (singular_array.shape[0], len(paths)):
         raise ValueError(
             "right_singular_vectors must have shape (singular values, inputs)"
         )
-    return InformationSpectrum(
+    result: InformationSpectrum = InformationSpectrum(
         input_paths=paths,
         singular_values=singular_array,
         right_singular_vectors=vectors_array,
@@ -731,6 +2419,7 @@ def make_information_spectrum(
         condition_estimate=_float(condition_estimate, "condition_estimate", 0),
         threshold=_nonnegative(_float(threshold, "threshold", 0), "threshold"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -746,8 +2435,65 @@ def make_execution_manifest(
     deterministic: bool,
     started_at_utc: str,
 ) -> ExecutionManifest:
-    """Create a validated execution manifest."""
-    return ExecutionManifest(
+    """Create a validated execution manifest.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeExecutionManifest`
+
+    Parameters
+    ----------
+    execution_id : str
+        Execution id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    model_ref : str
+        Model ref used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    schema_version : str
+        Schema version used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    package_version : str
+        Package version used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    source_checksum : str
+        Source checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    environment_checksum : str
+        Environment checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    backend : str
+        Backend used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    precision_policy : str
+        Precision policy used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    deterministic : bool
+        Deterministic used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    started_at_utc : str
+        Started at utc used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : ExecutionManifest
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: ExecutionManifest = ExecutionManifest(
         execution_id=_require_text(execution_id, "execution_id"),
         model_ref=_require_text(model_ref, "model_ref"),
         schema_version=_require_text(schema_version, "schema_version"),
@@ -761,6 +2507,7 @@ def make_execution_manifest(
         deterministic=deterministic,
         started_at_utc=_require_text(started_at_utc, "started_at_utc"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -773,13 +2520,62 @@ def make_policy_report(
     claim_in_domain: Any,
     achieved: Any,
 ) -> PolicyReport:
-    """Create a validated policy truth table."""
-    levels = _text_tuple(level_ids, "level_ids")
-    claims = _text_tuple(required_claim_ids, "required_claim_ids")
-    passed_array = _bool(claim_passed, "claim_passed", 1)
-    checked_array = _bool(claim_checked, "claim_checked", 1)
-    domain_array = _bool(claim_in_domain, "claim_in_domain", 1)
-    achieved_array = _bool(achieved, "achieved", 1)
+    """Create a validated policy truth table.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakePolicyReport`
+
+    Parameters
+    ----------
+    policy_id : str
+        Policy id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    level_ids : tuple[str, ...]
+        Level ids used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    required_claim_ids : tuple[str, ...]
+        Required claim ids used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    claim_passed : Any
+        Claim passed used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    claim_checked : Any
+        Claim checked used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    claim_in_domain : Any
+        Claim in domain used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    achieved : Any
+        Achieved used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : PolicyReport
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    levels: tuple[str, ...] = _text_tuple(level_ids, "level_ids")
+    claims: tuple[str, ...] = _text_tuple(
+        required_claim_ids,
+        "required_claim_ids",
+    )
+    passed_array: Array = _bool(claim_passed, "claim_passed", 1)
+    checked_array: Array = _bool(claim_checked, "claim_checked", 1)
+    domain_array: Array = _bool(claim_in_domain, "claim_in_domain", 1)
+    achieved_array: Array = _bool(achieved, "achieved", 1)
     if not (
         passed_array.shape
         == checked_array.shape
@@ -789,7 +2585,7 @@ def make_policy_report(
         raise ValueError("policy claim arrays must match required_claim_ids")
     if achieved_array.shape != (len(levels),):
         raise ValueError("achieved must match level_ids")
-    return PolicyReport(
+    result: PolicyReport = PolicyReport(
         policy_id=_require_text(policy_id, "policy_id"),
         level_ids=levels,
         required_claim_ids=claims,
@@ -798,6 +2594,7 @@ def make_policy_report(
         claim_in_domain=domain_array,
         achieved=achieved_array,
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -811,13 +2608,63 @@ def make_certification_context(
     check_ids: tuple[str, ...] = (),
     input_checksums: tuple[str, ...] = (),
 ) -> CertificationContext:
-    """Create a prepared certification context."""
-    expected_ref = f"{model.model_id}@{model.model_version}"
+    """Create a prepared certification context.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeCertificationContext`
+
+    Parameters
+    ----------
+    manifest : ExecutionManifest
+        Manifest used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    model : ForwardModelSpec
+        Model used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    artifacts : tuple[ArtifactRef, ...]
+        Artifacts used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    transformations : tuple[TransformationRecord, ...]
+        Transformations used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    evidence : tuple[EvidenceRef, ...]
+        Evidence used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    policy_id : str
+        Policy id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    check_ids : tuple[str, ...]
+        Check ids used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    input_checksums : tuple[str, ...]
+        Input checksums used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : CertificationContext
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    expected_ref: str = f"{model.model_id}@{model.model_version}"
     if manifest.model_ref not in (model.model_id, expected_ref):
         raise ValueError(
             "manifest model_ref does not match model specification"
         )
-    return CertificationContext(
+    result: CertificationContext = CertificationContext(
         manifest=manifest,
         model=model,
         artifacts=tuple(artifacts),
@@ -827,12 +2674,16 @@ def make_certification_context(
         check_ids=_text_tuple(check_ids, "check_ids"),
         input_checksums=_text_tuple(input_checksums, "input_checksums"),
     )
+    return result
 
 
 def _unique_module_ids(values: tuple[Any, ...], attribute: str) -> bool:
     """Return whether a module tuple contains unique named identities."""
-    identities = tuple(getattr(value, attribute) for value in values)
-    return len(identities) == len(set(identities))
+    identities: tuple[Any, ...] = tuple(
+        getattr(value, attribute) for value in values
+    )
+    unique: bool = len(identities) == len(set(identities))
+    return unique
 
 
 @jaxtyped(typechecker=beartype)
@@ -853,8 +2704,82 @@ def make_forward_certificate(  # noqa: PLR0913
     certificate_checksum: str,
     extensions_json: str = "{}",
 ) -> ForwardCertificate:
-    """Create and cross-validate a complete forward certificate."""
-    expected_ref = f"{model.model_id}@{model.model_version}"
+    """Create and cross-validate a complete forward certificate.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeForwardCertificate`
+
+    Parameters
+    ----------
+    manifest : ExecutionManifest
+        Manifest used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    model : ForwardModelSpec
+        Model used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    artifacts : tuple[ArtifactRef, ...]
+        Artifacts used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    transformations : tuple[TransformationRecord, ...]
+        Transformations used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    evidence : tuple[EvidenceRef, ...]
+        Evidence used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    claims : tuple[CertificationClaim, ...]
+        Claims used to construct the validated carrier (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    domains : tuple[DomainResult, ...]
+        Domains used to construct the validated carrier (**static** --
+        a compile-time constant; changing it triggers retracing).
+    derivatives : DerivativeEvidence
+        Derivatives used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    dependencies : DependencyMap
+        Dependencies used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    sensitivities : SensitivityMap
+        Sensitivities used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    information : InformationSpectrum
+        Information used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    policy_report : PolicyReport
+        Policy report used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    policy_id : str
+        Policy id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    certificate_checksum : str
+        Certificate checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    extensions_json : str
+        Extensions json used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+
+    Returns
+    -------
+    result : ForwardCertificate
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    values: Any
+    attribute: Any
+    expected_ref: str = f"{model.model_id}@{model.model_version}"
     if manifest.model_ref not in (model.model_id, expected_ref):
         raise ValueError(
             "manifest model_ref does not match model specification"
@@ -865,7 +2790,7 @@ def make_forward_certificate(  # noqa: PLR0913
         raise ValueError(
             "dependency model_id does not match model specification"
         )
-    identity_groups = (
+    identity_groups: tuple[tuple[tuple[Any, ...], str], ...] = (
         (artifacts, "artifact_id"),
         (transformations, "transformation_id"),
         (evidence, "evidence_id"),
@@ -875,7 +2800,7 @@ def make_forward_certificate(  # noqa: PLR0913
     for values, attribute in identity_groups:
         if not _unique_module_ids(values, attribute):
             raise ValueError(f"certificate contains duplicate {attribute}")
-    return ForwardCertificate(
+    result: ForwardCertificate = ForwardCertificate(
         manifest=manifest,
         model=model,
         artifacts=tuple(artifacts),
@@ -894,14 +2819,44 @@ def make_forward_certificate(  # noqa: PLR0913
         ),
         extensions_json=_json_object(extensions_json, "extensions_json"),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
 def make_certified_result(
     value: Any, certificate: ForwardCertificate
 ) -> CertifiedResult:
-    """Pair any JAX-compatible result value with a forward certificate."""
-    return CertifiedResult(value=value, certificate=certificate)
+    """Pair any JAX-compatible result value with a forward certificate.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeCertifiedResult`
+
+    Parameters
+    ----------
+    value : Any
+        Value used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    certificate : ForwardCertificate
+        Certificate used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : CertifiedResult
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: CertifiedResult = CertifiedResult(
+        value=value,
+        certificate=certificate,
+    )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -912,14 +2867,49 @@ def make_evidence_report(
     passed: Any,
     residual_norm: Any,
 ) -> EvidenceReport:
-    """Create an offline evidence-verification report."""
-    return EvidenceReport(
+    """Create an offline evidence-verification report.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeEvidenceReport`
+
+    Parameters
+    ----------
+    evidence_id : str
+        Evidence id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    resolved : Any
+        Resolved used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    compatible : Any
+        Compatible used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    passed : Any
+        Passed used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    residual_norm : Any
+        Residual norm used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : EvidenceReport
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: EvidenceReport = EvidenceReport(
         evidence_id=_require_text(evidence_id, "evidence_id"),
         resolved=_bool(resolved, "resolved", 0),
         compatible=_bool(compatible, "compatible", 0),
         passed=_bool(passed, "passed", 0),
         residual_norm=_float(residual_norm, "residual_norm", 0),
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -930,10 +2920,50 @@ def make_verification_report(
     evidence_valid: Any,
     policy_report: PolicyReport,
 ) -> VerificationReport:
-    """Create an offline certificate-verification report."""
+    """Create an offline certificate-verification report.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeVerificationReport`
+
+    Parameters
+    ----------
+    certificate_checksum : str
+        Certificate checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    policy_id : str
+        Policy id used to construct the validated carrier (**static**
+        -- a compile-time constant; changing it triggers retracing).
+    structure_valid : Any
+        Structure valid used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    evidence_valid : Any
+        Evidence valid used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    policy_report : PolicyReport
+        Policy report used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : VerificationReport
+        Validated immutable carrier.
+
+    Raises
+    ------
+    ValueError
+        If static structure or cross-record validation fails.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
     if policy_report.policy_id != policy_id:
         raise ValueError("policy_report policy_id does not match report")
-    return VerificationReport(
+    result: VerificationReport = VerificationReport(
         certificate_checksum=_require_text(
             certificate_checksum, "certificate_checksum"
         ),
@@ -942,6 +2972,7 @@ def make_verification_report(
         evidence_valid=_bool(evidence_valid, "evidence_valid", 0),
         policy_report=policy_report,
     )
+    return result
 
 
 @jaxtyped(typechecker=beartype)
@@ -953,8 +2984,47 @@ def make_reproduction_report(
     max_rel_error: Any,
     tolerance: Any,
 ) -> ReproductionReport:
-    """Create a report comparing a result with its re-execution."""
-    return ReproductionReport(
+    """Create a report comparing a result with its re-execution.
+
+    Carry static scientific vocabulary separately from traced numerical leaves
+    while preserving the validation boundary defined by this factory.
+
+    :see: :class:`~.test_certification.TestMakeReproductionReport`
+
+    Parameters
+    ----------
+    execution_id : str
+        Execution id used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    result_checksum : str
+        Result checksum used to construct the validated carrier
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
+    reproduced : Any
+        Reproduced used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+    max_abs_error : Any
+        Max abs error used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    max_rel_error : Any
+        Max rel error used to construct the validated carrier as a
+        traced numerical value in the declared physical units.
+    tolerance : Any
+        Tolerance used to construct the validated carrier as a traced
+        numerical value in the declared physical units.
+
+    Returns
+    -------
+    result : ReproductionReport
+        Validated immutable carrier.
+
+    Notes
+    -----
+    Static structure is checked eagerly; numerical validation remains expressed
+    with JAX arrays so valid inputs retain differentiation behavior.
+    """
+    result: ReproductionReport = ReproductionReport(
         execution_id=_require_text(execution_id, "execution_id"),
         result_checksum=_require_text(result_checksum, "result_checksum"),
         reproduced=_bool(reproduced, "reproduced", 0),
@@ -962,12 +3032,14 @@ def make_reproduction_report(
         max_rel_error=_float(max_rel_error, "max_rel_error", 0),
         tolerance=_nonnegative(_float(tolerance, "tolerance", 0), "tolerance"),
     )
+    return result
 
 
 __all__: list[str] = [
     "ArtifactRef",
     "CertificationClaim",
     "CertificationContext",
+    "CheckFunction",
     "CertifiedResult",
     "ConventionRef",
     "DependencyMap",
@@ -981,6 +3053,10 @@ __all__: list[str] = [
     "ForwardModelSpec",
     "InformationSpectrum",
     "PolicyReport",
+    "RegisteredModel",
+    "RegisteredTransformation",
+    "RegistryReport",
+    "RegistrySnapshot",
     "ReproductionReport",
     "SensitivityMap",
     "TransformationRecord",
@@ -1001,6 +3077,10 @@ __all__: list[str] = [
     "make_forward_model_spec",
     "make_information_spectrum",
     "make_policy_report",
+    "make_registered_model",
+    "make_registered_transformation",
+    "make_registry_report",
+    "make_registry_snapshot",
     "make_reproduction_report",
     "make_sensitivity_map",
     "make_transformation_record",

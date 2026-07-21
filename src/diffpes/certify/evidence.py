@@ -10,11 +10,11 @@ quantities beneath a certification threshold.
 Routine Listings
 ----------------
 :func:`derivative_evidence`
-    Compare JVP derivatives with batched central differences and VJPs.
+    Compare JAX information flow with batched finite differences.
 :func:`evaluate_claim`
-    Evaluate a numerical claim while preserving its continuous residual.
+    Evaluate a numerical claim and preserve residual and margin leaves.
 :func:`evaluate_domain`
-    Evaluate a validity-domain predicate and retain its signed margin.
+    Evaluate a symmetric domain predicate around a reference value.
 :func:`evaluate_evidence`
     Compare measured values with an external numerical reference.
 """
@@ -22,14 +22,15 @@ Routine Listings
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import Callable
+from beartype.typing import Any, Callable
 from jaxtyping import Array, Float, PyTree, jaxtyped
 
-from diffpes.types.certification import (
+from diffpes.types import (
     CertificationClaim,
     DerivativeEvidence,
     DomainResult,
     EvidenceRef,
+    InformationSpectrum,
     make_certification_claim,
     make_derivative_evidence,
     make_domain_result,
@@ -57,7 +58,48 @@ def evaluate_evidence(
     source_type: str = "external_reference",
     independent: bool = True,
 ) -> EvidenceRef:
-    """Compare measured values with an external numerical reference."""
+    """Compare measured values with an external numerical reference.
+
+    The operation retains continuous residuals and margins before it derives
+    Boolean certification outcomes. These leaves remain available to JAX
+    transformations.
+
+    :see: :class:`~.test_evidence.TestEvaluateEvidence`
+
+    Parameters
+    ----------
+    evidence_id : str
+        Stable evidence identifier (**static** -- changing it retraces).
+    method_id : str
+        Stable comparison-method identifier (**static** -- a change retraces).
+    measured : Array
+        Computed numerical values in the declared observable units.
+    reference : Array
+        Independent reference values in the same units.
+    tolerance : Array
+        Nonnegative component tolerances in the same units.
+    artifact_refs : tuple[str, ...]
+        Source artifact identifiers (**static** -- changing them retraces).
+    source_type : str
+        Evidence-source category (**static** -- changing it retraces).
+    independent : bool
+        Whether the source is independent (**static** -- changing it retraces).
+
+    Returns
+    -------
+    evidence : EvidenceRef
+        Vector evidence retaining measured, reference, residual, and tolerance.
+
+    Raises
+    ------
+    ValueError
+        If measured and reference shapes differ.
+
+    Notes
+    -----
+    Residuals remain JAX leaves, so losses may differentiate through the
+    comparison before any Boolean policy reduction.
+    """
     measured_array: Array = _as_vector(measured)
     reference_array: Array = _as_vector(reference)
     tolerance_array: Array = jnp.broadcast_to(
@@ -95,7 +137,52 @@ def evaluate_claim(
     in_domain: bool = True,
     severity_code: int = 1,
 ) -> CertificationClaim:
-    """Evaluate a numerical claim and preserve residual and margin leaves."""
+    """Evaluate a numerical claim and preserve residual and margin leaves.
+
+    The operation retains continuous residuals and margins before it derives
+    Boolean certification outcomes. These leaves remain available to JAX
+    transformations.
+
+    :see: :class:`~.test_evidence.TestEvaluateClaim`
+
+    Parameters
+    ----------
+    claim_id : str
+        Stable claim identifier (**static** -- changing it retraces).
+    subject_id : str
+        Scientific subject identifier (**static** -- changing it retraces).
+    predicate_id : str
+        Predicate identity (**static** -- changing it retraces).
+    measured : Array
+        Computed numerical values in the predicate units.
+    reference : Array
+        Reference values in the same units.
+    tolerance : Array
+        Nonnegative component tolerances in the same units.
+    evidence_ids : tuple[str, ...]
+        Supporting evidence identifiers (**static** -- changing them retraces).
+    checked : bool
+        Whether evaluation occurred (**static** -- changing it retraces).
+    in_domain : bool
+        Whether the subject lies in the validity domain (**static**).
+    severity_code : int
+        Numerical severity code (**static** -- changing it retraces).
+
+    Returns
+    -------
+    claim : CertificationClaim
+        Claim with continuous residual and signed minimum margin leaves.
+
+    Raises
+    ------
+    ValueError
+        If measured and reference shapes differ.
+
+    Notes
+    -----
+    The margin is differentiable almost everywhere with respect to measured
+    values; the Boolean outcome is derived only after retaining that margin.
+    """
     measured_array: Array = _as_vector(measured)
     reference_array: Array = _as_vector(reference)
     tolerance_array: Array = jnp.broadcast_to(
@@ -140,7 +227,39 @@ def evaluate_domain(
     checked: bool = True,
     severity_code: int = 1,
 ) -> DomainResult:
-    """Evaluate a symmetric domain predicate around a reference value."""
+    """Evaluate a symmetric domain predicate around a reference value.
+
+    The operation retains continuous residuals and margins before it derives
+    Boolean certification outcomes. These leaves remain available to JAX
+    transformations.
+
+    :see: :class:`~.test_evidence.TestEvaluateDomain`
+
+    Parameters
+    ----------
+    predicate_id : str
+        Stable domain-predicate identity (**static** -- changing it retraces).
+    measured : Array
+        Measured physical quantity in the predicate units.
+    reference : Array
+        Domain-center value in the same units.
+    tolerance : Array
+        Symmetric half-width in the same units.
+    checked : bool
+        Whether evaluation occurred (**static** -- changing it retraces).
+    severity_code : int
+        Numerical severity code (**static** -- changing it retraces).
+
+    Returns
+    -------
+    result : DomainResult
+        Traced outcome retaining residual and signed boundary margin.
+
+    Notes
+    -----
+    The signed margin remains differentiable away from the absolute-value
+    cusp and may be optimized directly without differentiating a Boolean.
+    """
     measured_array: Array = jnp.asarray(measured, dtype=jnp.float64)
     reference_array: Array = jnp.asarray(reference, dtype=jnp.float64)
     tolerance_array: Array = jnp.asarray(tolerance, dtype=jnp.float64)
@@ -189,27 +308,76 @@ def derivative_evidence(
     """Compare JAX information flow with batched finite differences.
 
     The tangent tree has a leading probe axis on every leaf. The function
-    reuses one ``jax.linearize`` result for all JVP probes, evaluates central
-    differences with ``vmap``, and applies one retained VJP to all output
-    cotangents. It additionally records a matrix-free local information
-    spectrum.
+    reuses one ``jax.linearize`` result for all JVP probes. It applies
+    ``jax.vmap`` to the central differences and the retained VJP. The result
+    also contains a matrix-free local information spectrum.
+
+    :see: :class:`~.test_evidence.TestDerivativeEvidence`
+
+    Implementation Logic
+    --------------------
+    1. **Compute the derivative residuals**::
+
+           residuals: Array = jvp_values - reference
+
+       The residual retains the difference between JAX linearization and the
+       finite-difference reference before construction of the evidence.
+
+    Parameters
+    ----------
+    forward_fn : Callable[[PyTree], Float[Array, " n_output"]]
+        Pure differentiable forward model.
+    inputs : PyTree
+        Numerical model inputs in their declared physical units.
+    directions : PyTree
+        Tangent probes with one leading probe axis on each numerical leaf.
+    cotangents : Float[Array, "n_cotangent n_output"]
+        Output-space probes in the units reciprocal to the forward output.
+    input_paths : tuple[str, ...]
+        Stable names for the probed input coordinates (**static**).
+    output_projection_ids : tuple[str, ...]
+        Stable names for the output projections (**static**).
+    scales : Float[Array, " n_probe"]
+        Positive physical scale for each tangent probe.
+    step : float
+        Relative central-difference step. Default 6e-6.
+    spectrum_rank : int
+        Requested information-spectrum rank (**static**). Default 8.
+
+    Returns
+    -------
+    evidence : DerivativeEvidence
+        JVP, VJP, finite-difference, and local information-spectrum evidence.
+
+    Notes
+    -----
+    JVP, VJP, residual, and spectrum leaves remain differentiable. Boolean
+    evidence fields are derived only after the continuous values are retained.
     """
-    output, pushforward = jax.linearize(forward_fn, inputs)
-    del output
+    linearized: tuple[Array, Callable[[PyTree], Array]] = jax.linearize(
+        forward_fn,
+        inputs,
+    )
+    pushforward: Callable[[PyTree], Array] = linearized[1]
     jvp_values: Array = jax.vmap(pushforward)(directions)
 
-    def finite_difference(direction: PyTree, local_step: Array) -> Array:
+    def _finite_difference(direction: PyTree, local_step: Array) -> Array:
         plus: Array = forward_fn(_perturb(inputs, direction, local_step))
         minus: Array = forward_fn(_perturb(inputs, direction, -local_step))
         derivative: Array = (plus - minus) / (2.0 * local_step)
         return derivative
 
     steps: Array = step * jnp.maximum(jnp.abs(scales), 1e-3)
-    reference: Array = jax.vmap(finite_difference)(directions, steps)
+    reference: Array = jax.vmap(_finite_difference)(directions, steps)
     residuals: Array = jvp_values - reference
-    _, pullback = jax.vjp(forward_fn, inputs)
+    vjp_result: tuple[Array, Callable[[Array], tuple[PyTree]]] = jax.vjp(
+        forward_fn,
+        inputs,
+    )
+    pullback: Callable[[Array], tuple[PyTree]] = vjp_result[1]
 
-    def pull_one(cotangent: Array) -> Array:
+    def _pull_one(cotangent: Array) -> Array:
+        leaf: Any
         pulled: PyTree = pullback(cotangent)[0]
         values: list[Array] = []
         for leaf in jax.tree.leaves(pulled):
@@ -220,8 +388,8 @@ def derivative_evidence(
         summaries: Array = jnp.asarray(values)
         return summaries
 
-    vjp_values: Array = jax.vmap(pull_one)(cotangents)
-    spectrum = information_spectrum(
+    vjp_values: Array = jax.vmap(_pull_one)(cotangents)
+    spectrum: InformationSpectrum = information_spectrum(
         forward_fn,
         inputs,
         input_paths=input_paths,

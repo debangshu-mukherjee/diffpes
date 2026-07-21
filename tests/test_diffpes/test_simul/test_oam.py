@@ -8,14 +8,11 @@ that all values are finite, and that the third channel equals the sum
 of the first two. All test logic and assertions are documented in the
 docstrings of each test class and method.
 
-Routine Listings
-----------------
-:class:`TestComputeOam`
-    Tests for compute_oam.
 """
 
 import chex
 import jax.numpy as jnp
+from jaxtyping import Array
 
 from diffpes.simul import compute_oam
 
@@ -25,33 +22,47 @@ class TestComputeOam(chex.TestCase):
 
     Verifies output shape (K, B, A, 3) and that p/d/total
     contributions are computed and finite.
+
+    :see: :func:`~diffpes.simul.compute_oam`
     """
 
-    def test_output_shape(self):
+    def test_output_shape(self) -> None:
         """Verify OAM array has shape (K, B, A, 3).
 
-        Test Logic
-        ----------
+        This case establishes the output shape contract for compute oam with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Create projections of shape (4, 3, 2, 9)
            (K=4, B=3, A=2) with uniform values.
         2. **Call**: compute_oam(projections).
         3. **Check**: Assert output shape (4, 3, 2, 3) and all finite.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         OAM shape is (K, B, A, 3) with [p_oam, d_oam, total_oam].
         """
+        k: int
+        b: int
+        a: int
+        projections: Array
+        oam: Array
+
         k, b, a = 4, 3, 2
         projections = jnp.ones((k, b, a, 9), dtype=jnp.float64) * 0.1
         oam = compute_oam(projections)
         chex.assert_shape(oam, (k, b, a, 3))
         chex.assert_tree_all_finite(oam)
 
-    def test_total_is_p_plus_d(self):
+    def test_total_is_p_plus_d(self) -> None:
         """Verify that the total OAM channel equals the sum of p and d channels.
 
-        Test Logic
-        ----------
+        This case establishes the total is p plus d contract for compute oam with the
+        concrete values and array shapes described below.
+
+        Notes
+        -----
         1. **Setup**: Create projections of shape (2, 2, 1, 9) with
            uniform value 0.2.
         2. **Call**: compute_oam(projections) yields oam with shape
@@ -59,11 +70,14 @@ class TestComputeOam(chex.TestCase):
         3. **Check**: The third channel (index 2) should equal the sum
            of the first (p) and second (d) channels.
 
-        Asserts
-        -------
+        **Expected assertions**
+
         oam[..., 0] + oam[..., 1] equals oam[..., 2] to within 1e-12,
         confirming the total OAM is the sum of p and d contributions.
         """
+        projections: Array
+        oam: Array
+
         projections = jnp.ones((2, 2, 1, 9), dtype=jnp.float64) * 0.2
         oam = compute_oam(projections)
         chex.assert_trees_all_close(

@@ -22,12 +22,15 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Float
+from beartype import beartype
+from beartype.typing import TextIO
+from jaxtyping import Float, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import CrystalGeometry, make_crystal_geometry
 
 
+@jaxtyped(typechecker=beartype)
 def read_poscar(
     filename: str = "POSCAR",
 ) -> CrystalGeometry:
@@ -40,8 +43,6 @@ def read_poscar(
     PyTree with coordinates always stored in fractional form and the
     lattice pre-scaled by the universal scaling factor.
 
-    Extended Summary
-    ----------------
     The POSCAR file format used by VASP has the following structure:
 
     * **Line 1**: Comment / system name (discarded).
@@ -61,49 +62,27 @@ def read_poscar(
       floats. Additional columns (selective-dynamics T/F flags) are
       silently ignored.
 
+    :see: :class:`~.test_poscar.TestReadPoscar`
+
     Implementation Logic
     --------------------
-    1. **Read comment line** (line 1) -- consumed and discarded.
+    1. **Read and scale the lattice**::
 
-    2. **Read scaling factor** (line 2) -- a single float that
-       multiplies all lattice vectors.
+           lattice = lattice * scaling_factor
 
-    3. **Read lattice vectors** (lines 3-5) -- three rows of three
-       floats each, stored as a (3, 3) NumPy array and immediately
-       multiplied by the scaling factor.
+       This applies the POSCAR scale before any coordinate conversion.
 
-    4. **Detect optional species line** (line 6) -- if the line
-       contains no digits it is the VASP-5 style element-symbol line
-       (e.g. ``"Si O"``). The symbols are stored and the next line is
-       read. If the line contains digits, it is the atom-count line
-       (VASP-4 style) and ``symbols`` remains empty.
+    2. **Convert Cartesian coordinates when required**::
 
-    5. **Read atom counts** -- parse the current line as a list of
-       integers giving the number of atoms per species.
+           coords = np.linalg.solve(lattice.T, coords.T).T
 
-    6. **Detect optional Selective Dynamics line** -- if the next line
-       starts with ``"s"`` or ``"S"``, selective-dynamics flags are
-       present; consume the line and read the coordinate-type line
-       that follows.
+       Solving against the scaled lattice produces fractional coordinates.
 
-    7. **Determine coordinate type** -- if the coordinate-type line
-       starts with ``"c"``, ``"C"``, ``"k"``, or ``"K"`` the
-       coordinates are Cartesian; otherwise they are direct
-       (fractional).
+    3. **Return validated crystal geometry**::
 
-    8. **Read coordinates** -- parse ``natoms`` lines, each with at
-       least three floats. Only the first three tokens are used
-       (selective-dynamics flags on positions 4-6 are ignored).
+           return geometry
 
-    9. **Convert Cartesian to fractional** (if needed) -- scale the
-       Cartesian coordinates by the scaling factor, then solve
-       ``lattice^T @ frac^T = cart^T`` via ``np.linalg.solve`` to
-       obtain fractional coordinates.
-
-    10. **Construct PyTree** -- call ``make_crystal_geometry`` with the
-        scaled lattice, fractional coordinates, element symbols, and
-        atom counts. The reciprocal lattice is computed automatically
-        inside ``make_crystal_geometry`` as ``2 * pi * inv(lattice)^T``.
+       The result includes the reciprocal lattice and atom metadata.
 
     Parameters
     ----------
@@ -115,11 +94,6 @@ def read_poscar(
     geometry : CrystalGeometry
         Crystal geometry with lattice, reciprocal lattice, fractional
         coordinates, element symbols, and atom counts.
-
-    Raises
-    ------
-    IndexError
-        If the coordinate-type line is empty (malformed file).
 
     Notes
     -----
@@ -133,6 +107,9 @@ def read_poscar(
     tuple; the caller should supply symbols from an external source
     (e.g. POTCAR) in that case.
     """
+    fid: TextIO
+    i: int
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         _comment: str = fid.readline().strip()

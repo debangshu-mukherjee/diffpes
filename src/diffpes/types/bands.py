@@ -9,15 +9,15 @@ the primary inputs to all ARPES simulation functions.
 Routine Listings
 ----------------
 :class:`ArpesSpectrum`
-    PyTree for ARPES simulation output.
+    Store ARPES simulation output in a JAX PyTree.
 :class:`BandStructure`
-    PyTree for electronic band structure.
+    Store electronic band-structure data in a JAX PyTree.
 :class:`OrbitalProjection`
-    PyTree for orbital-resolved band projections.
+    Store orbital-resolved band projections in a JAX PyTree.
 :class:`SpinBandStructure`
-    PyTree for spin-resolved electronic band structure.
+    Store spin-resolved electronic band-structure data in a JAX PyTree.
 :class:`SpinOrbitalProjection`
-    PyTree for orbital projections with mandatory spin data.
+    Store orbital projections with spin data in a JAX PyTree.
 :func:`make_arpes_spectrum`
     Create a validated ``ArpesSpectrum`` instance.
 :func:`make_band_structure`
@@ -47,10 +47,8 @@ from .constants import N_ORBITALS, N_SPIN_COMPONENTS
 
 
 class BandStructure(eqx.Module):
-    """PyTree for electronic band structure.
+    """Store electronic band-structure data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores the core outputs of a DFT band structure calculation: the
     eigenvalue spectrum E_n(k), the k-point mesh in reciprocal space, the
     integration weights for each k-point, and the Fermi energy. Together
@@ -62,6 +60,9 @@ class BandStructure(eqx.Module):
     transformations without manual flattening. All four fields are
     JAX-traced arrays (no static auxiliary data), which means the entire
     object is differentiable with respect to any of its fields.
+
+
+    :see: :class:`~.test_bands.TestBandStructure`
 
     Attributes
     ----------
@@ -88,11 +89,14 @@ class BandStructure(eqx.Module):
 
 
 class OrbitalProjection(eqx.Module):
-    """Orbital-resolved band projections.
+    """Store orbital-resolved band projections in a JAX PyTree.
 
     All array fields are differentiable PyTree leaves. Optional fields are
     empty subtrees when ``None``; changing their presence changes the tree
     structure and may trigger recompilation.
+
+
+    :see: :class:`~.test_bands.TestOrbitalProjection`
 
     Attributes
     ----------
@@ -110,10 +114,13 @@ class OrbitalProjection(eqx.Module):
 
 
 class SpinOrbitalProjection(eqx.Module):
-    """Orbital projections with mandatory spin data.
+    """Store orbital projections with spin data in a JAX PyTree.
 
     All present arrays are differentiable PyTree leaves. ``oam=None`` is an
     empty subtree; changing its presence changes the tree structure.
+
+
+    :see: :class:`~.test_bands.TestSpinOrbitalProjection`
 
     Attributes
     ----------
@@ -131,15 +138,13 @@ class SpinOrbitalProjection(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_spin_orbital_projection(
+def make_spin_orbital_projection(  # noqa: DOC503
     projections: Float[Array, "Kp Bp Ap Op"],
     spin: Float[Array, "Ks Bs As Ss"],
     oam: Optional[Float[Array, "Ko Bo Ao 3"]] = None,
 ) -> SpinOrbitalProjection:
     """Create a validated ``SpinOrbitalProjection`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises orbital projection
     data with mandatory spin before constructing a
     ``SpinOrbitalProjection`` PyTree. This is the spin-orbit coupling
@@ -154,25 +159,46 @@ def make_spin_orbital_projection(
     (K, B, A dimensions must agree across all provided arrays) are
     checked at call time.
 
+    :see: :class:`~.test_bands.TestMakeSpinOrbitalProjection`
+
     Implementation Logic
     --------------------
-    1. **Cast projections** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast spin** to ``jnp.float64`` via ``jnp.asarray``. This
-       field is mandatory, unlike in :func:`make_orbital_projection`.
-    3. **Cast oam** to ``jnp.float64`` when not ``None``; otherwise
-       leave as ``None`` to signal that OAM data is absent.
-    4. **Construct** the ``SpinOrbitalProjection`` Equinox module from the
-       three validated fields and return it.
+    1. **Prepare the normalized values**::
+
+           proj_arr = jnp.asarray(projections, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           proj_arr.shape[:3] != spin_arr.shape[:3]
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(proj_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return soc_proj
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    projections : Float[Array, "K B A 9"]
+    projections : Float[Array, "Kp Bp Ap Op"]
         Orbital projection weights ``|<psi|Y_{lm}>|^2`` following VASP
         ordering. Must share the K, B, A dimensions with ``spin``.
-    spin : Float[Array, "K B A 6"]
+    spin : Float[Array, "Ks Bs As Ss"]
         Spin projections ``[Sx_up, Sx_dn, Sy_up, Sy_dn, Sz_up,
         Sz_dn]``. Required (non-optional).
-    oam : Optional[Float[Array, "K B A 3"]], optional
+    oam : Optional[Float[Array, "Ko Bo Ao 3"]], optional
         Orbital angular momentum ``[L_p, L_d, L_total]``.
         Default is None.
 
@@ -190,6 +216,13 @@ def make_spin_orbital_projection(
     EquinoxRuntimeError
         If projection values are non-finite or negative, or spin values are
         non-finite.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the projection, spin, or OAM shapes violate their structural contract.
+    Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for non-finite arrays or negative projections.
 
     See Also
     --------
@@ -240,21 +273,20 @@ def make_spin_orbital_projection(
             ~(jnp.all(jnp.isfinite(spin_arr))),
             "make_spin_orbital_projection: spin finite",
         )
-        return SpinOrbitalProjection(
+        validated_projection: SpinOrbitalProjection = SpinOrbitalProjection(
             projections=proj_arr,
             spin=spin_arr,
             oam=oam_arr,
         )
+        return validated_projection
 
     soc_proj: SpinOrbitalProjection = validate_and_create()
     return soc_proj
 
 
 class SpinBandStructure(eqx.Module):
-    """PyTree for spin-resolved electronic band structure.
+    """Store spin-resolved electronic band-structure data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores eigenvalues for both spin channels from an ISPIN=2 VASP
     calculation. The two spin channels share the same k-point mesh
     and weights. This type is returned by ``read_eigenval`` when
@@ -265,6 +297,9 @@ class SpinBandStructure(eqx.Module):
     fields are dense JAX
     arrays stored as children (no auxiliary data), making the entire
     object fully differentiable with respect to any of its fields.
+
+
+    :see: :class:`~.test_bands.TestSpinBandStructure`
 
     Attributes
     ----------
@@ -306,7 +341,7 @@ class SpinBandStructure(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_spin_band_structure(
+def make_spin_band_structure(  # noqa: DOC503
     eigenvalues_up: Float[Array, "Ku Bu"],
     eigenvalues_down: Float[Array, "Kd Bd"],
     kpoints: Float[Array, "Kk 3"],
@@ -315,8 +350,6 @@ def make_spin_band_structure(
 ) -> SpinBandStructure:
     """Create a validated ``SpinBandStructure`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises raw spin-resolved
     band structure data before constructing a ``SpinBandStructure``
     PyTree. This is the spin-polarized (ISPIN=2) counterpart to
@@ -331,31 +364,47 @@ def make_spin_band_structure(
     between the two spin channels) before they propagate into the
     simulation pipeline.
 
+    :see: :class:`~.test_bands.TestMakeSpinBandStructure`
+
     Implementation Logic
     --------------------
-    1. **Cast eigenvalues_up** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast eigenvalues_down** to ``jnp.float64`` via
-       ``jnp.asarray``.
-    3. **Cast kpoints** to ``jnp.float64`` via ``jnp.asarray``.
-    4. **Default handling**: if ``kpoint_weights`` is ``None``, a
-       uniform weight vector ``jnp.ones(K)`` is created (where *K* is
-       inferred from ``eigenvalues_up.shape[0]``). This is the
-       standard assumption for band structure paths.
-    5. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    6. **Construction**: the five validated arrays are passed to the
-       ``SpinBandStructure`` named-tuple constructor, producing an
-       immutable PyTree ready for use in JAX transformations.
+    1. **Prepare the normalized values**::
+
+           up_arr = jnp.asarray(eigenvalues_up, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           up_arr.shape != down_arr.shape
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(up_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return bands
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    eigenvalues_up : Float[Array, "K B"]
+    eigenvalues_up : Float[Array, "Ku Bu"]
         Spin-up band energies in eV for K k-points and B bands.
-    eigenvalues_down : Float[Array, "K B"]
+    eigenvalues_down : Float[Array, "Kd Bd"]
         Spin-down band energies in eV. Must share the same (K, B)
         shape as ``eigenvalues_up``.
-    kpoints : Float[Array, "K 3"]
+    kpoints : Float[Array, "Kk 3"]
         k-point coordinates in reciprocal (fractional) space.
-    kpoint_weights : Union[Float[Array, " K"], None], optional
+    kpoint_weights : Union[Float[Array, " Kw"], None], optional
         Integration weights per k-point. Defaults to uniform weights
         ``jnp.ones(K)``.
     fermi_energy : ScalarNumeric, optional
@@ -375,6 +424,13 @@ def make_spin_band_structure(
     EquinoxRuntimeError
         If eigenvalues or k-points are non-finite, or weights are non-finite
         or negative.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the spin, k-point, band, or weight dimensions disagree. Traced validation
+    uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for non-finite
+    arrays or negative weights.
 
     See Also
     --------
@@ -437,23 +493,22 @@ def make_spin_band_structure(
             ~(jnp.all(weights_arr >= 0.0)),
             "make_spin_band_structure: weights non negative",
         )
-        return SpinBandStructure(
+        validated_bands: SpinBandStructure = SpinBandStructure(
             eigenvalues_up=up_arr,
             eigenvalues_down=down_arr,
             kpoints=kpts_arr,
             kpoint_weights=weights_arr,
             fermi_energy=fermi_arr,
         )
+        return validated_bands
 
     bands: SpinBandStructure = validate_and_create()
     return bands
 
 
 class ArpesSpectrum(eqx.Module):
-    """PyTree for ARPES simulation output.
+    """Store ARPES simulation output in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Stores the result of an ARPES simulation: a two-dimensional
     photoemission intensity map I(k, E) together with its energy axis.
     The k-point dimension indexes the momentum-resolved detector
@@ -465,6 +520,9 @@ class ArpesSpectrum(eqx.Module):
     loss functions and differentiated with ``grad`` for parameter
     fitting. Both fields are dense JAX arrays with no static auxiliary
     data, making the entire object fully differentiable.
+
+
+    :see: :class:`~.test_bands.TestArpesSpectrum`
 
     Attributes
     ----------
@@ -485,7 +543,7 @@ class ArpesSpectrum(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_band_structure(
+def make_band_structure(  # noqa: DOC503
     eigenvalues: Float[Array, "Ke B"],
     kpoints: Float[Array, "Kk 3"],
     kpoint_weights: Union[Float[Array, " Kw"], None] = None,
@@ -493,8 +551,6 @@ def make_band_structure(
 ) -> BandStructure:
     """Create a validated ``BandStructure`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises raw band structure
     data before constructing a ``BandStructure`` PyTree. All input
     arrays are cast to ``float64`` for numerical stability in
@@ -508,28 +564,44 @@ def make_band_structure(
     call time, catching mismatched dimensions before they propagate
     into the simulation pipeline.
 
+    :see: :class:`~.test_bands.TestMakeBandStructure`
+
     Implementation Logic
     --------------------
-    1. **Cast to float64**: ``eigenvalues`` and ``kpoints`` are
-       converted via ``jnp.asarray(..., dtype=jnp.float64)`` to
-       guarantee double-precision arithmetic in all subsequent
-       computations.
-    2. **Default handling**: if ``kpoint_weights`` is ``None``, a
-       uniform weight vector ``jnp.ones(K)`` is created (where *K* is
-       inferred from ``eigenvalues.shape[0]``). This is the standard
-       assumption for band structure paths (as opposed to Brillouin-
-       zone integrations where weights vary).
-    3. **Construction**: the four validated arrays are passed to the
-       ``BandStructure`` named-tuple constructor, producing an
-       immutable PyTree ready for use in JAX transformations.
+    1. **Prepare the normalized values**::
+
+           eigenvalues_arr = jnp.asarray(eigenvalues, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           kpoints_arr.shape[0] != nkpts
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(eigenvalues_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return bands
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    eigenvalues : Float[Array, "K B"]
+    eigenvalues : Float[Array, "Ke B"]
         Band energies in eV for K k-points and B bands.
-    kpoints : Float[Array, "K 3"]
+    kpoints : Float[Array, "Kk 3"]
         k-point coordinates in reciprocal space.
-    kpoint_weights : Union[Float[Array, " K"], None], optional
+    kpoint_weights : Union[Float[Array, " Kw"], None], optional
         Integration weights. Defaults to uniform weights.
     fermi_energy : ScalarNumeric, optional
         Fermi level in eV. Default is 0.0.
@@ -548,6 +620,13 @@ def make_band_structure(
     EquinoxRuntimeError
         If eigenvalues or k-points are non-finite, or weights are non-finite
         or negative.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    k-point or weight counts disagree with the eigenvalues. Traced validation
+    uses ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for non-finite
+    arrays or negative weights.
     """
     eigenvalues_arr: Float[Array, "K B"] = jnp.asarray(
         eigenvalues, dtype=jnp.float64
@@ -591,27 +670,26 @@ def make_band_structure(
             ~(jnp.all(weights_arr >= 0.0)),
             "make_band_structure: weights non negative",
         )
-        return BandStructure(
+        validated_bands: BandStructure = BandStructure(
             eigenvalues=eigenvalues_arr,
             kpoints=kpoints_arr,
             kpoint_weights=weights_arr,
             fermi_energy=fermi_arr,
         )
+        return validated_bands
 
     bands: BandStructure = validate_and_create()
     return bands
 
 
 @jaxtyped(typechecker=beartype)
-def make_orbital_projection(
+def make_orbital_projection(  # noqa: DOC503
     projections: Float[Array, "Kp Bp Ap Op"],
     spin: Optional[Float[Array, "Ks Bs As 6"]] = None,
     oam: Optional[Float[Array, "Ko Bo Ao 3"]] = None,
 ) -> OrbitalProjection:
     """Create a validated ``OrbitalProjection`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises raw orbital
     projection data before constructing an ``OrbitalProjection``
     PyTree. The mandatory ``projections`` array is cast to ``float64``;
@@ -623,27 +701,44 @@ def make_orbital_projection(
     so that shape constraints (K, B, A dimensions must agree across
     all provided arrays) are checked at call time.
 
+    :see: :class:`~.test_bands.TestMakeOrbitalProjection`
+
     Implementation Logic
     --------------------
-    1. **Cast to float64**: ``projections`` is converted via
-       ``jnp.asarray(..., dtype=jnp.float64)``. ``spin`` and ``oam``
-       are likewise converted when they are not ``None``.
-    2. **Default handling**: ``spin`` and ``oam`` default to ``None``,
-       which signals that the DFT calculation did not include spin-
-       orbit coupling. No placeholder arrays are created -- the
-       ``None`` propagates into the PyTree leaf, keeping the tree
-       structure minimal.
-    3. **Construction**: the three validated fields are passed to the
-       ``OrbitalProjection`` named-tuple constructor, producing an
-       immutable PyTree ready for use in JAX transformations.
+    1. **Prepare the normalized values**::
+
+           proj_arr = jnp.asarray(projections, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           proj_arr.shape[3] != N_ORBITALS
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(proj_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return orb_proj
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    projections : Float[Array, "K B A 9"]
+    projections : Float[Array, "Kp Bp Ap Op"]
         Orbital projection weights.
-    spin : Optional[Float[Array, "K B A 6"]], optional
+    spin : Optional[Float[Array, "Ks Bs As 6"]], optional
         Spin projections. Default is None.
-    oam : Optional[Float[Array, "K B A 3"]], optional
+    oam : Optional[Float[Array, "Ko Bo Ao 3"]], optional
         Orbital angular momentum. Default is None.
 
     Returns
@@ -660,6 +755,13 @@ def make_orbital_projection(
     EquinoxRuntimeError
         If projections are non-finite or negative, or a present spin channel
         is non-finite.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the projection, spin, or OAM shapes violate their structural contract.
+    Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for non-finite arrays or negative projections.
     """
     proj_arr: Float[Array, "K B A 9"] = jnp.asarray(
         projections, dtype=jnp.float64
@@ -703,25 +805,24 @@ def make_orbital_projection(
                 ~(jnp.all(jnp.isfinite(spin_arr))),
                 "make_orbital_projection: spin finite",
             )
-        return OrbitalProjection(
+        validated_projection: OrbitalProjection = OrbitalProjection(
             projections=proj_arr,
             spin=spin_arr,
             oam=oam_arr,
         )
+        return validated_projection
 
     orb_proj: OrbitalProjection = validate_and_create()
     return orb_proj
 
 
 @jaxtyped(typechecker=beartype)
-def make_arpes_spectrum(
+def make_arpes_spectrum(  # noqa: DOC503
     intensity: Float[Array, "K Ei"],
     energy_axis: Float[Array, " Ea"],
 ) -> ArpesSpectrum:
     """Create a validated ``ArpesSpectrum`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises simulated ARPES
     data before constructing an ``ArpesSpectrum`` PyTree. Both input
     arrays are cast to ``float64`` so that downstream loss functions
@@ -732,22 +833,42 @@ def make_arpes_spectrum(
     so that the energy dimension *E* is checked for consistency
     between ``intensity`` and ``energy_axis`` at call time.
 
+    :see: :class:`~.test_bands.TestMakeArpesSpectrum`
+
     Implementation Logic
     --------------------
-    1. **Cast to float64**: ``intensity`` and ``energy_axis`` are
-       converted via ``jnp.asarray(..., dtype=jnp.float64)`` to
-       guarantee double-precision arithmetic.
-    2. **Default handling**: none -- both fields are mandatory and
-       have no sentinel defaults.
-    3. **Construction**: the two validated arrays are passed to the
-       ``ArpesSpectrum`` named-tuple constructor, producing an
-       immutable PyTree ready for use in JAX transformations.
+    1. **Prepare the normalized values**::
+
+           intensity_arr = jnp.asarray(intensity, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           intensity_arr.shape[1] != energy_arr.shape[0]
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(intensity_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return spectrum
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    intensity : Float[Array, "K E"]
+    intensity : Float[Array, "K Ei"]
         Photoemission intensity map.
-    energy_axis : Float[Array, " E"]
+    energy_axis : Float[Array, " Ea"]
         Energy axis values in eV.
 
     Returns
@@ -763,6 +884,13 @@ def make_arpes_spectrum(
     EquinoxRuntimeError
         If intensity is non-finite or the energy axis is not strictly
         increasing.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the two energy-axis lengths disagree. Traced validation uses
+    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for non-finite
+    intensity or an energy axis that is not strictly increasing.
     """
     intensity_arr: Float[Array, "K E"] = jnp.asarray(
         intensity, dtype=jnp.float64
@@ -788,10 +916,11 @@ def make_arpes_spectrum(
             ~(jnp.all(jnp.diff(energy_arr) > 0.0)),
             "make_arpes_spectrum: energy axis strictly increasing",
         )
-        return ArpesSpectrum(
+        validated_spectrum: ArpesSpectrum = ArpesSpectrum(
             intensity=intensity_arr,
             energy_axis=energy_arr,
         )
+        return validated_spectrum
 
     spectrum: ArpesSpectrum = validate_and_create()
     return spectrum

@@ -473,6 +473,8 @@ class TestRegressionReferences(chex.TestCase):
         )
         chex.assert_equal(actual_dtypes, (jnp.float64,) * 5)
 
+        artifact_name: str
+        archive: Any
         for artifact_name in (
             "novice_toy",
             "tb_radial_graphene",
@@ -492,7 +494,11 @@ class TestRegressionReferences(chex.TestCase):
 
 
 class TestRepositoryArchitecture(chex.TestCase):
-    """Enforce centralized Equinox carriers, factories, and constants."""
+    """Enforce the production architecture rules from CONTRIBUTING.
+
+    Covers carrier and factory ownership, import boundaries, public runtime
+    type checking, explicit returns, package listings, and zero-legacy exports.
+    """
 
     @staticmethod
     def _production_modules() -> tuple[tuple[Path, ast.Module], ...]:
@@ -504,9 +510,78 @@ class TestRepositoryArchitecture(chex.TestCase):
         )
         return modules
 
+    @staticmethod
+    def _test_modules() -> tuple[tuple[Path, ast.Module], ...]:
+        """Parse every test Python module in deterministic order."""
+        test_root: Path = Path(__file__).resolve().parents[1] / "tests"
+        modules: tuple[tuple[Path, ast.Module], ...] = tuple(
+            (path, ast.parse(path.read_text(encoding="utf-8")))
+            for path in sorted(test_root.rglob("*.py"))
+        )
+        return modules
+
+    @staticmethod
+    def _literal_exports(module: ast.Module) -> set[str]:
+        """Return literal names from one module-level ``__all__``."""
+        exports: set[str] = set()
+        node: ast.stmt
+        for node in module.body:
+            value: ast.expr | None = None
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            ):
+                value = node.value
+            elif (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "__all__"
+            ):
+                value = node.value
+            if isinstance(value, (ast.List, ast.Tuple)):
+                exports = {
+                    entry.value
+                    for entry in value.elts
+                    if isinstance(entry, ast.Constant)
+                    and isinstance(entry.value, str)
+                }
+        return exports
+
+    @staticmethod
+    def _routine_listing_summaries(docstring: str) -> dict[str, str]:
+        """Return public names and summaries from one Routine Listings block."""
+        summaries: dict[str, str] = {}
+        lines: list[str] = docstring.splitlines()
+        index: int
+        line: str
+        for index, line in enumerate(lines):
+            match: re.Match[str] | None = re.match(
+                r":(?:func|class|obj):`(?:~[^`]*\.)?([^`]+)`",
+                line.strip(),
+            )
+            if match is None:
+                continue
+            summary: str = ""
+            if index + 1 < len(lines) and lines[index + 1].startswith("    "):
+                summary = lines[index + 1].strip()
+            summaries[match.group(1)] = summary
+        return summaries
+
     def test_legacy_pytree_carriers_are_forbidden(self) -> None:
-        """Reject NamedTuple and manual JAX PyTree registration machinery."""
+        """Reject legacy PyTree carrier and registration machinery.
+
+        Confirms production carriers do not use ``NamedTuple`` or manual JAX
+        flattening hooks instead of the project Equinox carrier contract.
+
+        Notes
+        -----
+        Parses every production class and call expression, then reports the
+        source location of each forbidden base, method, or registration call.
+        """
         violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
         for path, module in self._production_modules():
             for node in ast.walk(module):
                 if isinstance(node, ast.ClassDef):
@@ -530,8 +605,20 @@ class TestRepositoryArchitecture(chex.TestCase):
         self.assertEqual(violations, [])
 
     def test_all_production_carriers_are_types_equinox_modules(self) -> None:
-        """Keep every public production carrier under ``diffpes.types``."""
+        """Keep every public carrier under ``diffpes.types``.
+
+        Confirms public production classes are Equinox modules and have the
+        types subpackage as their single architectural owner.
+
+        Notes
+        -----
+        Parses each public class declaration and compares its direct bases and
+        source directory with the carrier ownership rule.
+        """
         violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
         for path, module in self._production_modules():
             in_types: bool = path.parent.name == "types"
             for node in module.body:
@@ -545,8 +632,20 @@ class TestRepositoryArchitecture(chex.TestCase):
         self.assertEqual(violations, [])
 
     def test_make_factories_are_types_owned(self) -> None:
-        """Forbid carrier-building ``make_*`` factories outside types."""
+        """Forbid ``make_*`` factories outside ``diffpes.types``.
+
+        Confirms consumers cannot create a second construction contract for a
+        public carrier in another production subpackage.
+
+        Notes
+        -----
+        Scans top-level production callables and reports each ``make_*`` name
+        whose module is not owned by the types subpackage.
+        """
         violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
         for path, module in self._production_modules():
             if path.parent.name == "types":
                 continue
@@ -557,7 +656,16 @@ class TestRepositoryArchitecture(chex.TestCase):
         self.assertEqual(violations, [])
 
     def test_declarative_constants_are_types_owned(self) -> None:
-        """Allow only generated/runtime module state outside types."""
+        """Keep declarative constants under ``diffpes.types``.
+
+        Confirms non-types modules contain only explicitly approved generated
+        or runtime state in addition to their public export lists.
+
+        Notes
+        -----
+        Parses module-level assignments and compares them with the narrow
+        allowlist for version, registry, generated table, and polynomial data.
+        """
         allowed: dict[str, set[str]] = {
             "__init__.py": {"__version__"},
             "inout/hdf5.py": {"_PYTREE_REGISTRY"},
@@ -565,6 +673,10 @@ class TestRepositoryArchitecture(chex.TestCase):
             "utils/math.py": {"_W_POLY"},
         }
         violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        name: str
         for path, module in self._production_modules():
             if path.parent.name == "types":
                 continue
@@ -587,6 +699,893 @@ class TestRepositoryArchitecture(chex.TestCase):
                     ):
                         continue
                     violations.append(f"{path}:{node.lineno}:{name}")
+        self.assertEqual(violations, [])
+
+    def test_type_aliases_are_types_owned(self) -> None:
+        """Keep every production type alias under ``diffpes.types``.
+
+        Confirms PEP 695 declarations and legacy ``TypeAlias`` annotations do
+        not create local type vocabularies in consuming subpackages.
+
+        Notes
+        -----
+        Parses module-level declarations and reports the exact source location
+        of each alias found outside the types subpackage.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        for path, module in self._production_modules():
+            if path.parent.name == "types":
+                continue
+            for node in module.body:
+                if isinstance(node, ast.TypeAlias):
+                    alias_name: str = ast.unparse(node.name)
+                    violations.append(f"{path}:{node.lineno}:{alias_name}")
+                elif isinstance(node, ast.AnnAssign) and ast.unparse(
+                    node.annotation
+                ).endswith("TypeAlias"):
+                    target_name: str = ast.unparse(node.target)
+                    violations.append(f"{path}:{node.lineno}:{target_name}")
+        self.assertEqual(violations, [])
+
+    def test_public_functions_are_runtime_typechecked(self) -> None:
+        """Require the project decorator on every public production function.
+
+        Confirms public module-level callables use the exact
+        ``@jaxtyped(typechecker=beartype)`` stack required by CONTRIBUTING.
+
+        Notes
+        -----
+        Compares normalized decorator syntax through the AST and reports each
+        missing function with its source line.
+        """
+        violations: list[str] = []
+        required_decorator: str = "jaxtyped(typechecker=beartype)"
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        for path, module in self._production_modules():
+            for node in module.body:
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) or node.name.startswith("_"):
+                    continue
+                decorators: set[str] = {
+                    ast.unparse(decorator) for decorator in node.decorator_list
+                }
+                if required_decorator not in decorators:
+                    violations.append(f"{path}:{node.lineno}:{node.name}")
+        self.assertEqual(violations, [])
+
+    def test_functions_assign_before_returning(self) -> None:
+        """Require production functions to return annotated names.
+
+        Confirms each value-returning path binds its result before returning,
+        including paths in private and nested helpers.
+
+        Notes
+        -----
+        Walks each public function while excluding nested function bodies and
+        reports non-name return expressions by source line.
+        """
+
+        class ReturnVisitor(ast.NodeVisitor):
+            """Collect bare returns without descending into nested callables."""
+
+            def __init__(self, root: ast.FunctionDef | ast.AsyncFunctionDef):
+                self.root: ast.FunctionDef | ast.AsyncFunctionDef = root
+                self.violations: list[int] = []
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                """Visit only the requested root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(
+                self, node: ast.AsyncFunctionDef
+            ) -> None:
+                """Visit only the requested asynchronous root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_Lambda(self, node: ast.Lambda) -> None:
+                """Exclude lambda expression bodies from the outer contract."""
+                del node
+
+            def visit_Return(self, node: ast.Return) -> None:
+                """Record returns whose value is not a bound local name."""
+                if node.value is not None and not isinstance(
+                    node.value, ast.Name
+                ):
+                    self.violations.append(node.lineno)
+
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._production_modules():
+            for node in ast.walk(module):
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ):
+                    continue
+                visitor: ReturnVisitor = ReturnVisitor(node)
+                visitor.visit(node)
+                violations.extend(
+                    f"{path}:{line}:{node.name}" for line in visitor.violations
+                )
+        self.assertEqual(violations, [])
+
+    def test_function_intermediates_are_annotated(self) -> None:
+        """Require explicit types for production intermediate variables.
+
+        Confirms assignment, loop, context, walrus, and exception targets have
+        an annotation in that function scope while respecting ``nonlocal``.
+
+        Notes
+        -----
+        Walks one callable scope at a time, excludes nested callables and
+        throwaway ``_`` bindings, and reports each unannotated local target.
+        """
+
+        class AssignmentVisitor(ast.NodeVisitor):
+            """Collect annotations and assignments in one callable scope."""
+
+            def __init__(self, root: ast.FunctionDef | ast.AsyncFunctionDef):
+                self.root: ast.FunctionDef | ast.AsyncFunctionDef = root
+                self.annotated: set[str] = set()
+                self.nonlocal_names: set[str] = set()
+                self.assignments: list[tuple[int, str]] = []
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                """Visit only the requested root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(
+                self, node: ast.AsyncFunctionDef
+            ) -> None:
+                """Visit only the requested asynchronous root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_Lambda(self, node: ast.Lambda) -> None:
+                """Exclude lambda expression scopes from the outer contract."""
+                del node
+
+            def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+                """Record a directly annotated local name."""
+                if isinstance(node.target, ast.Name):
+                    self.annotated.add(node.target.id)
+                self.generic_visit(node)
+
+            def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+                """Record names whose annotations belong to an outer scope."""
+                self.nonlocal_names.update(node.names)
+
+            def _record_target(self, target: ast.expr, line: int) -> None:
+                """Record stored names within one assignment-like target."""
+                candidate: ast.AST
+                for candidate in ast.walk(target):
+                    if (
+                        isinstance(candidate, ast.Name)
+                        and isinstance(candidate.ctx, ast.Store)
+                        and candidate.id != "_"
+                    ):
+                        self.assignments.append((line, candidate.id))
+
+            def visit_Assign(self, node: ast.Assign) -> None:
+                """Record plain local-name assignment targets."""
+                target: ast.expr
+                for target in node.targets:
+                    self._record_target(target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_For(self, node: ast.For) -> None:
+                """Record an ordinary loop target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+                """Record an asynchronous loop target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_With(self, node: ast.With) -> None:
+                """Record context-manager binding targets."""
+                item: ast.withitem
+                for item in node.items:
+                    if item.optional_vars is not None:
+                        self._record_target(item.optional_vars, node.lineno)
+                self.generic_visit(node)
+
+            def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+                """Record asynchronous context-manager binding targets."""
+                item: ast.withitem
+                for item in node.items:
+                    if item.optional_vars is not None:
+                        self._record_target(item.optional_vars, node.lineno)
+                self.generic_visit(node)
+
+            def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+                """Record an assignment-expression target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+                """Record an exception-handler binding."""
+                if node.name is not None and node.name != "_":
+                    self.assignments.append((node.lineno, node.name))
+                self.generic_visit(node)
+
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._production_modules():
+            for node in ast.walk(module):
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ):
+                    continue
+                visitor: AssignmentVisitor = AssignmentVisitor(node)
+                visitor.visit(node)
+                violations.extend(
+                    f"{path}:{line}:{node.name}:{name}"
+                    for line, name in visitor.assignments
+                    if name not in visitor.annotated
+                    and name not in visitor.nonlocal_names
+                )
+        self.assertEqual(violations, [])
+
+    def test_cross_subpackage_imports_use_public_surfaces(self) -> None:
+        """Forbid deep imports across production subpackage boundaries.
+
+        Confirms consumers import through ``diffpes.<subpackage>`` instead of
+        reaching into another subpackage's implementation file.
+
+        Notes
+        -----
+        Compares each absolute DiffPES import with the importing file's owning
+        subpackage and reports cross-boundary modules deeper than one level.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._production_modules():
+            relative_parts: tuple[str, ...] = tuple(
+                path.as_posix().split("/src/diffpes/", 1)[1].split("/")
+            )
+            owner: str = relative_parts[0]
+            for node in ast.walk(module):
+                if not isinstance(node, ast.ImportFrom) or node.level != 0:
+                    continue
+                imported_module: str = node.module or ""
+                parts: list[str] = imported_module.split(".")
+                if (
+                    len(parts) > 2
+                    and parts[0] == "diffpes"
+                    and parts[1] != owner
+                ):
+                    violations.append(
+                        f"{path}:{node.lineno}:{imported_module}"
+                    )
+        self.assertEqual(violations, [])
+
+    def test_diffpes_imports_are_not_renamed(self) -> None:
+        """Forbid aliases for names imported from DiffPES surfaces.
+
+        Confirms each internal DiffPES name has one spelling at every consumer
+        and excludes reviewer-hostile private aliases for shared constants.
+
+        Notes
+        -----
+        Inspects absolute DiffPES imports and reports every ``as`` binding;
+        canonical third-party aliases such as ``jnp`` are outside this scan.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        imported_name: ast.alias
+        for path, module in self._production_modules():
+            for node in ast.walk(module):
+                if isinstance(node, ast.ImportFrom) and (
+                    node.module or ""
+                ).startswith("diffpes"):
+                    for imported_name in node.names:
+                        if imported_name.asname is not None:
+                            violations.append(
+                                f"{path}:{node.lineno}:{imported_name.name}"
+                            )
+                elif isinstance(node, ast.Import):
+                    for imported_name in node.names:
+                        if (
+                            imported_name.name.startswith("diffpes")
+                            and imported_name.asname is not None
+                        ):
+                            violations.append(
+                                f"{path}:{node.lineno}:{imported_name.name}"
+                            )
+        self.assertEqual(violations, [])
+
+    def test_typing_constructs_use_beartype_typing(self) -> None:
+        """Forbid production imports from the standard typing module.
+
+        Confirms runtime-visible typing constructs come from
+        ``beartype.typing`` as required by the package type-checking contract.
+
+        Notes
+        -----
+        Reports both ``import typing`` and ``from typing import ...`` at their
+        production source locations.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        for path, module in self._production_modules():
+            for node in module.body:
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == "typing"
+                ):
+                    violations.append(f"{path}:{node.lineno}:from typing")
+                elif isinstance(node, ast.Import) and any(
+                    imported_name.name == "typing"
+                    for imported_name in node.names
+                ):
+                    violations.append(f"{path}:{node.lineno}:import typing")
+        self.assertEqual(violations, [])
+
+    def test_package_docstrings_list_every_submodule(self) -> None:
+        """Keep package ``Extended Summary`` submodule lists exact.
+
+        Confirms each package docstring contains one ``- :mod:`` entry for
+        every sibling module. Each entry repeats that module's summary line.
+
+        Notes
+        -----
+        Compares filenames and summary lines with the Sphinx module roles and
+        descriptions parsed from each production ``__init__.py`` docstring.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        for path, module in self._production_modules():
+            if path.name != "__init__.py":
+                continue
+            actual_modules: set[str] = {
+                sibling.stem
+                for sibling in path.parent.glob("*.py")
+                if sibling.name != "__init__.py"
+            }
+            module_docstring: str = (
+                ast.get_docstring(module, clean=False) or ""
+            )
+            listed_modules: set[str] = set(
+                re.findall(r"- :mod:`([^`]+)`", module_docstring)
+            )
+            listed_descriptions: dict[str, str] = dict(
+                re.findall(
+                    r"(?m)^- :mod:`([^`]+)`\n    ([^\n]+)$",
+                    module_docstring,
+                )
+            )
+            if actual_modules != listed_modules:
+                violations.append(
+                    f"{path}: missing={sorted(actual_modules - listed_modules)} "
+                    f"stale={sorted(listed_modules - actual_modules)}"
+                )
+            sibling: Path
+            for sibling in path.parent.glob("*.py"):
+                if sibling.name == "__init__.py":
+                    continue
+                sibling_module: ast.Module = ast.parse(sibling.read_text())
+                sibling_docstring: str = (
+                    ast.get_docstring(sibling_module, clean=False) or ""
+                )
+                sibling_summary: str = sibling_docstring.splitlines()[0]
+                if listed_descriptions.get(sibling.stem) != sibling_summary:
+                    violations.append(
+                        f"{path}: submodule summary mismatch: {sibling.stem}"
+                    )
+        self.assertEqual(violations, [])
+
+    def test_public_api_uses_three_place_documentation(self) -> None:
+        """Keep exports and summaries synchronized in all three locations.
+
+        Confirms each public definition is exported and each module and
+        subpackage surface lists exactly the same names and summary sentences.
+
+        Notes
+        -----
+        Parses literal export lists and Sphinx Routine Listings, then compares
+        defining docstrings, module entries, and subpackage entries verbatim.
+        """
+        parsed_modules: tuple[tuple[Path, ast.Module], ...] = (
+            self._production_modules()
+        )
+        module_records: dict[
+            Path, tuple[ast.Module, set[str], dict[str, str]]
+        ] = {}
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        name: str
+        for path, module in parsed_modules:
+            module_docstring: str = (
+                ast.get_docstring(module, clean=False) or ""
+            )
+            exports: set[str] = self._literal_exports(module)
+            listings: dict[str, str] = self._routine_listing_summaries(
+                module_docstring
+            )
+            module_records[path] = (module, exports, listings)
+            if path.name == "__init__.py":
+                continue
+            public_definitions: dict[str, str] = {
+                node.name: (ast.get_docstring(node) or "").splitlines()[0]
+                for node in module.body
+                if isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                )
+                and not node.name.startswith("_")
+            }
+            missing_exports: set[str] = set(public_definitions) - exports
+            if missing_exports:
+                violations.append(
+                    f"{path}: public definitions missing from __all__: "
+                    f"{sorted(missing_exports)}"
+                )
+            if exports != set(listings):
+                violations.append(
+                    f"{path}: __all__/listing mismatch: "
+                    f"missing={sorted(exports - set(listings))}, "
+                    f"stale={sorted(set(listings) - exports)}"
+                )
+            for name in exports & set(listings) & set(public_definitions):
+                if public_definitions[name] != listings[name]:
+                    violations.append(f"{path}: summary mismatch: {name}")
+
+        source_root: Path = Path(__file__).resolve().parents[1] / "src/diffpes"
+        package_path: Path
+        for package_path in sorted(source_root.iterdir()):
+            init_path: Path = package_path / "__init__.py"
+            if not package_path.is_dir() or init_path not in module_records:
+                continue
+            package_module: ast.Module
+            package_exports: set[str]
+            package_listings: dict[str, str]
+            package_module, package_exports, package_listings = module_records[
+                init_path
+            ]
+            del package_module
+            submodule_exports: set[str] = set()
+            submodule_summaries: dict[str, str] = {}
+            for path, (_, exports, listings) in module_records.items():
+                if path.parent == package_path and path.name != "__init__.py":
+                    submodule_exports.update(exports)
+                    submodule_summaries.update(listings)
+            if package_exports != submodule_exports:
+                violations.append(
+                    f"{init_path}: package/module export mismatch: "
+                    f"missing={sorted(submodule_exports - package_exports)}, "
+                    f"extra={sorted(package_exports - submodule_exports)}"
+                )
+            if package_exports != set(package_listings):
+                violations.append(
+                    f"{init_path}: __all__/listing mismatch: "
+                    f"missing={sorted(package_exports - set(package_listings))}, "
+                    f"stale={sorted(set(package_listings) - package_exports)}"
+                )
+            for name in (
+                package_exports
+                & set(package_listings)
+                & set(submodule_summaries)
+            ):
+                if package_listings[name] != submodule_summaries[name]:
+                    violations.append(f"{init_path}: summary mismatch: {name}")
+        self.assertEqual(violations, [])
+
+    def test_public_docstrings_follow_house_process_format(self) -> None:
+        """Keep public source docstrings on the house process format.
+
+        Extended Summary
+        ----------------
+        Confirms functions and classes use untitled extended prose. Every
+        public function must explain its process in Notes or literal steps.
+
+        Notes
+        -----
+        Parses source docstrings and checks each numbered bold logic step for
+        the required double-colon heading and an indented literal expression.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        for path, module in self._production_modules():
+            if path.name == "__init__.py":
+                continue
+            for node in module.body:
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ) or node.name.startswith("_"):
+                    continue
+                docstring: str = ast.get_docstring(node) or ""
+                if "\nExtended Summary\n" in docstring:
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: titled extended "
+                        "summary"
+                    )
+                summary_end: int = docstring.find("\n")
+                see_position: int = docstring.find("\n:see:")
+                extended_summary: str = docstring[
+                    summary_end:see_position
+                ].strip()
+                if summary_end < 0 or see_position < 0 or not extended_summary:
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: no untitled "
+                        "extended summary before :see:"
+                    )
+                if isinstance(node, ast.ClassDef):
+                    continue
+                has_logic: bool = "\nImplementation Logic\n" in docstring
+                has_notes: bool = "\nNotes\n" in docstring
+                if not has_logic and not has_notes:
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: no process section"
+                    )
+                    continue
+                if not has_logic:
+                    continue
+                section_match: re.Match[str] | None = re.search(
+                    r"(?ms)^Implementation Logic\n-+\n"
+                    r"(.*?)(?=^[A-Z][A-Za-z ]+\n-+\n|\Z)",
+                    docstring,
+                )
+                if section_match is None:
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: malformed logic "
+                        "section"
+                    )
+                    continue
+                logic_section: str = section_match.group(1)
+                step_headings: list[str] = re.findall(
+                    r"(?m)^\d+\. \*\*[^\n]+\*\*:+$", logic_section
+                )
+                valid_headings: list[str] = re.findall(
+                    r"(?m)^\d+\. \*\*[^\n]+\*\*::$", logic_section
+                )
+                literal_steps: list[str] = re.findall(
+                    r"(?m)^\d+\. \*\*[^\n]+\*\*::\n\n {7}\S",
+                    logic_section,
+                )
+                if (
+                    not valid_headings
+                    or step_headings != valid_headings
+                    or len(literal_steps) != len(valid_headings)
+                ):
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: "
+                        f"steps={len(step_headings)}, "
+                        f"valid={len(valid_headings)}, "
+                        f"literal={len(literal_steps)}"
+                    )
+        self.assertEqual(violations, [])
+
+    def test_public_objects_have_symbol_owned_tests(self) -> None:
+        """Require one reciprocal ``Test<Symbol>`` class per public object.
+
+        Confirms every public production function and class links to its exact
+        symbol-owned class in the mirrored test module and that class links back.
+
+        Notes
+        -----
+        Normalizes underscores and capitalization so scientific abbreviations
+        remain flexible while generic multi-symbol test classes are rejected.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[1]
+        source_root: Path = repository_root / "src/diffpes"
+        tests_root: Path = repository_root / "tests/test_diffpes"
+        violations: list[str] = []
+        source_path: Path
+        source_module: ast.Module
+        node: ast.stmt
+        for source_path, source_module in self._production_modules():
+            if source_path.name == "__init__.py":
+                continue
+            relative_path: Path = source_path.relative_to(source_root)
+            subpackage: str = relative_path.parts[0]
+            test_path: Path = (
+                tests_root / f"test_{subpackage}" / f"test_{source_path.name}"
+            )
+            test_classes: dict[str, ast.ClassDef] = {}
+            if test_path.is_file():
+                test_module: ast.Module = ast.parse(
+                    test_path.read_text(encoding="utf-8")
+                )
+                test_classes = {
+                    node.name: node
+                    for node in test_module.body
+                    if isinstance(node, ast.ClassDef)
+                }
+            for node in source_module.body:
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ) or node.name.startswith("_"):
+                    continue
+                source_docstring: str = ast.get_docstring(node) or ""
+                targets: list[str] = re.findall(
+                    r":see:\s+:class:`[^`]*\.(Test\w+)`",
+                    source_docstring,
+                )
+                if len(targets) != 1:
+                    violations.append(
+                        f"{source_path}:{node.lineno}:{node.name}: "
+                        f"test targets={targets}"
+                    )
+                    continue
+                target_name: str = targets[0]
+                expected_normalized: str = "test" + re.sub(
+                    r"[^a-z0-9]", "", node.name.lower()
+                )
+                actual_normalized: str = re.sub(
+                    r"[^a-z0-9]", "", target_name.lower()
+                )
+                if actual_normalized != expected_normalized:
+                    violations.append(
+                        f"{source_path}:{node.lineno}:{node.name}: "
+                        f"target={target_name}"
+                    )
+                    continue
+                test_class: ast.ClassDef | None = test_classes.get(target_name)
+                if test_class is None:
+                    violations.append(
+                        f"{source_path}:{node.lineno}:{node.name}: "
+                        f"missing {test_path}:{target_name}"
+                    )
+                    continue
+                class_docstring: str = ast.get_docstring(test_class) or ""
+                reciprocal_name: str = f"diffpes.{subpackage}.{node.name}"
+                if reciprocal_name not in class_docstring:
+                    violations.append(
+                        f"{test_path}:{test_class.lineno}:{target_name}: "
+                        f"missing {reciprocal_name}"
+                    )
+        self.assertEqual(violations, [])
+
+    def test_test_docstrings_specify_what_and_how(self) -> None:
+        """Require complete reader-facing specifications on every test.
+
+        Confirms each test module has an extended summary and every test
+        callable has ``-> None``, extended what prose, and a how-focused Notes.
+
+        Notes
+        -----
+        Parses published test docstrings and reports missing structural parts;
+        semantic prose quality remains a review responsibility.
+        """
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._test_modules():
+            module_docstring: str = ast.get_docstring(module) or ""
+            if (
+                path.name != "__init__.py"
+                and len(
+                    [
+                        line
+                        for line in module_docstring.splitlines()
+                        if line.strip()
+                    ]
+                )
+                < 2
+            ):
+                violations.append(f"{path}: module extended summary")
+            for node in ast.walk(module):
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) or not node.name.startswith("test_"):
+                    continue
+                if not (
+                    isinstance(node.returns, ast.Constant)
+                    and node.returns.value is None
+                ):
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: -> None"
+                    )
+                docstring: str = ast.get_docstring(node) or ""
+                before_notes: str = docstring.split("Notes\n", 1)[0]
+                if (
+                    len(
+                        [
+                            line
+                            for line in before_notes.splitlines()
+                            if line.strip()
+                        ]
+                    )
+                    < 2
+                ):
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: extended summary"
+                    )
+                if "\nNotes\n" not in docstring:
+                    violations.append(
+                        f"{path}:{node.lineno}:{node.name}: Notes"
+                    )
+        self.assertEqual(violations, [])
+
+    def test_test_intermediates_are_annotated(self) -> None:
+        """Require explicit types for intermediate variables in tests.
+
+        Confirms assignment, loop, context, walrus, and exception targets in
+        test callables carry a type annotation in their own scope.
+
+        Notes
+        -----
+        Excludes nested callables, legal ``nonlocal`` reassignments, and the
+        throwaway ``_`` name while reporting every other local target.
+        """
+
+        class TestAssignmentVisitor(ast.NodeVisitor):
+            """Collect annotations and assignments in one test callable."""
+
+            def __init__(self, root: ast.FunctionDef | ast.AsyncFunctionDef):
+                self.root: ast.FunctionDef | ast.AsyncFunctionDef = root
+                self.annotated: set[str] = set()
+                self.nonlocal_names: set[str] = set()
+                self.assignments: list[tuple[int, str]] = []
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                """Visit only the requested root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(
+                self, node: ast.AsyncFunctionDef
+            ) -> None:
+                """Visit only the requested asynchronous root function body."""
+                if node is self.root:
+                    self.generic_visit(node)
+
+            def visit_Lambda(self, node: ast.Lambda) -> None:
+                """Exclude lambda expression scopes from the outer contract."""
+                del node
+
+            def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+                """Record a directly annotated local name."""
+                if isinstance(node.target, ast.Name):
+                    self.annotated.add(node.target.id)
+                self.generic_visit(node)
+
+            def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+                """Record names whose annotations belong to an outer scope."""
+                self.nonlocal_names.update(node.names)
+
+            def _record_target(self, target: ast.expr, line: int) -> None:
+                """Record stored names within one assignment-like target."""
+                candidate: ast.AST
+                for candidate in ast.walk(target):
+                    if (
+                        isinstance(candidate, ast.Name)
+                        and isinstance(candidate.ctx, ast.Store)
+                        and candidate.id != "_"
+                    ):
+                        self.assignments.append((line, candidate.id))
+
+            def visit_Assign(self, node: ast.Assign) -> None:
+                """Record plain local-name assignment targets."""
+                target: ast.expr
+                for target in node.targets:
+                    self._record_target(target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_For(self, node: ast.For) -> None:
+                """Record an ordinary loop target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+                """Record an asynchronous loop target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_With(self, node: ast.With) -> None:
+                """Record context-manager binding targets."""
+                item: ast.withitem
+                for item in node.items:
+                    if item.optional_vars is not None:
+                        self._record_target(item.optional_vars, node.lineno)
+                self.generic_visit(node)
+
+            def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+                """Record asynchronous context-manager binding targets."""
+                item: ast.withitem
+                for item in node.items:
+                    if item.optional_vars is not None:
+                        self._record_target(item.optional_vars, node.lineno)
+                self.generic_visit(node)
+
+            def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+                """Record an assignment-expression target."""
+                self._record_target(node.target, node.lineno)
+                self.generic_visit(node)
+
+            def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+                """Record an exception-handler binding."""
+                if node.name is not None and node.name != "_":
+                    self.assignments.append((node.lineno, node.name))
+                self.generic_visit(node)
+
+        violations: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._test_modules():
+            for node in ast.walk(module):
+                if not isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ):
+                    continue
+                visitor: TestAssignmentVisitor = TestAssignmentVisitor(node)
+                visitor.visit(node)
+                violations.extend(
+                    f"{path}:{line}:{node.name}:{name}"
+                    for line, name in visitor.assignments
+                    if name not in visitor.annotated
+                    and name not in visitor.nonlocal_names
+                )
+        self.assertEqual(violations, [])
+
+    def test_public_symbols_have_one_owning_subpackage(self) -> None:
+        """Forbid compatibility re-exports across subpackage surfaces.
+
+        Confirms a public name appears in exactly one non-root subpackage
+        ``__all__`` so moves cannot leave aliases or secondary import paths.
+
+        Notes
+        -----
+        Reads literal ``__all__`` entries from each first-level subpackage and
+        reports names claimed by more than one owner.
+        """
+        owners: dict[str, list[str]] = {}
+        path: Path
+        module: ast.Module
+        node: ast.stmt
+        entry: ast.expr
+        for path, module in self._production_modules():
+            if path.name != "__init__.py" or path.parent.name == "diffpes":
+                continue
+            for node in module.body:
+                target: ast.expr | None = None
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    target = node.targets[0]
+                elif isinstance(node, ast.AnnAssign):
+                    target = node.target
+                if (
+                    not isinstance(target, ast.Name)
+                    or target.id != "__all__"
+                    or not isinstance(node.value, (ast.List, ast.Tuple))
+                ):
+                    continue
+                for entry in node.value.elts:
+                    if isinstance(entry, ast.Constant) and isinstance(
+                        entry.value, str
+                    ):
+                        owners.setdefault(entry.value, []).append(
+                            path.parent.name
+                        )
+        violations: list[str] = [
+            f"{name}:{sorted(subpackages)}"
+            for name, subpackages in sorted(owners.items())
+            if len(subpackages) > 1
+        ]
         self.assertEqual(violations, [])
 
 

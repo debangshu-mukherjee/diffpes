@@ -12,8 +12,10 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype.typing import Any, Callable
 from jaxtyping import Array, Complex, Float
 
+import diffpes
 from diffpes.simul import simulate_tb_radial
 from diffpes.tightb import diagonalize_tb
 from diffpes.types import (
@@ -129,7 +131,16 @@ class TestTBRadialCarrierGradients:
         eigenvalues, generic complex eigenvectors, Slater exponents, all three
         polarization angles, and every continuous simulation parameter. Every
         selected leaf must retain finite, nonzero, FD-correct sensitivity.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        bands: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        polarization: diffpes.types.PolarizationConfig
+        radial_grid: Array
+
         bands, slater, params, polarization, radial_grid = (
             _generic_radial_fixture()
         )
@@ -211,7 +222,10 @@ class TestTBRadialBaselineGradient:
         three Gamma/K/M points, carbon 2p orbitals, a 300-point energy grid,
         and a 2,000-point explicit radial grid. The expected derivative was
         independently rerun against tag ``v0.1`` before being pinned here.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
         model: TBModel = make_graphene_model(t=-2.7)
         kpoints: Float[Array, "3 3"] = jnp.array(
             [

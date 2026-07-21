@@ -10,9 +10,9 @@ the differentiable forward simulator.
 Routine Listings
 ----------------
 :class:`DiagonalizedBands`
-    PyTree for diagonalized electronic structure.
+    Store diagonalized electronic-structure data in a JAX PyTree.
 :class:`TBModel`
-    PyTree for tight-binding model parameters (legacy).
+    Store tight-binding parameters in a JAX PyTree.
 :func:`make_diagonalized_bands`
     Create a validated ``DiagonalizedBands`` instance.
 :func:`make_1d_chain_model`
@@ -39,10 +39,8 @@ from .radial_params import OrbitalBasis, make_orbital_basis
 
 
 class DiagonalizedBands(eqx.Module):
-    """PyTree for diagonalized electronic structure.
+    """Store diagonalized electronic-structure data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     The common interface between VASP-derived and TB-derived inputs
     for the forward simulator ``simulate_tb_radial``. The native
     ``diffpes.tightb.diagonalize_tb`` producer constructs this PyTree
@@ -60,6 +58,9 @@ class DiagonalizedBands(eqx.Module):
     auxiliary data), making the entire object fully differentiable.
     This enables end-to-end gradient computation from TB hopping
     parameters through diagonalization to simulated ARPES intensity.
+
+
+    :see: :class:`~.test_tb_model.TestDiagonalizedBands`
 
     Attributes
     ----------
@@ -99,12 +100,15 @@ class DiagonalizedBands(eqx.Module):
 
 
 class TBModel(eqx.Module):
-    """Tight-binding parameters with differentiable and static fields.
+    """Store tight-binding parameters in a JAX PyTree.
 
     ``hopping_params`` and ``lattice_vectors`` are differentiable leaves.
     The connectivity, orbital count, and basis are compile-time metadata;
     changing any static field changes the PyTree definition and retraces JIT
     compiled consumers.
+
+
+    :see: :class:`~.test_tb_model.TestTBModel`
 
     Attributes
     ----------
@@ -113,11 +117,14 @@ class TBModel(eqx.Module):
     lattice_vectors : Float[Array, "3 3"]
         Real-space lattice vectors in Angstrom.
     hopping_indices : tuple
-        **Static.** Orbital connectivity and lattice translations.
+        Orbital connectivity and lattice translations (**static** -- a
+        compile-time constant; changing it triggers retracing).
     n_orbitals : int
-        **Static.** Number of orbitals in the unit cell.
+        Number of orbitals in the unit cell (**static** -- a compile-time
+        constant; changing it triggers retracing).
     orbital_basis : OrbitalBasis
-        **Static.** Orbital quantum-number metadata.
+        Orbital quantum-number metadata (**static** -- a compile-time
+        constant; changing it triggers retracing).
     """
 
     hopping_params: Float[Array, " H"]
@@ -128,7 +135,7 @@ class TBModel(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_diagonalized_bands(
+def make_diagonalized_bands(  # noqa: DOC503
     eigenvalues: Float[Array, "Ke Be"],
     eigenvectors: Complex[Array, "Kv Bv O"],
     kpoints: Float[Array, "Kk 3"],
@@ -136,8 +143,6 @@ def make_diagonalized_bands(
 ) -> DiagonalizedBands:
     """Create a validated ``DiagonalizedBands`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises diagonalized
     electronic structure data before constructing a
     ``DiagonalizedBands`` PyTree. Real-valued arrays are cast to
@@ -152,25 +157,45 @@ def make_diagonalized_bands(
     Use this factory when constructing ``DiagonalizedBands`` from
     either TB diagonalization output or VASP eigenvector data.
 
+    :see: :class:`~.test_tb_model.TestMakeDiagonalizedBands`
+
     Implementation Logic
     --------------------
-    1. **Cast eigenvalues** to ``jnp.float64`` via ``jnp.asarray``.
-    2. **Cast eigenvectors** to ``jnp.complex128`` via
-       ``jnp.asarray`` to preserve full double-precision for the
-       complex orbital coefficients.
-    3. **Cast kpoints** to ``jnp.float64`` via ``jnp.asarray``.
-    4. **Cast fermi_energy** scalar to a 0-D ``jnp.float64`` array.
-    5. **Construct** the ``DiagonalizedBands`` Equinox module from all
-       four validated arrays and return it.
+    1. **Prepare the normalized values**::
+
+           eig_arr = jnp.asarray(eigenvalues, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           eig_arr.shape != vec_arr.shape[:2]
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(eig_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return bands
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
-    eigenvalues : Float[Array, "K B"]
+    eigenvalues : Float[Array, "Ke Be"]
         Band energies E_n(k) in eV for K k-points and B bands.
-    eigenvectors : Complex[Array, "K B O"]
+    eigenvectors : Complex[Array, "Kv Bv O"]
         Complex orbital coefficients c_{k,b,orb} from Hamiltonian
         diagonalization, where O is the number of orbitals.
-    kpoints : Float[Array, "K 3"]
+    kpoints : Float[Array, "Kk 3"]
         k-point coordinates in reciprocal (fractional) space.
     fermi_energy : ScalarNumeric, optional
         Fermi level in eV. Default is 0.0.
@@ -189,6 +214,13 @@ def make_diagonalized_bands(
         If eigenvalues, eigenvectors, k-points, or the Fermi energy
         contain a non-finite value.
 
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    the k-point or band dimensions disagree. Traced validation uses
+    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when any numerical
+    field contains a non-finite value.
+
     See Also
     --------
     DiagonalizedBands : The PyTree class constructed by this factory.
@@ -203,7 +235,7 @@ def make_diagonalized_bands(
         msg: str = "eigenvalues and eigenvectors must agree on K and B"
         raise ValueError(msg)
     if eig_arr.shape[0] != kpt_arr.shape[0]:
-        msg = "eigenvalues and kpoints must agree on K"
+        msg: str = "eigenvalues and kpoints must agree on K"
         raise ValueError(msg)
 
     def validate_and_create() -> DiagonalizedBands:
@@ -228,19 +260,20 @@ def make_diagonalized_bands(
             ~(jnp.isfinite(ef_arr)),
             "make_diagonalized_bands: fermi energy finite",
         )
-        return DiagonalizedBands(
+        validated_bands: DiagonalizedBands = DiagonalizedBands(
             eigenvalues=eig_arr,
             eigenvectors=vec_arr,
             kpoints=kpt_arr,
             fermi_energy=ef_arr,
         )
+        return validated_bands
 
     bands: DiagonalizedBands = validate_and_create()
     return bands
 
 
 @jaxtyped(typechecker=beartype)
-def make_tb_model(
+def make_tb_model(  # noqa: DOC503
     hopping_params: Float[Array, " H"],
     lattice_vectors: Float[Array, "3 3"],
     hopping_indices: tuple,
@@ -249,8 +282,6 @@ def make_tb_model(
 ) -> TBModel:
     """Create a validated ``TBModel`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates and normalises tight-binding
     model parameters before constructing a ``TBModel`` PyTree. The
     two differentiable arrays (``hopping_params``,
@@ -265,17 +296,36 @@ def make_tb_model(
     (e.g. from a Slater-Koster parameterization) before passing it
     to the Hamiltonian construction and diagonalization routines.
 
+    :see: :class:`~.test_tb_model.TestMakeTBModel`
+
     Implementation Logic
     --------------------
-    1. **Cast hopping_params** to ``jnp.float64`` via
-       ``jnp.asarray``.
-    2. **Cast lattice_vectors** to ``jnp.float64`` via
-       ``jnp.asarray``.
-    3. **Pass through** ``hopping_indices``, ``n_orbitals``, and
-       ``orbital_basis`` unchanged -- these become auxiliary data
-       in the PyTree.
-    4. **Construct** the ``TBModel`` Equinox module from all five fields
-       and return it.
+    1. **Prepare the normalized values**::
+
+           hop_arr = jnp.asarray(hopping_params, dtype=jnp.float64)
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           hop_arr.shape[0] != len(hopping_indices)
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(hop_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return model
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -286,11 +336,14 @@ def make_tb_model(
     hopping_indices : tuple
         Connectivity: ``(orb_i, orb_j, (R_x, R_y, R_z))`` per
         hopping, where R_x, R_y, R_z are integer lattice translation
-        indices.
+        indices (**static** -- a compile-time constant; changing it triggers
+        retracing).
     n_orbitals : int
-        Number of orbitals in the unit cell.
+        Number of orbitals in the unit cell (**static** -- a compile-time
+        constant; changing it triggers retracing).
     orbital_basis : OrbitalBasis
-        Quantum number metadata for each orbital.
+        Quantum number metadata for each orbital (**static** -- a compile-time
+        constant; changing it triggers retracing).
 
     Returns
     -------
@@ -308,6 +361,13 @@ def make_tb_model(
         If hoppings or lattice vectors are non-finite, or if the lattice
         is degenerate.
 
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction when
+    hopping metadata, orbital counts, or orbital indices are inconsistent.
+    Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for non-finite arrays or a degenerate lattice.
+
     See Also
     --------
     TBModel : The PyTree class constructed by this factory.
@@ -323,14 +383,14 @@ def make_tb_model(
         msg: str = "hopping_params and hopping_indices must have equal length"
         raise ValueError(msg)
     if len(orbital_basis.n_values) != n_orbitals:
-        msg = "orbital_basis size must match n_orbitals"
+        msg: str = "orbital_basis size must match n_orbitals"
         raise ValueError(msg)
     if any(
         index < 0 or index >= n_orbitals
         for hopping in hopping_indices
         for index in hopping[:2]
     ):
-        msg = "hopping orbital indices must be in [0, n_orbitals)"
+        msg: str = "hopping orbital indices must be in [0, n_orbitals)"
         raise ValueError(msg)
 
     def validate_and_create() -> TBModel:
@@ -350,13 +410,14 @@ def make_tb_model(
             jnp.linalg.det(lat_arr) == 0.0,
             "make_tb_model: lattice non-degenerate",
         )
-        return TBModel(
+        validated_model: TBModel = TBModel(
             hopping_params=hop_arr,
             lattice_vectors=lat_arr,
             hopping_indices=hopping_indices,
             n_orbitals=n_orbitals,
             orbital_basis=orbital_basis,
         )
+        return validated_model
 
     model: TBModel = validate_and_create()
     return model
@@ -370,8 +431,6 @@ def make_1d_chain_model(
 
     Single orbital per unit cell with nearest-neighbor hopping t.
 
-    Extended Summary
-    ----------------
     The 1D chain is the simplest possible tight-binding model: one
     s-orbital per unit cell with hopping only to the two nearest
     neighbors at lattice vectors ``+a1`` and ``-a1``.  The lattice is
@@ -396,6 +455,26 @@ def make_1d_chain_model(
     these are redundant (each is its own conjugate), so the
     on-diagonal entry receives ``2t cos(2 pi k)`` as expected.
 
+    :see: :class:`~.test_tb_model.TestMake1dChainModel`
+
+    Implementation Logic
+    --------------------
+    1. **Create the orbital basis**::
+
+           basis = make_orbital_basis(...)
+
+       The basis contains one s orbital per unit cell.
+    2. **Define nearest-neighbor hops**::
+
+           hopping_indices = ((0, 0, (1, 0, 0)), (0, 0, (-1, 0, 0)))
+
+       The two entries connect the orbital to both adjacent unit cells.
+    3. **Construct the model**::
+
+           model = make_tb_model(...)
+
+       The validated factory preserves gradients through the hopping value.
+
     Parameters
     ----------
     t : ScalarFloat
@@ -413,8 +492,8 @@ def make_1d_chain_model(
         labels=("s",),
     )
     hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
-        (0, 0, (1, 0, 0)),  # +R hop
-        (0, 0, (-1, 0, 0)),  # -R hop
+        (0, 0, (1, 0, 0)),
+        (0, 0, (-1, 0, 0)),
     )
     lattice: Float[Array, "3 3"] = jnp.eye(3, dtype=jnp.float64)
     model: TBModel = make_tb_model(
@@ -436,8 +515,6 @@ def make_graphene_model(
     Two-orbital (A/B sublattice) model on a honeycomb lattice
     with nearest-neighbor hopping t.
 
-    Extended Summary
-    ----------------
     Graphene's honeycomb lattice has two atoms (sublattices A and B)
     per primitive cell.  The lattice vectors used here are:
 
@@ -462,6 +539,73 @@ def make_graphene_model(
     band structure with linear dispersion near the K and K' points
     and a bandwidth of ``|6t|``.
 
+    :see: :class:`~.test_tb_model.TestMakeGrapheneModel`
+
+    Implementation Logic
+    --------------------
+    1. **Create the orbital basis**::
+
+           basis: OrbitalBasis = make_orbital_basis(
+               n_values=(2, 2),
+               l_values=(1, 1),
+               m_values=(0, 0),
+               labels=("A_pz", "B_pz"),
+           )
+
+       These static quantum numbers identify the two carbon p-z orbitals.
+
+    2. **Construct the primitive lattice**::
+
+           a: float = 2.46
+           a1 = jnp.array([a, 0.0, 0.0], dtype=jnp.float64)
+           a2 = jnp.array(
+               [a / 2.0, a * jnp.sqrt(3.0) / 2.0, 0.0],
+               dtype=jnp.float64,
+           )
+           a3 = jnp.array([0.0, 0.0, 10.0], dtype=jnp.float64)
+           lattice = jnp.stack([a1, a2, a3])
+
+       The first two vectors define the honeycomb plane. The third vector
+       adds vacuum normal to that plane.
+
+    3. **Enumerate the nearest-neighbor hoppings**::
+
+           hopping_indices = (
+               (0, 1, (0, 0, 0)),
+               (0, 1, (-1, 0, 0)),
+               (0, 1, (0, -1, 0)),
+               (1, 0, (0, 0, 0)),
+               (1, 0, (1, 0, 0)),
+               (1, 0, (0, 1, 0)),
+           )
+
+       The forward and reverse entries preserve the Hermitian lattice model.
+
+    4. **Construct the validated model**::
+
+           t_val = jnp.asarray(t, dtype=jnp.float64)
+           hopping_params = jnp.array(
+               [t_val, t_val, t_val, t_val, t_val, t_val],
+               dtype=jnp.float64,
+           )
+           model = make_tb_model(
+               hopping_params=hopping_params,
+               lattice_vectors=lattice,
+               hopping_indices=hopping_indices,
+               n_orbitals=2,
+               orbital_basis=basis,
+           )
+
+       The shared JAX scalar keeps one differentiable hopping value for all
+       six directed bonds. The factory applies the model validation contract.
+
+    5. **Return the named instance**::
+
+           return model
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
+
     Parameters
     ----------
     t : ScalarFloat
@@ -479,6 +623,9 @@ def make_graphene_model(
     literature (e.g. Castro Neto et al., Rev. Mod. Phys. 81, 109).
     The negative sign follows the convention that bonding states
     are lower in energy.
+
+    The conversion with ``jnp.asarray`` keeps ``t`` on the JAX gradient tape.
+    Gradients of downstream spectra therefore propagate to the shared hopping.
     """
     basis: OrbitalBasis = make_orbital_basis(
         n_values=(2, 2),
@@ -486,7 +633,6 @@ def make_graphene_model(
         m_values=(0, 0),
         labels=("A_pz", "B_pz"),
     )
-    # Honeycomb lattice vectors (Angstrom)
     a: float = 2.46
     a1: Float[Array, " 3"] = jnp.array([a, 0.0, 0.0], dtype=jnp.float64)
     a2: Float[Array, " 3"] = jnp.array(
@@ -495,15 +641,13 @@ def make_graphene_model(
     a3: Float[Array, " 3"] = jnp.array([0.0, 0.0, 10.0], dtype=jnp.float64)
     lattice: Float[Array, "3 3"] = jnp.stack([a1, a2, a3])
 
-    # Three nearest-neighbor hoppings A->B
     hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
-        (0, 1, (0, 0, 0)),  # same cell
-        (0, 1, (-1, 0, 0)),  # -a1
-        (0, 1, (0, -1, 0)),  # -a2
-        # Hermitian conjugates (B->A)
-        (1, 0, (0, 0, 0)),  # same cell
-        (1, 0, (1, 0, 0)),  # +a1
-        (1, 0, (0, 1, 0)),  # +a2
+        (0, 1, (0, 0, 0)),
+        (0, 1, (-1, 0, 0)),
+        (0, 1, (0, -1, 0)),
+        (1, 0, (0, 0, 0)),
+        (1, 0, (1, 0, 0)),
+        (1, 0, (0, 1, 0)),
     )
     t_val: Float[Array, " "] = jnp.asarray(t, dtype=jnp.float64)
     hopping_params: Float[Array, " H"] = jnp.array(

@@ -121,6 +121,8 @@ def central_fd_grad(
     cost is two forward evaluations per real parameter and four per complex
     parameter, so this helper is restricted to toy-model gates.
     """
+    leaves: list[Any]
+    treedef: jax.tree_util.PyTreeDef
     leaves, treedef = jax.tree_util.tree_flatten(theta)
     array_leaves: list[Array] = [jnp.asarray(leaf) for leaf in leaves]
     jitted_fn: ScalarLoss = jax.jit(fn)
@@ -184,14 +186,21 @@ def assert_grad_matches_fd(
     finite_difference: PyTree = central_fd_grad(
         fn, theta, scale_floor=scale_floor
     )
+    automatic_paths: list[tuple[tuple[object, ...], Array]]
+    automatic_treedef: jax.tree_util.PyTreeDef
     automatic_paths, automatic_treedef = jax.tree_util.tree_flatten_with_path(
         automatic
     )
+    finite_leaves: list[Array]
+    finite_treedef: jax.tree_util.PyTreeDef
     finite_leaves, finite_treedef = jax.tree_util.tree_flatten(
         finite_difference
     )
     if automatic_treedef != finite_treedef:
         raise AssertionError("autodiff and finite-difference trees differ")
+    path: tuple[object, ...]
+    actual: Array
+    expected: Array
     for (path, actual), expected in zip(
         automatic_paths, finite_leaves, strict=True
     ):
@@ -224,6 +233,7 @@ def assert_nonzero_grad(
     greater than ``min_norm``.
     """
     gradient: PyTree = jax.grad(fn)(theta)
+    path_leaves: list[tuple[tuple[object, ...], Array]]
     path_leaves, _ = jax.tree_util.tree_flatten_with_path(gradient)
     available_paths: set[str] = {_path_name(path) for path, _ in path_leaves}
     selected_paths: set[str] = (
@@ -235,6 +245,8 @@ def assert_nonzero_grad(
             f"unknown sensitive gradient paths: {sorted(missing_paths)}"
         )
         raise ValueError(message)
+    path: tuple[object, ...]
+    leaf: Array
     for path, leaf in path_leaves:
         path_name: str = _path_name(path)
         if path_name in selected_paths:
@@ -280,6 +292,8 @@ def random_generic_complex(
     ``scale`` and ``0.7 * scale``. The asymmetry prevents conjugation errors
     from passing accidentally through Hermitian or equal-component inputs.
     """
+    real_key: PRNGKeyArray
+    imaginary_key: PRNGKeyArray
     real_key, imaginary_key = jax.random.split(key)
     real_part: Float[Array, "..."] = scale * jax.random.normal(real_key, shape)
     imaginary_part: Float[Array, "..."] = (

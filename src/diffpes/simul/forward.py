@@ -39,11 +39,13 @@ energy and binding energy to a photoelectron wavevector magnitude
 using the free-electron final-state approximation.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from beartype.typing import Optional
-from jaxtyping import Array, Complex, Float, jaxtyped
+from beartype.typing import Callable, Optional
+from jaxtyping import Array, Complex, Float, Integer, jaxtyped
 
 from diffpes.maths import (
     dipole_matrix_element_single,
@@ -83,8 +85,6 @@ def _ekin_to_k_magnitude(
     magnitude of the photoelectron wavevector using the free-electron
     final-state approximation.
 
-    Extended Summary
-    ----------------
     In the three-step model of photoemission, the photoelectron kinetic
     energy is:
 
@@ -168,8 +168,6 @@ def simulate_tb_radial(  # noqa: PLR0915
     pipeline is JAX-traceable and supports ``jax.grad`` with respect
     to all continuous parameters.
 
-    Extended Summary
-    ----------------
     This is the "Chinook-style" tight-binding ARPES forward model.
     Unlike the six-level ``simulate_*`` functions in ``spectrum.py``
     (which use VASP orbital projections as pre-computed weights),
@@ -186,53 +184,68 @@ def simulate_tb_radial(  # noqa: PLR0915
     - ``work_function``
     - ``self_energy.coefficients`` (if provided)
 
+    :see: :class:`~.test_forward.TestSimulateTBRadial`
+
     Implementation Logic
     --------------------
     The simulation proceeds in five stages:
 
-    1. **Energy axis and radial grid setup**:
-       A linear energy axis of ``fidelity`` points spanning
-       ``[energy_min, energy_max]`` is created. If no radial grid is
-       provided, a default grid of 10000 points on ``[1e-6, 50.0]``
-       Bohr is used for the radial integrals.
+    1. **Create the numerical grids**::
 
-    2. **Precompute radial wavefunctions**:
-       For each orbital in ``slater_params.orbital_basis``, the
-       Slater radial function ``R_nl(r; zeta)`` is evaluated on the
-       grid and scaled by the leading coefficient. This is a
-       Python-level loop that JAX unrolls during tracing.
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min, params.energy_max, params.fidelity
+           )
 
-    3. **Compute band intensities |M(k,b)|^2**:
-       For each (k-point, band) pair, the total dipole matrix element
-       is:
+       The energy axis fixes the output sampling. The optional radial grid
+       controls the integration sampling in Bohr.
+
+    2. **Evaluate the radial wavefunctions**::
+
+           radial_scan: tuple[None, Float[Array, "O R"]] = jax.lax.scan(
+               _scan_radial,
+               None,
+               orbital_indices,
+           )
+
+       The scan traverses the differentiable Slater parameters.
+       ``jax.lax.switch`` selects each static principal quantum number.
+
+    3. **Compute the coherent band intensities**::
+
+           band_intensity: Float[Array, "K B"] = (i_s + i_p) / 2.0
+
+       Nested ``jax.vmap`` calls evaluate all k-points and bands. Each
+       evaluation forms the coherent orbital sum before the squared modulus.
+
+       The coherent matrix element is:
 
        .. math::
 
            M_{k,b} = \sum_o c_{k,b,o} \cdot M_o(k, \hat{\epsilon})
 
-       where :math:`c_{k,b,o}` are eigenvector coefficients and
-       :math:`M_o` is the single-orbital dipole matrix element
-       computed by ``dipole_matrix_element_single``. The photoelectron
-       momentum ``k`` is derived from kinematics via
-       ``_ekin_to_k_magnitude``, scaled along the crystal k-direction.
-       For unpolarized light, s- and p-polarization intensities are
-       averaged: ``I = (|M_s|^2 + |M_p|^2) / 2``. The computation
-       is vectorized with nested ``jax.vmap`` over bands and k-points.
+       Here, :math:`c_{k,b,o}` is an eigenvector coefficient and
+       :math:`M_o` is one orbital matrix element. Unpolarized light averages
+       the s-polarized and p-polarized intensities.
 
-    4. **Spectral broadening**:
-       Each band contributes a Voigt profile weighted by the
-       Fermi-Dirac occupation and the band intensity. If a
-       ``SelfEnergyConfig`` is provided, the Lorentzian width
-       ``gamma`` becomes energy-dependent via ``evaluate_self_energy``,
-       and a per-energy-point Voigt is computed. Otherwise, a
-       constant ``params.gamma`` is used. Contributions from all
-       bands at each k-point are summed.
+    4. **Broaden the band contributions**::
 
-    5. **Optional momentum broadening**:
-       If ``dk`` is specified, a Gaussian convolution along the
-       k-axis is applied via ``apply_momentum_broadening`` to
-       simulate finite angular acceptance. Cumulative k-distances
-       are computed from the k-point path.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               diag_bands.eigenvalues,
+               band_intensity,
+           )
+
+       Each band contributes a Fermi-weighted Voigt profile. The optional
+       self-energy makes the Lorentzian width depend on energy.
+
+    5. **Apply the momentum response**::
+
+           intensity = apply_momentum_broadening(
+               intensity, k_distances, dk
+           )
+
+       The Gaussian response represents finite angular acceptance. The
+       operation remains differentiable with respect to the spectrum and the
+       response width.
 
     Parameters
     ----------
@@ -273,6 +286,15 @@ def simulate_tb_radial(  # noqa: PLR0915
         Simulated ARPES spectrum with ``intensity`` of shape
         ``(K, E)`` and ``energy_axis`` of shape ``(E,)``.
 
+    Notes
+    -----
+    The inner function ``_single_k_band`` uses :func:`safe_norm` and
+    :func:`safe_divide` to select a zero direction and zero gradient at the
+    Gamma point. It preserves the fractional crystal-momentum direction when
+    it forms the photoelectron momentum. Both radial construction and coherent
+    orbital summation use ``jax.lax.scan``. Static quantum numbers select
+    specialized branches with ``jax.lax.switch``.
+
     See Also
     --------
     simulate_expert : Projection-based simulation (uses VASP weights
@@ -281,28 +303,17 @@ def simulate_tb_radial(  # noqa: PLR0915
     slater_radial : Slater-type radial wavefunction evaluation.
     evaluate_self_energy : Energy-dependent broadening model.
     apply_momentum_broadening : k-space Gaussian convolution.
-
-    Notes
-    -----
-    The inner function ``_single_k_band`` uses :func:`safe_norm` and
-    :func:`safe_divide` to select a zero direction and zero gradient at the
-    Gamma point. The Python-level ``for`` loop over orbitals is unrolled by
-    the JAX tracer and does not affect runtime performance after JIT
-    compilation.
     """
-    # Energy axis
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min, params.energy_max, params.fidelity
     )
 
-    # Radial grid
     if r_grid is None:
         r_grid = jnp.linspace(1e-6, 50.0, 10000)
+    r_grid: Float[Array, " R"]
 
-    # Work function as JAX scalar
     W: Float[Array, " "] = jnp.asarray(work_function, dtype=jnp.float64)
 
-    # Build polarization E-field
     is_unpolarized: bool = (
         pol_config.polarization_type.lower() == "unpolarized"
     )
@@ -310,15 +321,107 @@ def simulate_tb_radial(  # noqa: PLR0915
     basis: OrbitalBasis = slater_params.orbital_basis
     n_orbitals: int = len(basis.n_values)
 
-    # Precompute radial wavefunctions on the grid for each orbital
-    # (Python-level loop, unrolled by JAX tracer)
-    radial_on_grid: list[Float[Array, " R"]] = []
-    for o in range(n_orbitals):
-        R_vals: Float[Array, " R"] = slater_radial(
-            r_grid, basis.n_values[o], slater_params.zeta[o]
+    def _evaluate_radial(
+        operand: tuple[Float[Array, ""], Float[Array, ""]],
+        *,
+        n: int,
+    ) -> Float[Array, " R"]:
+        """Evaluate one radial branch specialized to static ``n``."""
+        zeta_value: Float[Array, ""] = operand[0]
+        coefficient: Float[Array, ""] = operand[1]
+        radial_values: Float[Array, " R"] = (
+            slater_radial(r_grid, n, zeta_value) * coefficient
         )
-        R_vals = R_vals * slater_params.coefficients[o, 0]
-        radial_on_grid.append(R_vals)
+        return radial_values
+
+    radial_branches: tuple[
+        Callable[
+            [tuple[Float[Array, ""], Float[Array, ""]]],
+            Float[Array, " R"],
+        ],
+        ...,
+    ] = tuple(
+        partial(_evaluate_radial, n=n_value) for n_value in basis.n_values
+    )
+
+    def _scan_radial(
+        carry: None,
+        orbital_index: Integer[Array, ""],
+    ) -> tuple[None, Float[Array, " R"]]:
+        """Construct one radial row from traced Slater parameters."""
+        operand: tuple[Float[Array, ""], Float[Array, ""]] = (
+            slater_params.zeta[orbital_index],
+            slater_params.coefficients[orbital_index, 0],
+        )
+        radial_values: Float[Array, " R"] = jax.lax.switch(
+            orbital_index,
+            radial_branches,
+            operand,
+        )
+        scan_output: tuple[None, Float[Array, " R"]] = (
+            carry,
+            radial_values,
+        )
+        return scan_output
+
+    orbital_indices: Integer[Array, " O"] = jnp.arange(n_orbitals)
+    radial_scan: tuple[None, Float[Array, "O R"]] = jax.lax.scan(
+        _scan_radial,
+        None,
+        orbital_indices,
+    )
+    radial_on_grid: Float[Array, "O R"] = radial_scan[1]
+
+    def _evaluate_orbital_contribution(
+        operand: tuple[
+            Float[Array, " 3"],
+            Float[Array, " R"],
+            Complex[Array, ""],
+            Complex[Array, " 3"],
+        ],
+        *,
+        l: int,
+        m: int,
+    ) -> Complex[Array, ""]:
+        """Evaluate one coherent orbital branch with static ``(l, m)``."""
+        k_vector: Float[Array, " 3"] = operand[0]
+        radial_values: Float[Array, " R"] = operand[1]
+        eigenvector_coefficient: Complex[Array, ""] = operand[2]
+        electric_field: Complex[Array, " 3"] = operand[3]
+        matrix_element: Complex[Array, ""] = dipole_matrix_element_single(
+            k_vector,
+            r_grid,
+            radial_values,
+            l,
+            m,
+            electric_field,
+        )
+        contribution: Complex[Array, ""] = (
+            eigenvector_coefficient * matrix_element
+        )
+        return contribution
+
+    orbital_branches: tuple[
+        Callable[
+            [
+                tuple[
+                    Float[Array, " 3"],
+                    Float[Array, " R"],
+                    Complex[Array, ""],
+                    Complex[Array, " 3"],
+                ]
+            ],
+            Complex[Array, ""],
+        ],
+        ...,
+    ] = tuple(
+        partial(_evaluate_orbital_contribution, l=l_value, m=m_value)
+        for l_value, m_value in zip(
+            basis.l_values,
+            basis.m_values,
+            strict=True,
+        )
+    )
 
     def _compute_band_intensity_single_efield(
         efield: Complex[Array, " 3"],
@@ -371,37 +474,61 @@ def simulate_tb_radial(  # noqa: PLR0915
             Float[Array, " "]
                 Squared modulus of the total dipole matrix element.
             """
-            # Compute photoelectron k magnitude from kinematics
             k_mag: Float[Array, " "] = _ekin_to_k_magnitude(
                 params.photon_energy, W, eigenval
             )
-            # Preserve the existing fractional-k direction convention.
             k_norm: Float[Array, " "] = safe_norm(k_crystal)
             k_hat: Float[Array, " 3"] = safe_divide(k_crystal, k_norm)
             k_vec: Float[Array, " 3"] = k_hat * k_mag
 
-            # Compute total M = sum_o c_{k,b,o} * M_o
-            M_total: Complex[Array, " "] = jnp.zeros((), dtype=jnp.complex128)
-            for o in range(n_orbitals):
-                M_o: Complex[Array, " "] = dipole_matrix_element_single(
+            def _scan_orbital(
+                matrix_element_sum: Complex[Array, ""],
+                orbital_index: Integer[Array, ""],
+            ) -> tuple[Complex[Array, ""], None]:
+                """Accumulate one coherent orbital contribution."""
+                operand: tuple[
+                    Float[Array, " 3"],
+                    Float[Array, " R"],
+                    Complex[Array, ""],
+                    Complex[Array, " 3"],
+                ] = (
                     k_vec,
-                    r_grid,
-                    radial_on_grid[o],
-                    basis.l_values[o],
-                    basis.m_values[o],
+                    radial_on_grid[orbital_index],
+                    eigvec[orbital_index],
                     efield,
                 )
-                M_total = M_total + eigvec[o] * M_o
+                contribution: Complex[Array, ""] = jax.lax.switch(
+                    orbital_index,
+                    orbital_branches,
+                    operand,
+                )
+                next_sum: Complex[Array, ""] = (
+                    matrix_element_sum + contribution
+                )
+                scan_output: tuple[Complex[Array, ""], None] = (
+                    next_sum,
+                    None,
+                )
+                return scan_output
+
+            initial_sum: Complex[Array, ""] = jnp.zeros(
+                (), dtype=jnp.complex128
+            )
+            orbital_scan: tuple[Complex[Array, ""], None] = jax.lax.scan(
+                _scan_orbital,
+                initial_sum,
+                orbital_indices,
+            )
+            M_total: Complex[Array, ""] = orbital_scan[0]
 
             intensity_kb: Float[Array, " "] = jnp.abs(M_total) ** 2
             return intensity_kb
 
-        # vmap over bands (B), then over k-points (K)
-        _vmap_bands = jax.vmap(
+        _vmap_bands: Callable[..., Float[Array, " B"]] = jax.vmap(
             _single_k_band,
             in_axes=(None, 0, 0),
         )
-        _vmap_k = jax.vmap(
+        _vmap_k: Callable[..., Float[Array, "K B"]] = jax.vmap(
             _vmap_bands,
             in_axes=(0, 0, 0),
         )
@@ -412,7 +539,6 @@ def simulate_tb_radial(  # noqa: PLR0915
         )
         return result
 
-    # Compute band intensities
     if is_unpolarized:
         e_s: Float[Array, " 3"]
         e_p: Float[Array, " 3"]
@@ -426,7 +552,6 @@ def simulate_tb_radial(  # noqa: PLR0915
         efield: Complex[Array, " 3"] = build_efield(pol_config)
         band_intensity = _compute_band_intensity_single_efield(efield)
 
-    # Broadening: Voigt profile with optional energy-dependent gamma
     if self_energy is not None:
         gamma_E: Float[Array, " E"] = evaluate_self_energy(
             energy_axis, self_energy
@@ -459,7 +584,6 @@ def simulate_tb_radial(  # noqa: PLR0915
             fd: Float[Array, " "] = fermi_dirac(
                 energy, diag_bands.fermi_energy, params.temperature
             )
-            # Per-energy-point Voigt with varying gamma
             profile: Float[Array, " E"] = jax.vmap(
                 lambda e_pt, g: voigt(
                     jnp.expand_dims(e_pt, 0), energy, params.sigma, g
@@ -565,9 +689,7 @@ def simulate_tb_radial(  # noqa: PLR0915
             diag_bands.eigenvalues, band_intensity
         )
 
-    # Optional momentum broadening
     if dk is not None:
-        # Compute cumulative k-distances
         dk_vecs: Float[Array, "Km1 3"] = jnp.diff(diag_bands.kpoints, axis=0)
         dk_norms: Float[Array, " Km1"] = jnp.linalg.norm(dk_vecs, axis=1)
         k_distances: Float[Array, " K"] = jnp.concatenate(

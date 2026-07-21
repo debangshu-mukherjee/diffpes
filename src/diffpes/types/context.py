@@ -9,9 +9,9 @@ provides one canonical import surface for every diffpes PyTree.
 Routine Listings
 ----------------
 :class:`WorkflowContext`
-    Parsed band, projection, k-path, and density-of-states inputs.
+    Store parsed VASP inputs for high-level workflow helpers.
 :func:`make_workflow_context`
-    Create a workflow context from parsed inputs.
+    Create a workflow context from parsed VASP inputs.
 :obj:`DosType`
     Supported density-of-states containers.
 :obj:`ProjectionType`
@@ -32,14 +32,14 @@ DosType: TypeAlias = Union[DensityOfStates, FullDensityOfStates]
 
 
 class WorkflowContext(eqx.Module):
-    """Parsed VASP inputs used by high-level workflow helpers.
+    """Store parsed VASP inputs for high-level workflow helpers.
 
-    Extended Summary
-    ----------------
     Bundles the electronic bands and orbital projections required by an
     ARPES simulation with optional k-path and density-of-states metadata.
     Every non-``None`` field is itself an Equinox PyTree, so the complete
     context can pass through JAX transformations as one immutable object.
+
+    :see: :class:`~.test_context.TestWorkflowContext`
 
     Attributes
     ----------
@@ -67,6 +67,25 @@ def make_workflow_context(
     dos: Optional[DosType] = None,
 ) -> WorkflowContext:
     """Create a workflow context from parsed VASP inputs.
+
+    Collects parsed electronic bands and orbital projections with optional
+    k-path and density-of-states data. The result is one immutable Equinox
+    PyTree for high-level simulation workflows.
+
+    :see: :class:`~.test_context.TestMakeWorkflowContext`
+
+    Implementation Logic
+    --------------------
+    1. **Check the shared axes**::
+
+           bands.eigenvalues.shape[:2] != orb_proj.projections.shape[:2]
+
+       This static shape check raises ``ValueError`` before construction.
+    2. **Construct the context**::
+
+           context = WorkflowContext(...)
+
+       The Equinox module keeps all supplied carriers in one PyTree.
 
     Parameters
     ----------

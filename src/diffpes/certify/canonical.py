@@ -15,11 +15,11 @@ numerical certification claim.
 Routine Listings
 ----------------
 :func:`canonical_json`
-    Encode JSON-like data while retaining Python container and scalar types.
+    Return deterministic typed JSON bytes for ``value``.
 :func:`canonical_pytree`
-    Encode a supported carrier or PyTree as one canonical byte string.
+    Return canonical bytes for a supported carrier or PyTree.
 :func:`iter_canonical_pytree_chunks`
-    Stream the same representation without assembling large array payloads.
+    Yield canonical carrier bytes in bounded chunks.
 """
 
 from __future__ import annotations
@@ -32,170 +32,188 @@ import struct
 import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+from beartype import beartype
+from beartype.typing import Any, cast
+from jaxtyping import jaxtyped
 
-type JsonScalar = None | bool | int | float | str
-type JsonValue = (
-    JsonScalar
-    | list[JsonValue]
-    | tuple[JsonValue, ...]
-    | Mapping[str, JsonValue]
+from diffpes.types import (
+    CANONICAL_ARRAY_CHUNK_BYTES,
+    CANONICAL_JSON_PREFIX,
+    CANONICAL_PYTREE_PREFIX,
+    CANONICAL_SUPPORTED_ARRAY_KINDS,
 )
-type CanonicalChunk = bytes | memoryview
-
-CANONICAL_JSON_VERSION: str = "1"
-CANONICAL_PYTREE_VERSION: str = "1"
-_JSON_PREFIX: bytes = b"DIFFPES-CANONICAL-JSON-V1\x00"
-_PYTREE_PREFIX: bytes = b"DIFFPES-CANONICAL-PYTREE-V1\x00"
-_DEFAULT_ARRAY_CHUNK_BYTES: int = 1024 * 1024
-_SUPPORTED_ARRAY_KINDS: frozenset[str] = frozenset({"b", "i", "u", "f", "c"})
-
-
-class CanonicalizationError(ValueError):
-    """Report a value that has no stable certification representation."""
 
 
 def _normalize_text(value: str) -> str:
     """Return the NFC-normalized form of ``value``."""
-    return unicodedata.normalize("NFC", value)
+    normalized: str = unicodedata.normalize("NFC", value)
+    return normalized
 
 
 def _length(value: int) -> bytes:
     """Encode a nonnegative record length as an unsigned 64-bit integer."""
     if value < 0:
-        msg = "canonical record lengths must be nonnegative"
-        raise CanonicalizationError(msg)
-    return struct.pack(">Q", value)
+        msg: str = "canonical record lengths must be nonnegative"
+        raise ValueError(msg)
+    encoded: bytes = struct.pack(">Q", value)
+    return encoded
 
 
 def _text_record(tag: bytes, value: str) -> bytes:
     """Encode a tagged normalized UTF-8 text record."""
-    encoded = _normalize_text(value).encode("utf-8")
-    return tag + _length(len(encoded)) + encoded
+    encoded: bytes = _normalize_text(value).encode("utf-8")
+    record: bytes = tag + _length(len(encoded)) + encoded
+    return record
 
 
 def _qualified_name(value_type: type[Any]) -> str:
     """Return a stable module-qualified type name."""
-    return f"{value_type.__module__}.{value_type.__qualname__}"
+    name: str = f"{value_type.__module__}.{value_type.__qualname__}"
+    return name
 
 
 def _float_bits(value: float) -> str:
     """Return exact IEEE-754 binary64 bits as lowercase hexadecimal."""
     if not math.isfinite(value):
-        msg = "canonical records reject NaN and infinite floats"
-        raise CanonicalizationError(msg)
-    return struct.pack(">d", value).hex()
+        msg: str = "canonical records reject NaN and infinite floats"
+        raise ValueError(msg)
+    bits: str = struct.pack(">d", value).hex()
+    return bits
 
 
 def _json_node(value: object) -> object:  # noqa: PLR0911
     """Convert JSON-like input to an explicitly typed JSON tree."""
+    key: Any
+    item: Any
     if value is None:
-        return {"$none": True}
-    if isinstance(value, bool):
-        return {"$bool": value}
-    if isinstance(value, int):
-        return {"$int": str(value)}
-    if isinstance(value, float):
-        return {"$float64": _float_bits(value)}
-    if isinstance(value, str):
-        return {"$str": _normalize_text(value)}
-    if isinstance(value, tuple):
-        return {"$tuple": [_json_node(item) for item in value]}
-    if isinstance(value, list):
-        return {"$list": [_json_node(item) for item in value]}
-    if isinstance(value, Mapping):
+        node: object = {"$none": True}
+    elif isinstance(value, bool):
+        node = {"$bool": value}
+    elif isinstance(value, int):
+        node = {"$int": str(value)}
+    elif isinstance(value, float):
+        node = {"$float64": _float_bits(value)}
+    elif isinstance(value, str):
+        node = {"$str": _normalize_text(value)}
+    elif isinstance(value, tuple):
+        node = {"$tuple": [_json_node(item) for item in value]}
+    elif isinstance(value, list):
+        node = {"$list": [_json_node(item) for item in value]}
+    elif isinstance(value, Mapping):
         normalized: list[tuple[str, object]] = []
         seen: set[str] = set()
         for key, item in value.items():
             if not isinstance(key, str):
-                msg = "canonical JSON mappings require string keys"
-                raise CanonicalizationError(msg)
-            normalized_key = _normalize_text(key)
+                msg: str = "canonical JSON mappings require string keys"
+                raise ValueError(msg)
+            normalized_key: str = _normalize_text(key)
             if normalized_key in seen:
-                msg = "mapping keys collide after Unicode normalization"
-                raise CanonicalizationError(msg)
+                msg: str = "mapping keys collide after Unicode normalization"
+                raise ValueError(msg)
             seen.add(normalized_key)
             normalized.append((normalized_key, item))
         normalized.sort(key=lambda pair: pair[0].encode("utf-8"))
-        return {
+        node = {
             "$map": [
                 [{"$str": key}, _json_node(item)] for key, item in normalized
             ]
         }
-    msg = f"unsupported canonical JSON value: {type(value)!r}"
-    raise CanonicalizationError(msg)
+    else:
+        msg: str = f"unsupported canonical JSON value: {type(value)!r}"
+        raise ValueError(msg)
+    return node
 
 
+@jaxtyped(typechecker=beartype)
 def canonical_json(value: object) -> bytes:
     """Return deterministic typed JSON bytes for ``value``.
 
+    The record preserves scalar, container, array-dtype, and array-shape
+    identity. It rejects values that have no finite deterministic
+    representation.
+
+    :see: :class:`~.test_canonical.TestCanonicalJson`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           encoded: bytes = CANONICAL_JSON_PREFIX + payload
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
     Parameters
     ----------
-    value : JsonValue
-        JSON-like data. Mapping keys must be strings. Tuples are accepted and
-        deliberately remain distinguishable from lists.
+    value : object
+        JSON-like data. Mapping keys must be strings. Tuples are accepted.
+        Tuples deliberately remain distinguishable from lists.
 
     Returns
     -------
     encoded : bytes
         Versioned canonical UTF-8 JSON record.
-
-    Raises
-    ------
-    CanonicalizationError
-        If a key is not text, normalized keys collide, a float is nonfinite,
-        or a value is outside the supported vocabulary.
     """
-    node = _json_node(value)
-    payload = json.dumps(
+    node: object = _json_node(value)
+    payload: bytes = json.dumps(
         node,
         allow_nan=False,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    return _JSON_PREFIX + payload
+    encoded: bytes = CANONICAL_JSON_PREFIX + payload
+    return encoded
 
 
 def _is_array(value: object) -> bool:
     """Return whether ``value`` exposes a concrete NumPy/JAX array protocol."""
     if isinstance(value, np.ndarray | np.generic):
-        return True
-    return all(
+        is_array: bool = True
+        return is_array
+    is_array: bool = all(
         hasattr(value, attr) for attr in ("__array__", "dtype", "shape")
     )
+    return is_array
 
 
 def _canonical_array(value: object) -> np.ndarray:
     """Materialize one array in the canonical dtype and memory order."""
+    exc: Exception
     try:
-        array = np.asarray(value)
+        array: np.ndarray = np.asarray(value)
     except Exception as exc:
-        msg = (
+        msg: str = (
             "canonicalization requires concrete arrays and cannot consume "
             "a JAX tracer"
         )
-        raise CanonicalizationError(msg) from exc
-    if array.dtype.kind not in _SUPPORTED_ARRAY_KINDS:
-        msg = f"unsupported array dtype for canonicalization: {array.dtype}"
-        raise CanonicalizationError(msg)
+        raise ValueError(msg) from exc
+    if array.dtype.kind not in CANONICAL_SUPPORTED_ARRAY_KINDS:
+        msg: str = (
+            f"unsupported array dtype for canonicalization: {array.dtype}"
+        )
+        raise ValueError(msg)
     if array.dtype.kind in {"f", "c"} and not bool(np.all(np.isfinite(array))):
-        msg = "canonical records reject arrays containing NaN or infinity"
-        raise CanonicalizationError(msg)
-    dtype = array.dtype.newbyteorder("<")
-    return np.asarray(array, dtype=dtype, order="C")
+        msg: str = "canonical records reject arrays containing NaN or infinity"
+        raise ValueError(msg)
+    dtype: np.dtype[Any] = array.dtype.newbyteorder("<")
+    canonical: np.ndarray = np.asarray(array, dtype=dtype, order="C")
+    return canonical
 
 
 def _iter_array_chunks(
     value: object,
     *,
     chunk_bytes: int,
-) -> Iterator[CanonicalChunk]:
+) -> Iterator[bytes | memoryview]:
     """Yield a canonical typed header followed by bounded array chunks."""
-    array = _canonical_array(value)
-    dtype_text = array.dtype.str.encode("ascii")
+    dimension: Any
+    offset: Any
+    array: np.ndarray = _canonical_array(value)
+    dtype_text: bytes = array.dtype.str.encode("ascii")
     yield b"A" + _length(len(dtype_text)) + dtype_text
     yield _length(array.ndim)
     for dimension in array.shape:
@@ -203,7 +221,7 @@ def _iter_array_chunks(
     yield _length(array.nbytes)
     if array.nbytes == 0:
         return
-    payload = memoryview(array).cast("B")
+    payload: memoryview = memoryview(array).cast("B")
     for offset in range(0, array.nbytes, chunk_bytes):
         yield payload[offset : offset + chunk_bytes]
 
@@ -212,18 +230,20 @@ def _iter_mapping_chunks(
     value: Mapping[object, object],
     *,
     chunk_bytes: int,
-) -> Iterator[CanonicalChunk]:
+) -> Iterator[bytes | memoryview]:
     """Yield a mapping sorted by normalized text keys."""
+    key: Any
+    item: Any
     normalized: list[tuple[str, object]] = []
     seen: set[str] = set()
     for key, item in value.items():
         if not isinstance(key, str):
-            msg = "canonical PyTree mappings require string keys"
-            raise CanonicalizationError(msg)
-        normalized_key = _normalize_text(key)
+            msg: str = "canonical PyTree mappings require string keys"
+            raise ValueError(msg)
+        normalized_key: str = _normalize_text(key)
         if normalized_key in seen:
-            msg = "mapping keys collide after Unicode normalization"
-            raise CanonicalizationError(msg)
+            msg: str = "mapping keys collide after Unicode normalization"
+            raise ValueError(msg)
         seen.add(normalized_key)
         normalized.append((normalized_key, item))
     normalized.sort(key=lambda pair: pair[0].encode("utf-8"))
@@ -237,9 +257,12 @@ def _iter_dataclass_chunks(
     value: object,
     *,
     chunk_bytes: int,
-) -> Iterator[CanonicalChunk]:
+) -> Iterator[bytes | memoryview]:
     """Yield dataclass or Equinox fields in declaration order."""
-    fields = dataclasses.fields(value)
+    field: Any
+    fields: tuple[dataclasses.Field[Any], ...] = dataclasses.fields(
+        cast(Any, value)
+    )
     yield _text_record(b"O", _qualified_name(type(value)))
     yield _length(len(fields))
     for field in fields:
@@ -255,8 +278,9 @@ def _iter_sequence_chunks(
     *,
     tag: bytes,
     chunk_bytes: int,
-) -> Iterator[CanonicalChunk]:
+) -> Iterator[bytes | memoryview]:
     """Yield one tagged list or tuple record."""
+    item: Any
     yield tag + _length(len(value))
     for item in value:
         yield from _iter_value_chunks(item, chunk_bytes=chunk_bytes)
@@ -266,7 +290,7 @@ def _iter_value_chunks(  # noqa: PLR0912
     value: object,
     *,
     chunk_bytes: int,
-) -> Iterator[CanonicalChunk]:
+) -> Iterator[bytes | memoryview]:
     """Yield canonical chunks for one supported value."""
     if value is None:
         yield b"N"
@@ -278,8 +302,8 @@ def _iter_value_chunks(  # noqa: PLR0912
         yield b"F" + bytes.fromhex(_float_bits(value))
     elif isinstance(value, complex):
         if not math.isfinite(value.real) or not math.isfinite(value.imag):
-            msg = "canonical records reject nonfinite complex values"
-            raise CanonicalizationError(msg)
+            msg: str = "canonical records reject nonfinite complex values"
+            raise ValueError(msg)
         yield b"C" + struct.pack(">dd", value.real, value.imag)
     elif isinstance(value, str):
         yield _text_record(b"S", value)
@@ -307,18 +331,39 @@ def _iter_value_chunks(  # noqa: PLR0912
             chunk_bytes=chunk_bytes,
         )
     elif isinstance(value, Mapping):
-        yield from _iter_mapping_chunks(value, chunk_bytes=chunk_bytes)
+        mapping: Mapping[object, object] = cast(
+            "Mapping[object, object]",
+            value,
+        )
+        yield from _iter_mapping_chunks(mapping, chunk_bytes=chunk_bytes)
     else:
-        msg = f"unsupported canonical PyTree value: {type(value)!r}"
-        raise CanonicalizationError(msg)
+        msg: str = f"unsupported canonical PyTree value: {type(value)!r}"
+        raise ValueError(msg)
 
 
+@jaxtyped(typechecker=beartype)
 def iter_canonical_pytree_chunks(
     tree: object,
     *,
-    chunk_bytes: int = _DEFAULT_ARRAY_CHUNK_BYTES,
-) -> Iterator[CanonicalChunk]:
+    chunk_bytes: int = CANONICAL_ARRAY_CHUNK_BYTES,
+) -> Iterator[bytes | memoryview]:
     """Yield canonical carrier bytes in bounded chunks.
+
+    The record preserves scalar, container, array-dtype, and array-shape
+    identity. It rejects values that have no finite deterministic
+    representation.
+
+    :see: :class:`~.test_canonical.TestIterCanonicalPytreeChunks`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           yield from _iter_value_chunks(tree, chunk_bytes=chunk_bytes)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -329,31 +374,38 @@ def iter_canonical_pytree_chunks(
 
     Yields
     ------
-    chunk : CanonicalChunk
+    chunk : bytes | memoryview
         Consecutive chunks of the canonical representation.
 
     Raises
     ------
     ValueError
-        If ``chunk_bytes`` is not positive.
-    CanonicalizationError
-        If the tree contains an unsupported or nonfinite value.
+        If ``chunk_bytes`` is not positive. This error also occurs if the tree
+        contains an unsupported or nonfinite value.
     """
     if chunk_bytes <= 0:
-        msg = "chunk_bytes must be positive"
+        msg: str = "chunk_bytes must be positive"
         raise ValueError(msg)
-    yield _PYTREE_PREFIX
+    yield CANONICAL_PYTREE_PREFIX
     yield from _iter_value_chunks(tree, chunk_bytes=chunk_bytes)
 
 
+@jaxtyped(typechecker=beartype)
 def canonical_pytree(tree: object) -> bytes:
     """Return canonical bytes for a supported carrier or PyTree.
+
+    The record preserves scalar, container, array-dtype, and array-shape
+    identity. It rejects values that have no finite deterministic
+    representation.
+
+    :see: :class:`~.test_canonical.TestCanonicalPytree`
+
 
     Parameters
     ----------
     tree : object
-        Supported nested scientific content. Equinox modules are represented
-        through their dataclass fields, including static metadata.
+        Supported nested scientific content. The record represents Equinox
+        modules through their dataclass fields, including static metadata.
 
     Returns
     -------
@@ -362,19 +414,14 @@ def canonical_pytree(tree: object) -> bytes:
 
     Notes
     -----
-    Use :func:`iter_canonical_pytree_chunks` when only a streaming checksum is
-    required for a large array.
+    Use :func:`iter_canonical_pytree_chunks` for a streaming checksum of a
+    large array.
     """
-    return b"".join(iter_canonical_pytree_chunks(tree))
+    encoded: bytes = b"".join(iter_canonical_pytree_chunks(tree))
+    return encoded
 
 
 __all__: list[str] = [
-    "CANONICAL_JSON_VERSION",
-    "CANONICAL_PYTREE_VERSION",
-    "CanonicalChunk",
-    "CanonicalizationError",
-    "JsonScalar",
-    "JsonValue",
     "canonical_json",
     "canonical_pytree",
     "iter_canonical_pytree_chunks",

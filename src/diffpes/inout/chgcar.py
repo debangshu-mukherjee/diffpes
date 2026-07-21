@@ -2,11 +2,10 @@
 
 Extended Summary
 ----------------
-Reads VASP CHGCAR volumetric files and returns a
-:class:`~diffpes.types.VolumetricData` PyTree containing the crystal
+Reads VASP CHGCAR volumetric files and returns a carrier with the crystal
 geometry, charge density, and optional magnetization density.
-For SOC calculations (4 grid blocks), returns an
-:class:`~diffpes.types.SOCVolumetricData` with vector magnetization.
+Scalar data uses :class:`~diffpes.types.VolumetricData`.
+Four-block vector data uses :class:`~diffpes.types.SOCVolumetricData`.
 
 Routine Listings
 ----------------
@@ -19,7 +18,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 from beartype import beartype
-from beartype.typing import Optional, Tuple
+from beartype.typing import Optional, TextIO, Tuple
 from jaxtyping import Array, Float, Int, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
@@ -39,7 +38,7 @@ from diffpes.types import (
 def read_chgcar(
     filename: str = "CHGCAR",
 ) -> VolumetricData | SOCVolumetricData:
-    """Parse a VASP CHGCAR file.
+    r"""Parse a VASP CHGCAR file.
 
     Supports three layouts:
 
@@ -47,78 +46,65 @@ def read_chgcar(
     - **ISPIN=2**: 2 grid blocks (charge + scalar magnetization).
     - **SOC** (LSORBIT): 4 grid blocks (charge, mx, my, mz).
 
-    Extended Summary
-    ----------------
-    The CHGCAR file produced by VASP begins with a POSCAR-style header
-    (comment, scaling factor, lattice vectors, species, atom counts,
-    coordinate type, and atomic positions) followed by one or more
-    volumetric data blocks on a real-space FFT grid. Each block starts
-    with a line of three integers (``NGX NGY NGZ``) giving the grid
-    dimensions, followed by the flattened grid values written in
-    Fortran column-major order (x fastest, z slowest).
+    The CHGCAR file starts with a POSCAR-style structural header. One or
+    more volumetric blocks follow the header on a real-space FFT grid.
+    Each block starts with the three grid dimensions. VASP then writes
+    the flattened values in Fortran column-major order.
+
+    :see: :class:`~.test_chgcar.TestReadChgcar`
 
     Implementation Logic
     --------------------
-    1. **Read POSCAR header** -- delegates to :func:`_read_poscar_header`
-       to obtain the lattice matrix, fractional coordinates, element
-       symbols, and atom counts.
+    1. **Read the structural header and remaining records**::
 
-    2. **Compute cell volume** -- ``|a . (b x c)|`` from the three
-       lattice vectors. Raises if the volume is zero (degenerate cell).
+           path: Path = Path(filename)
+           with path.open("r") as fid:
+               lattice, coords, symbols, atom_counts = _read_poscar_header(fid)
+               rest_lines: list[str] = [
+                   line.rstrip("\n") for line in fid
+               ]
 
-    3. **Locate first grid block** -- scans remaining lines for the
-       first line containing exactly three positive integers (the FFT
-       grid dimensions) via :func:`_find_next_grid_line`.
+       This separates the geometry from the subsequent volumetric blocks.
 
-    4. **Parse charge density** -- reads ``NGX * NGY * NGZ`` floats
-       from subsequent lines via :func:`_parse_float_block`, reshapes
-       in Fortran order, and divides by the cell volume to convert
-       from the VASP convention (charge * volume) to charge density
-       (electrons / Angstrom^3).
+    2. **Normalize the charge grid by the cell volume**::
 
-    5. **Parse magnetization blocks** -- repeats the grid-search and
-       float-parsing loop up to three more times (for ISPIN=2 or SOC
-       calculations). The loop terminates early if no further grid
-       header is found.
+           charge_grid: Float[NDArray, "Nx Ny Nz"] = (
+               charge_vals.reshape(grid_shape, order="F") / volume
+           )
 
-    6. **Construct return value** -- based on the number of
-       magnetization grids found:
+       This converts VASP charge-times-volume values to charge density.
 
-       * 0 grids: ISPIN=1. Returns ``VolumetricData`` with
-         ``magnetization=None``.
-       * 1 grid: ISPIN=2. Returns ``VolumetricData`` with a scalar
-         magnetization density (spin-up minus spin-down).
-       * 3 grids: SOC. Returns ``SOCVolumetricData`` with the
-         three grids stacked into a ``(NGX, NGY, NGZ, 3)``
-         magnetization vector field (mx, my, mz). The scalar
-         ``magnetization`` field is set to the mz component for
-         backward compatibility.
+    3. **Return the carrier for the detected layout**::
+
+           return volumetric
+
+       The grid-count branch binds scalar or SOC data to one output name.
 
     Parameters
     ----------
     filename : str, optional
-        Path to CHGCAR file. Default is ``"CHGCAR"``.
+        Path to the CHGCAR file. Default is ``"CHGCAR"``.
 
     Returns
     -------
     volumetric : VolumetricData or SOCVolumetricData
         ``VolumetricData`` for ISPIN=1 or ISPIN=2 files.
-        ``SOCVolumetricData`` for SOC files (4 grid blocks).
+        ``SOCVolumetricData`` for SOC files with four grid blocks.
 
     Raises
     ------
     ValueError
-        If the lattice volume is zero or if the grid dimensions cannot
-        be located or the data block is truncated.
+        If the lattice volume is zero, the grid dimensions are absent,
+        or a data block is incomplete.
 
     Notes
     -----
-    All returned densities are in units of electrons / Angstrom^3 (the
-    raw VASP values, which encode charge * volume, are divided by the
-    cell volume). Coordinates are stored in fractional form after
-    conversion from Cartesian if necessary. The grid arrays use
-    Fortran (column-major) ordering to match the VASP write convention.
+    The returned densities use electrons per cubic Angstrom. The parser
+    divides the raw VASP values by the cell volume. It stores coordinates
+    in fractional form and preserves the VASP Fortran grid order.
     """
+    fid: TextIO
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         lattice: Float[NDArray, "3 3"]
@@ -159,7 +145,6 @@ def read_chgcar(
         charge_vals.reshape(grid_shape, order="F") / volume
     )
 
-    # Read all remaining grid blocks (up to 3 for SOC: mx, my, mz)
     mag_grids: list[Float[NDArray, "Nx Ny Nz"]] = []
     scan_idx: int = end_idx
     while len(mag_grids) < N_SOC_MAG_BLOCKS:
@@ -184,10 +169,10 @@ def read_chgcar(
     )
     counts_arr: Int[Array, " S"] = jnp.asarray(atom_counts, dtype=jnp.int32)
 
+    volumetric: VolumetricData | SOCVolumetricData
     if len(mag_grids) == N_SOC_MAG_BLOCKS:
-        # SOC: blocks are mx, my, mz
         mag_vector: Float[NDArray, "Nx Ny Nz 3"] = np.stack(mag_grids, axis=-1)
-        result_soc: SOCVolumetricData = make_soc_volumetric_data(
+        volumetric = make_soc_volumetric_data(
             lattice=lattice_arr,
             coords=coords_arr,
             charge=charge_arr,
@@ -197,9 +182,9 @@ def read_chgcar(
             symbols=symbols,
             atom_counts=counts_arr,
         )
-        return result_soc
+        return volumetric
 
-    result: VolumetricData = make_volumetric_data(
+    volumetric = make_volumetric_data(
         lattice=lattice_arr,
         coords=coords_arr,
         charge=charge_arr,
@@ -212,12 +197,12 @@ def read_chgcar(
         symbols=symbols,
         atom_counts=counts_arr,
     )
-    return result
+    return volumetric
 
 
 @jaxtyped(typechecker=beartype)
 def _read_poscar_header(
-    fid,  # noqa: ANN001
+    fid: TextIO,
 ) -> Tuple[
     Float[NDArray, "3 3"],
     Float[NDArray, "N 3"],
@@ -256,7 +241,7 @@ def _read_poscar_header(
 
     Parameters
     ----------
-    fid : file-like
+    fid : TextIO
         Open file handle positioned at the start of the CHGCAR file.
 
     Returns
@@ -276,6 +261,9 @@ def _read_poscar_header(
         If a lattice line has fewer than 3 components or a coordinate
         line has fewer than 3 components.
     """
+    row: int
+    atom_idx: int
+
     _comment: str = fid.readline().strip()
     scale: float = float(fid.readline().strip())
 
@@ -318,7 +306,13 @@ def _read_poscar_header(
         coords = coords * scale
         coords = np.linalg.solve(lattice.T, coords.T).T
 
-    return lattice, coords, symbols, atom_counts
+    header_data: Tuple[
+        Float[NDArray, "3 3"],
+        Float[NDArray, "N 3"],
+        tuple[str, ...],
+        list[int],
+    ] = (lattice, coords, symbols, atom_counts)
+    return header_data
 
 
 @jaxtyped(typechecker=beartype)
@@ -362,6 +356,8 @@ def _find_next_grid_line(
         ``(NGX, NGY, NGZ)`` grid dimensions, or ``(0, 0, 0)`` if
         not found.
     """
+    idx: int
+
     for idx in range(start_idx, len(lines)):
         stripped: str = lines[idx].strip()
         if not stripped:
@@ -378,8 +374,13 @@ def _find_next_grid_line(
         except ValueError:
             continue
         if values[0] > 0 and values[1] > 0 and values[2] > 0:
-            return idx, values
-    return None, (0, 0, 0)
+            grid_line: Tuple[Optional[int], tuple[int, int, int]] = (
+                idx,
+                values,
+            )
+            return grid_line
+    grid_line = (None, (0, 0, 0))
+    return grid_line  # noqa: RET504 -- assign-before-return is required.
 
 
 @jaxtyped(typechecker=beartype)
@@ -437,6 +438,8 @@ def _parse_float_block(
         If the end of ``lines`` is reached before ``nvals`` floats
         have been collected.
     """
+    token: str
+
     values: list[float] = []
     idx: int = start_idx
 
@@ -464,7 +467,8 @@ def _parse_float_block(
         msg: str = "Unexpected end of CHGCAR data block."
         raise ValueError(msg)
     value_arr: Float[NDArray, " nvals"] = np.asarray(values, dtype=np.float64)
-    return value_arr, idx
+    parsed_block: Tuple[Float[NDArray, " nvalues"], int] = (value_arr, idx)
+    return parsed_block
 
 
 __all__: list[str] = [

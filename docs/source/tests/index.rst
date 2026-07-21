@@ -30,6 +30,7 @@ Coverage Map
    :maxdepth: 1
 
    inout
+   certify
    maths
    radial
    simul

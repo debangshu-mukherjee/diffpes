@@ -25,10 +25,11 @@ Routine Listings
 
 Notes
 -----
-All functions accept :class:`~diffpes.types.BandStructure`,
-:class:`~diffpes.types.OrbitalProjection`, and
-:class:`~diffpes.types.SimulationParams` PyTrees and return an
-:class:`~diffpes.types.ArpesSpectrum` PyTree.
+All functions accept three carriers.
+Band data uses :class:`~diffpes.types.BandStructure`.
+Orbital data uses :class:`~diffpes.types.OrbitalProjection`.
+Settings use :class:`~diffpes.types.SimulationParams`.
+Results use :class:`~diffpes.types.ArpesSpectrum`.
 
 The ``if is_unpolarized`` branches are intentional Python-side dispatch
 (config choice); they are not traced, so only one path is compiled per call.
@@ -75,28 +76,36 @@ def simulate_novice(
     making this the simplest model that still captures lifetime and
     instrumental broadening simultaneously.
 
+    :see: :class:`~.test_spectrum.TestSimulateNovice`
+
     Implementation Logic
     --------------------
-    1. **Build energy axis** via ``jnp.linspace(energy_min, energy_max,
-       fidelity)`` to define the output energy grid of shape ``(E,)``.
+    1. **Build the energy axis**::
 
-    2. **Sum all non-s orbital projections**
-       (``slice(1, 9)``, i.e., indices 1 through 8) across
-       both orbital type and atom axes to produce uniform per-band
-       weights of shape ``(K, B)``. The s-orbital (index 0) is excluded
-       because it contributes negligible photoemission intensity at
-       typical photon energies.
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min,
+               params.energy_max,
+               params.fidelity,
+           )
 
-    3. **Define ``_single_band``**: for one band at one k-point, compute
-       ``Fermi-Dirac(E_band) * Voigt(energy_axis, E_band, sigma, gamma)
-       * weight`` to yield a spectral contribution of shape ``(E,)``.
+       This defines the common energy grid for every k-point.
 
-    4. **Define ``_single_kpoint``**: ``jax.vmap`` ``_single_band`` over
-       the band index B, then sum contributions to produce the total
-       intensity at one k-point with shape ``(E,)``.
+    2. **Vectorize the band accumulation**::
 
-    5. **Outer vmap** ``_single_kpoint`` over k-points K to produce the
-       full intensity array of shape ``(K, E)``.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, weights
+           )
+
+       JAX maps the differentiable band calculation across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------
@@ -118,17 +127,17 @@ def simulate_novice(
         Simulated ARPES intensity map with ``intensity`` of shape
         ``(K, E)`` and ``energy_axis`` of shape ``(E,)``.
 
-    See Also
-    --------
-    simulate_novice_expanded : Expanded variant that returns per-band
-        contributions before summation.
-
     Notes
     -----
     Uses Voigt profile (combined Gaussian-Lorentzian) and sums all
     non-s orbital contributions with equal weight. This is appropriate
     when orbital cross-section data is unavailable or when a quick
     qualitative comparison with experiment is sufficient.
+
+    See Also
+    --------
+    simulate_novice_expanded : Expanded variant that returns per-band
+        contributions before summation.
     """
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min,
@@ -225,30 +234,36 @@ def simulate_basic(
     first-order approximation to photoionization cross-sections without
     requiring tabulated atomic data.
 
+    :see: :class:`~.test_spectrum.TestSimulateBasic`
+
     Implementation Logic
     --------------------
-    1. **Build energy axis** via ``jnp.linspace(energy_min, energy_max,
-       fidelity)`` to define the output energy grid of shape ``(E,)``.
+    1. **Build the energy axis**::
 
-    2. **Compute heuristic weights** from ``photon_energy`` via
-       :func:`~diffpes.simul.crosssections.heuristic_weights`, returning
-       a weight vector of shape ``(9,)`` with empirical cross-section
-       approximations per orbital channel.
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min,
+               params.energy_max,
+               params.fidelity,
+           )
 
-    3. **Weight projections by heuristic weights** (skipping the
-       s-orbital at index 0): multiply
-       ``proj[..., slice(1, 9)]`` element-wise by
-       ``orb_w[slice(1, 9)]``, then sum over orbital and atom axes to yield
-       per-band weights of shape ``(K, B)``.
+       This defines the common energy grid for every k-point.
 
-    4. **Define ``_single_band``**: for one band at one k-point, compute
-       ``Fermi-Dirac(E_band) * Gaussian(energy_axis, E_band, sigma)
-       * weight`` to yield a spectral contribution of shape ``(E,)``.
+    2. **Vectorize the band accumulation**::
 
-    5. **Double vmap over k-points and bands**: ``jax.vmap``
-       ``_single_band`` over B inside ``_single_kpoint``, then
-       ``jax.vmap`` ``_single_kpoint`` over K to produce the full
-       intensity array of shape ``(K, E)``.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, weights
+           )
+
+       JAX maps the differentiable Gaussian calculation across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------
@@ -376,30 +391,36 @@ def simulate_basicplus(
     cross-section magnitudes are correctly applied before orbital
     selection.
 
+    :see: :class:`~.test_spectrum.TestSimulateBasicplus`
+
     Implementation Logic
     --------------------
-    1. **Build energy axis** via ``jnp.linspace(energy_min, energy_max,
-       fidelity)`` to define the output energy grid of shape ``(E,)``.
+    1. **Build the energy axis**::
 
-    2. **Compute Yeh-Lindau weights** from ``photon_energy`` via
-       :func:`~diffpes.simul.crosssections.yeh_lindau_weights`, returning
-       interpolated photoionization cross-sections of shape ``(9,)``.
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min,
+               params.energy_max,
+               params.fidelity,
+           )
 
-    3. **Weight ALL projections by cross-sections, then sum non-s**:
-       multiply the full ``proj`` array by ``orb_w`` across all 9
-       orbital channels, then apply ``slice(1, 9)`` (indices 1..8) and
-       sum over orbital and atom axes to yield per-band weights of
-       shape ``(K, B)``.
-       This order matters: weighting before slicing ensures correct
-       normalization.
+       This defines the common energy grid for every k-point.
 
-    4. **Define ``_single_band``**: for one band at one k-point, compute
-       ``Fermi-Dirac(E_band) * Gaussian(energy_axis, E_band, sigma)
-       * weight`` to yield a spectral contribution of shape ``(E,)``.
+    2. **Vectorize the band accumulation**::
 
-    5. **Double vmap over k-points and bands**: same ``_single_band``
-       inside ``_single_kpoint`` pattern as ``simulate_basic``, with
-       ``jax.vmap`` over B then K to produce shape ``(K, E)``.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, weights
+           )
+
+       JAX maps the weighted Gaussian calculation across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------
@@ -529,36 +550,36 @@ def simulate_advanced(
     selection vector. Supports both polarized (linear, circular) and
     unpolarized light configurations.
 
+    :see: :class:`~.test_spectrum.TestSimulateAdvanced`
+
     Implementation Logic
     --------------------
-    1. **Build energy axis** via ``jnp.linspace(energy_min, energy_max,
-       fidelity)`` and **compute Yeh-Lindau weights** from
-       ``photon_energy``, same as ``simulate_basicplus``.
+    1. **Build the energy axis**::
 
-    2. **Branch on unpolarized vs polarized**:
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min,
+               params.energy_max,
+               params.fidelity,
+           )
 
-       a. **Unpolarized**: build orthogonal polarization vectors
-          ``e_s``, ``e_p`` from ``(theta, phi)`` via
-          :func:`~diffpes.simul.polarization.build_polarization_vectors`.
-          For each polarization vector, compute dipole matrix elements
-          of shape ``(9,)`` via
-          :func:`~diffpes.simul.polarization.dipole_matrix_elements`.
-          Weight projections by ``orb_w * m_s`` and ``orb_w * m_p``
-          respectively, sum non-s channels over orbital and atom axes
-          to get ``ws_sum`` and ``wp_sum`` of shape ``(K, B)``, compute
-          ``|ws_sum|^2`` and ``|wp_sum|^2``, then average:
-          ``band_intensity = (i_s + i_p) / 2``.
+       This defines the common energy grid for every k-point.
 
-       b. **Polarized**: build the electric field vector E via
-          :func:`~diffpes.simul.polarization.build_efield`, compute
-          dipole matrix elements ``m_elem`` of shape ``(9,)``, weight
-          projections by ``orb_w * m_elem``, sum non-s channels, and
-          compute ``band_intensity = |w_sum|^2``.
+    2. **Vectorize the polarized band accumulation**::
 
-    3. **Double vmap with ``band_intensity``**: define ``_single_band``
-       as ``Fermi-Dirac * Gaussian * band_intensity``, vmap over bands
-       B inside ``_single_kpoint``, then vmap over k-points K to
-       produce shape ``(K, E)``.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, band_intensity
+           )
+
+       JAX maps the differentiable polarization model across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------
@@ -725,33 +746,36 @@ def simulate_expert(
     dipole matrix element weighting. This level should be used when
     quantitative comparison with experimental spectra is required.
 
+    :see: :class:`~.test_spectrum.TestSimulateExpert`
+
     Implementation Logic
     --------------------
-    1. **Build energy axis** and **compute Yeh-Lindau weights**, same
-       as ``simulate_advanced``.
+    1. **Build the energy axis**::
 
-    2. **Branch on unpolarized vs polarized**: identical logic to
-       ``simulate_advanced`` for computing ``band_intensity`` of shape
-       ``(K, B)`` from dipole matrix elements and cross-sections.
+           energy_axis: Float[Array, " E"] = jnp.linspace(
+               params.energy_min,
+               params.energy_max,
+               params.fidelity,
+           )
 
-       a. **Unpolarized**: build ``e_s``, ``e_p`` polarization vectors,
-          compute dipole elements for each, weight projections by
-          ``orb_w * m_s`` and ``orb_w * m_p``, sum non-s channels,
-          compute ``|sum|^2`` for each, average to get
-          ``band_intensity = (i_s + i_p) / 2``.
+       This defines the common energy grid for every k-point.
 
-       b. **Polarized**: build E-field vector, compute dipole elements,
-          weight projections, sum non-s, compute
-          ``band_intensity = |w_sum|^2``.
+    2. **Vectorize the polarized band accumulation**::
 
-    3. **Double vmap with ``band_intensity``**: define ``_single_band``
-       using **Voigt(sigma, gamma)** instead of Gaussian. This is the
-       key distinction from ``simulate_advanced``: the Voigt profile
-       ``V(E; E_band, sigma, gamma)`` accounts for both instrumental
-       resolution (Gaussian, width ``sigma``) and quasiparticle
-       lifetime broadening (Lorentzian, width ``gamma``)
-       simultaneously. Then vmap over bands B and k-points K to produce
-       the full intensity of shape ``(K, E)``.
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, band_intensity
+           )
+
+       JAX maps the differentiable Voigt model across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------
@@ -921,19 +945,34 @@ def simulate_soc(
     (spin up/down for x, y, z). Uses Voigt broadening and the same
     Yeh-Lindau and polarization logic as ``simulate_expert``.
 
+    :see: :class:`~.test_spectrum.TestSimulateSoc`
+
     Implementation Logic
     --------------------
-    1. **Orbital intensity**: Compute ``band_intensity`` exactly as in
-       ``simulate_expert`` (Yeh-Lindau, dipole matrix elements,
-       unpolarized or polarized branch).
-    2. **Spin vector**: From ``spin`` (K, B, A, 6) form (Sx, Sy, Sz) per
-       (k, band, atom): Sx = spin[...,0]+spin[...,1], Sy = spin[...,2]+
-       spin[...,3], Sz = spin[...,4]+spin[...,5]. Sum over atoms to get
-       spin per (k, band) of shape (K, B, 3).
-    3. **SOC correction**: k_photon = photon_wavevector(theta, phi).
-       spin_dot_k = (K, B). band_intensity_soc = band_intensity *
-       (1 + ls_scale * spin_dot_k). Then Voigt convolution and vmap
-       as in expert.
+    1. **Compute the spin-orbit correction**::
+
+           band_intensity_soc: Float[Array, "K B"] = band_intensity * (
+               1.0 + ls_arr * spin_dot_k
+           )
+
+       This modulates the orbital intensity by the photon-aligned spin.
+
+    2. **Vectorize the corrected band accumulation**::
+
+           intensity: Float[Array, "K E"] = jax.vmap(_single_kpoint)(
+               bands.eigenvalues, band_intensity_soc
+           )
+
+       JAX maps the differentiable spin-orbit model across all k-points.
+
+    3. **Build the spectrum carrier**::
+
+           spectrum: ArpesSpectrum = make_arpes_spectrum(
+               intensity=intensity,
+               energy_axis=energy_axis,
+           )
+
+       The factory validates and stores the computed arrays.
 
     Parameters
     ----------

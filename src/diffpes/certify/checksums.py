@@ -15,15 +15,21 @@ bounded chunks.
 Routine Listings
 ----------------
 :func:`checksum_bytes`
-    Compute a typed checksum for an in-memory byte record.
+    Return a non-security consistency checksum for ``data``.
+:func:`checksum_chunks`
+    Compute a consistency checksum over consecutive byte chunks.
+:func:`checksum_file`
+    Stream exact file bytes into a consistency checksum.
 :func:`checksum_pytree`
-    Stream the canonical representation of a supported carrier.
+    Stream a canonical carrier into a consistency checksum.
+:func:`parse_checksum`
+    Parse and validate one checksum string.
 :func:`artifact_ref`
-    Describe exact source bytes and normalized scientific content separately.
+    Build separate byte, normalized-content, and semantic identities.
 :func:`semantic_checksum`
-    Include scientific units, axes, frames, and conventions in an identity.
+    Identify content together with its declared scientific meaning.
 :func:`result_checksum`
-    Include the declared numerical identity of a result.
+    Identify a result under a declared numerical configuration.
 """
 
 from __future__ import annotations
@@ -32,37 +38,30 @@ import re
 import zlib
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from diffpes.types.certification import make_artifact_ref
+from beartype import beartype
+from beartype.typing import TYPE_CHECKING, Any
+from jaxtyping import jaxtyped
 
-from .canonical import (
+from diffpes.types import (
     CANONICAL_PYTREE_VERSION,
-    CanonicalChunk,
-    canonical_pytree,
-    iter_canonical_pytree_chunks,
+    CHECKSUM_ALGORITHM,
+    CHECKSUM_FILE_CHUNK_BYTES,
+    CHECKSUM_PATTERN,
+    CHECKSUM_RECORD_KIND_PATTERN,
+    make_artifact_ref,
 )
+
+from .canonical import iter_canonical_pytree_chunks
 
 if TYPE_CHECKING:
-    from diffpes.types.certification import ArtifactRef
-
-type SemanticDescriptor = object
-type NumericalIdentity = object
-
-CHECKSUM_ALGORITHM: str = "crc32"
-CHECKSUM_FORMAT_VERSION: str = "1"
-_CHECKSUM_RE: re.Pattern[str] = re.compile(
-    r"^crc32:canonical-(?P<canonical>[0-9]+):"
-    r"(?P<kind>[a-z][a-z0-9-]*):(?P<value>[0-9a-f]{8})$"
-)
-_RECORD_KIND_RE: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9-]*$")
-_FILE_CHUNK_BYTES: int = 1024 * 1024
+    from diffpes.types import ArtifactRef
 
 
 def _validate_record_kind(record_kind: str) -> None:
     """Reject ambiguous or unstable checksum record-kind labels."""
-    if _RECORD_KIND_RE.fullmatch(record_kind) is None:
-        msg = (
+    if CHECKSUM_RECORD_KIND_PATTERN.fullmatch(record_kind) is None:
+        msg: str = (
             "record_kind must start with a lowercase letter and contain "
             "only lowercase letters, digits, and hyphens"
         )
@@ -71,40 +70,75 @@ def _validate_record_kind(record_kind: str) -> None:
 
 def _format_checksum(value: int, *, record_kind: str) -> str:
     """Format a CRC32 value with its bookkeeping context."""
-    return (
+    checksum: str = (
         f"{CHECKSUM_ALGORITHM}:canonical-{CANONICAL_PYTREE_VERSION}:"
         f"{record_kind}:{value & 0xFFFFFFFF:08x}"
     )
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def checksum_chunks(
-    chunks: Iterable[CanonicalChunk],
+    chunks: Iterable[bytes | memoryview],
     *,
     record_kind: str,
 ) -> str:
     """Compute a consistency checksum over consecutive byte chunks.
 
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestChecksumChunks`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = _format_checksum(value, record_kind=record_kind)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
     Parameters
     ----------
-    chunks : Iterable[CanonicalChunk]
+    chunks : Iterable[bytes | memoryview]
         Consecutive byte-like pieces of one record.
     record_kind : str
-        Stable description such as ``"normalized-content"`` or ``"result"``.
+        Stable description, such as ``"normalized-content"`` or ``"result"``.
 
     Returns
     -------
     checksum : str
         Versioned, typed CRC32 consistency checksum.
     """
+    chunk: Any
     _validate_record_kind(record_kind)
-    value = 0
+    value: int = 0
     for chunk in chunks:
         value = zlib.crc32(chunk, value)
-    return _format_checksum(value, record_kind=record_kind)
+    checksum: str = _format_checksum(value, record_kind=record_kind)
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def checksum_bytes(data: bytes, *, record_kind: str) -> str:
     """Return a non-security consistency checksum for ``data``.
+
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestChecksumBytes`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = checksum_chunks((data,), record_kind=record_kind)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -118,11 +152,28 @@ def checksum_bytes(data: bytes, *, record_kind: str) -> str:
     checksum : str
         Typed CRC32 bookkeeping value.
     """
-    return checksum_chunks((data,), record_kind=record_kind)
+    checksum: str = checksum_chunks((data,), record_kind=record_kind)
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def checksum_pytree(tree: object, *, record_kind: str) -> str:
     """Stream a canonical carrier into a consistency checksum.
+
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestChecksumPytree`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = checksum_chunks(chunks, record_kind=record_kind)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -136,16 +187,33 @@ def checksum_pytree(tree: object, *, record_kind: str) -> str:
     checksum : str
         Typed CRC32 bookkeeping value.
     """
-    chunks = iter_canonical_pytree_chunks(tree)
-    return checksum_chunks(chunks, record_kind=record_kind)
+    chunks: Iterable[bytes | memoryview] = iter_canonical_pytree_chunks(tree)
+    checksum: str = checksum_chunks(chunks, record_kind=record_kind)
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def checksum_file(path: str | Path, *, record_kind: str) -> str:
     """Stream exact file bytes into a consistency checksum.
 
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestChecksumFile`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = checksum_chunks(chunks(), record_kind=record_kind)
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
     Parameters
     ----------
-    path : str or Path
+    path : str | Path
         Existing regular file.
     record_kind : str
         Stable record-kind label.
@@ -155,18 +223,42 @@ def checksum_file(path: str | Path, *, record_kind: str) -> str:
     checksum : str
         Typed CRC32 bookkeeping value.
     """
-    source = Path(path)
+    source: Path = Path(path)
 
     def chunks() -> Iterable[bytes]:
+        stream: Any
+        chunk: Any
         with source.open("rb") as stream:
-            while chunk := stream.read(_FILE_CHUNK_BYTES):
+            while chunk := stream.read(CHECKSUM_FILE_CHUNK_BYTES):
                 yield chunk
 
-    return checksum_chunks(chunks(), record_kind=record_kind)
+    checksum: str = checksum_chunks(chunks(), record_kind=record_kind)
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def parse_checksum(checksum: str) -> tuple[str, str, str, str]:
     """Parse and validate one checksum string.
+
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestParseChecksum`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           parsed: tuple[str, str, str, str] = (
+                   CHECKSUM_ALGORITHM,
+                   match.group("canonical"),
+                   match.group("kind"),
+                   match.group("value"),
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
@@ -184,29 +276,46 @@ def parse_checksum(checksum: str) -> tuple[str, str, str, str]:
     ValueError
         If ``checksum`` is not in the current explicit format.
     """
-    match = _CHECKSUM_RE.fullmatch(checksum)
+    match: re.Match[str] | None = CHECKSUM_PATTERN.fullmatch(checksum)
     if match is None:
-        msg = "invalid DiffPES consistency-checksum format"
+        msg: str = "invalid DiffPES consistency-checksum format"
         raise ValueError(msg)
-    return (
+    parsed: tuple[str, str, str, str] = (
         CHECKSUM_ALGORITHM,
         match.group("canonical"),
         match.group("kind"),
         match.group("value"),
     )
+    return parsed
 
 
+@jaxtyped(typechecker=beartype)
 def semantic_checksum(
     value: object,
-    semantics: SemanticDescriptor,
+    semantics: object,
 ) -> str:
     """Identify content together with its declared scientific meaning.
+
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestSemanticChecksum`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = checksum_pytree(payload, record_kind="semantic")
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
     value : object
         Normalized scientific content.
-    semantics : SemanticDescriptor
+    semantics : object
         Units, axes, frames, conventions, schema, and other meaning-bearing
         declarations.
 
@@ -215,18 +324,39 @@ def semantic_checksum(
     checksum : str
         Non-security semantic consistency checksum.
     """
-    payload = ("org.diffpes.semantic-record.v1", value, semantics)
-    return checksum_pytree(payload, record_kind="semantic")
+    payload: tuple[str, object, object] = (
+        "org.diffpes.semantic-record.v1",
+        value,
+        semantics,
+    )
+    checksum: str = checksum_pytree(payload, record_kind="semantic")
+    return checksum
 
 
-def result_checksum(value: object, numerical: NumericalIdentity) -> str:
+@jaxtyped(typechecker=beartype)
+def result_checksum(value: object, numerical: object) -> str:
     """Identify a result under a declared numerical configuration.
+
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestResultChecksum`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           checksum: str = checksum_pytree(payload, record_kind="result")
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
 
     Parameters
     ----------
     value : object
         Result carrier.
-    numerical : NumericalIdentity
+    numerical : object
         Precision, backend-independent tolerance semantics, and any other
         numerical configuration that defines result identity.
 
@@ -235,24 +365,53 @@ def result_checksum(value: object, numerical: NumericalIdentity) -> str:
     checksum : str
         Non-security result consistency checksum.
     """
-    payload = ("org.diffpes.result-record.v1", value, numerical)
-    return checksum_pytree(payload, record_kind="result")
+    payload: tuple[str, object, object] = (
+        "org.diffpes.result-record.v1",
+        value,
+        numerical,
+    )
+    checksum: str = checksum_pytree(payload, record_kind="result")
+    return checksum
 
 
+@jaxtyped(typechecker=beartype)
 def artifact_ref(
     path: str | Path,
     normalized: object,
     *,
     role: str,
     media_type: str = "application/octet-stream",
-    semantics: SemanticDescriptor | None = None,
+    semantics: object | None = None,
     artifact_id: str | None = None,
 ) -> ArtifactRef:
     """Build separate byte, normalized-content, and semantic identities.
 
+    The CRC32 value detects accidental disagreement in canonical scientific
+    records. It is bookkeeping evidence, not cryptographic authentication.
+
+    :see: :class:`~.test_checksums.TestArtifactRef`
+
+
+    Implementation Logic
+    --------------------
+    1. **Bind the documented output**::
+
+           reference: ArtifactRef = make_artifact_ref(
+                   artifact_id=resolved_id,
+                   media_type=media_type,
+                   byte_checksum=byte_value,
+                   content_checksum=content_value,
+                   semantic_checksum=semantic_value,
+                   locator=str(source),
+                   role=role,
+               )
+
+       This expression follows the explicit validation and transformations in
+       the function body. It keeps the documented output bound before return.
+
     Parameters
     ----------
-    path : str or Path
+    path : str | Path
         Source artifact whose exact bytes are recorded.
     normalized : object
         Parsed, normalized scientific carrier derived from the source.
@@ -260,12 +419,12 @@ def artifact_ref(
         Scientific role of this artifact in the execution.
     media_type : str, optional
         Declared media type of the source bytes.
-    semantics : SemanticDescriptor, optional
+    semantics : object | None, optional
         Meaning-bearing declarations. By default, the role and normalized
         carrier type form the minimal semantic descriptor.
-    artifact_id : str, optional
-        Stable caller-owned identity. By default a local identity is derived
-        from the byte checksum value for bookkeeping convenience.
+    artifact_id : str | None, optional
+        Stable caller-owned identity. By default, the function derives a local
+        identity from the byte checksum value.
 
     Returns
     -------
@@ -273,13 +432,13 @@ def artifact_ref(
         Immutable certification carrier with three deliberately separate
         consistency checksums.
     """
-    source = Path(path)
-    byte_value = checksum_file(source, record_kind="artifact-bytes")
-    content_value = checksum_pytree(
+    source: Path = Path(path)
+    byte_value: str = checksum_file(source, record_kind="artifact-bytes")
+    content_value: str = checksum_pytree(
         normalized,
         record_kind="normalized-content",
     )
-    descriptor: SemanticDescriptor
+    descriptor: object
     if semantics is None:
         descriptor = {
             "carrier_type": (
@@ -290,13 +449,13 @@ def artifact_ref(
         }
     else:
         descriptor = semantics
-    semantic_value = semantic_checksum(normalized, descriptor)
+    semantic_value: str = semantic_checksum(normalized, descriptor)
     if artifact_id is None:
-        checksum_value = parse_checksum(byte_value)[3]
-        resolved_id = f"artifact-{checksum_value}"
+        checksum_value: str = parse_checksum(byte_value)[3]
+        resolved_id: str = f"artifact-{checksum_value}"
     else:
         resolved_id = artifact_id
-    return make_artifact_ref(
+    reference: ArtifactRef = make_artifact_ref(
         artifact_id=resolved_id,
         media_type=media_type,
         byte_checksum=byte_value,
@@ -305,24 +464,11 @@ def artifact_ref(
         locator=str(source),
         role=role,
     )
-
-
-def canonical_checksum_bytes(tree: object) -> bytes:
-    """Return canonical bytes used by :func:`checksum_pytree` for diagnostics.
-
-    This convenience helper is intended for golden tests and inspection. It
-    assembles the complete record and should not be used for large arrays.
-    """
-    return canonical_pytree(tree)
+    return reference
 
 
 __all__: list[str] = [
-    "CHECKSUM_ALGORITHM",
-    "CHECKSUM_FORMAT_VERSION",
-    "NumericalIdentity",
-    "SemanticDescriptor",
     "artifact_ref",
-    "canonical_checksum_bytes",
     "checksum_bytes",
     "checksum_chunks",
     "checksum_file",

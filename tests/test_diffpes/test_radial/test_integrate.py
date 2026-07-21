@@ -9,15 +9,13 @@ a known analytical Fourier-transform result for Slater 1s orbitals, and
 verify the autodiff gradient with respect to the Slater exponent zeta
 against a central finite-difference estimate.
 
-Routine Listings
-----------------
-:class:`TestRadialIntegral`
-    Tests for radial_integral.
 """
 
 import chex
 import jax
 import jax.numpy as jnp
+from beartype.typing import Any, Callable
+from jaxtyping import Array
 
 from diffpes.radial import radial_integral, slater_radial
 
@@ -30,10 +28,12 @@ class TestRadialIntegral(chex.TestCase):
     against analytical results for Slater-type orbitals and verifies
     that JAX autodiff gradients with respect to the Slater exponent
     zeta agree with finite-difference estimates.
+
+    :see: :func:`~diffpes.radial.radial_integral`
     """
 
     @chex.variants(with_jit=True, without_jit=True)
-    def test_l0_slater_matches_analytic_integral(self):
+    def test_l0_slater_matches_analytic_integral(self) -> None:
         """Verify the l'=0 radial integral matches the analytical Fourier transform.
 
         For a Slater 1s orbital R(r) = N * r^0 * exp(-zeta*r) with
@@ -44,7 +44,19 @@ class TestRadialIntegral(chex.TestCase):
         agrees with the analytical expression to within 5e-3 in both
         absolute and relative tolerance.  Run under both JIT and eager
         modes via ``chex.variants``.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        zeta: float
+        r: Array
+        radial: Array
+        k: Array
+        fn: Callable[..., Any]
+        numeric: Array
+        norm: Array
+        expected: Array
+
         zeta = 1.2
         r = jnp.linspace(0.0, 50.0, 25000, dtype=jnp.float64)
         radial = slater_radial(r, n=1, zeta=zeta)
@@ -62,7 +74,7 @@ class TestRadialIntegral(chex.TestCase):
             numeric, expected, atol=5.0e-3, rtol=5.0e-3
         )
 
-    def test_gradient_wrt_zeta_matches_finite_difference(self):
+    def test_gradient_wrt_zeta_matches_finite_difference(self) -> None:
         """Verify autodiff gradient w.r.t. zeta matches finite differences.
 
         Defines a scalar objective that computes the real part of the
@@ -73,13 +85,26 @@ class TestRadialIntegral(chex.TestCase):
         within 5e-3 (atol and rtol), confirming that the numerical
         integration (trapezoid rule), Slater radial construction, and
         Bessel evaluation are all smoothly differentiable end-to-end.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        r: Array
+        k: Array
+        zeta0: Array
+        eps: Array
+        grad_auto: Array
+        fd: Array
+
         r = jnp.linspace(0.0, 45.0, 18000, dtype=jnp.float64)
         k = jnp.asarray(0.9, dtype=jnp.float64)
         zeta0 = jnp.asarray(1.1, dtype=jnp.float64)
         eps = jnp.asarray(5.0e-4, dtype=jnp.float64)
 
         def objective(zeta: chex.Numeric) -> chex.Array:
+            radial: Array
+            value: Array
+
             radial = slater_radial(r, n=1, zeta=jnp.asarray(zeta))
             value = radial_integral(k, r, radial, l_prime=0)
             return jnp.real(value)
@@ -94,15 +119,24 @@ class TestRadialIntegrateErrors:
 
     Validates that ``radial_integral`` raises ``ValueError`` for
     negative ``l_prime`` values.
+
+    :see: :func:`~diffpes.radial.radial_integral`
     """
 
-    def test_negative_l_prime_raises(self):
+    def test_negative_l_prime_raises(self) -> None:
         """Verify that l_prime < 0 raises ValueError.
 
         Calls ``radial_integral`` with ``l_prime=-1`` and asserts a
         ``ValueError`` matching "non-negative" is raised, covering the
         guard at the top of the function.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        r: Array
+        radial: Array
+        k: Array
+
         import jax.numpy as jnp
         import pytest
 

@@ -3,7 +3,17 @@ diffpes.inout tests
 
 Validation and regression tests for :mod:`diffpes.inout`.
 
+.. automodule:: tests.test_diffpes.test_inout.test_certificate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: tests.test_diffpes.test_inout.test_hdf5
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_hdf5_all_carriers
    :members:
    :undoc-members:
    :show-inheritance:
@@ -17,8 +27,34 @@ Validation and regression tests for :mod:`diffpes.inout`.
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: Axes, AxesImage, Figure, PathCollection
 
-.. automodule:: tests.test_diffpes.test_inout.test_vasp_readers
+.. automodule:: tests.test_diffpes.test_inout.test_chgcar
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_doscar
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_eigenval
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_kpoints
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_poscar
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_inout.test_procar
    :members:
    :undoc-members:
    :show-inheritance:

@@ -20,6 +20,7 @@ from diffpes.tightb import (
 from diffpes.types import (
     BandStructure,
     DiagonalizedBands,
+    OrbitalBasis,
     OrbitalProjection,
     PolarizationConfig,
     SimulationParams,
@@ -203,7 +204,7 @@ def toy_slater_params() -> SlaterParams:
     magnetic quantum number 0, and a finite positive exponent of 1.625 inverse
     Bohr. The analytic fixture policy uses no random seed.
     """
-    basis = make_orbital_basis(
+    basis: OrbitalBasis = make_orbital_basis(
         n_values=(2, 2),
         l_values=(1, 1),
         m_values=(0, 0),

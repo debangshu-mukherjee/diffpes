@@ -7,15 +7,17 @@ forward result; its `certificate` is the scientific-assurance record.
 
 ```python
 from diffpes.certify import (
-    TB_RADIAL_MODEL_ID,
-    TB_RADIAL_MODEL_VERSION,
     certify_forward,
     explain_claim,
     prepare_certification,
     register_builtin_models,
     summarize_certificate,
 )
-from diffpes.types import make_execution_manifest
+from diffpes.types import (
+    TB_RADIAL_MODEL_ID,
+    TB_RADIAL_MODEL_VERSION,
+    make_execution_manifest,
+)
 
 register_builtin_models()
 
@@ -116,9 +118,10 @@ from_json = load_certificate_json("tb-radial.certificate.json")
 from_h5 = load_certificate_h5("tb-radial.h5", "spectrum")
 ```
 
-The stored consistency checksum is only an accidental-corruption guard. The
-scientific assurance comes from the explicit contracts, differentiable
-diagnostics, evidence, and policy evaluation recorded in the certificate.
+The stored consistency marker detects accidental storage mismatches only. It
+provides no security or physical-assurance claim. Scientific assurance comes
+from the explicit contracts, differentiable diagnostics, evidence, and policy
+evaluation recorded in the certificate.
 
 ## Compare reruns
 

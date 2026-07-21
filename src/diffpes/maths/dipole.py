@@ -27,12 +27,16 @@ Routine Listings
     Compute dipole matrix element for a single orbital (n, l, m).
 """
 
+from functools import partial
+
+import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Complex, Float, jaxtyped
+from beartype.typing import Callable
+from jaxtyping import Array, Complex, Float, Integer, jaxtyped
 
 from diffpes.radial import radial_integral, slater_radial
-from diffpes.types import SlaterParams
+from diffpes.types import OrbitalBasis, SlaterParams
 
 from .gaunt import GAUNT_TABLE, L_MAX
 from .safe import safe_arccos, safe_arctan2, safe_divide, safe_norm
@@ -52,8 +56,6 @@ def _cartesian_to_spherical_dipole(
     - q =  0 corresponds to Y_1^0(real) ~ cos(theta) ~ z
     - q = +1 corresponds to Y_1^{+1}(real) ~ sin(theta)cos(phi) ~ x
 
-    Extended Summary
-    ----------------
     The dipole operator :math:`\hat{r}` is expanded in the real spherical
     harmonic basis for l=1. In Cartesian coordinates the three components
     of the position vector are :math:`(x, y, z)`, and they map to real
@@ -88,7 +90,6 @@ def _cartesian_to_spherical_dipole(
     ex: Complex[Array, ""] = efield[0]
     ey: Complex[Array, ""] = efield[1]
     ez: Complex[Array, ""] = efield[2]
-    # q=+1 ~ x, q=-1 ~ y, q=0 ~ z (real spherical harmonic convention)
     e_spherical: Complex[Array, " 3"] = jnp.array(
         [ey, ez, ex], dtype=jnp.complex128
     )
@@ -114,8 +115,6 @@ def dipole_matrix_element_single(
     where the sum is over dipole components q in {-1, 0, +1} and
     final-state angular momenta l' in {l-1, l+1}.
 
-    Extended Summary
-    ----------------
     This function assembles the full photoemission dipole matrix element
     by combining four ingredients:
 
@@ -148,6 +147,8 @@ def dipole_matrix_element_single(
     guard conventions select zero subgradients at the zero vector and at the
     angular coordinate singularities without perturbing non-singular values.
 
+    :see: :class:`~.test_dipole.TestDipoleMatrixElementSingle`
+
     Parameters
     ----------
     k_vec : Float[Array, " 3"]
@@ -177,18 +178,21 @@ def dipole_matrix_element_single(
     for JIT compilation but means different orbitals trace distinct
     XLA programs.
     """
+    q_idx: int
+    q: int
+    lp: int
+
     k_mag: Float[Array, ""] = safe_norm(k_vec)
     k_hat: Float[Array, " 3"] = safe_divide(k_vec, k_mag)
     theta_k: Float[Array, ""] = safe_arccos(k_hat[2])
     phi_k: Float[Array, ""] = safe_arctan2(k_hat[1], k_hat[0])
 
-    # Polarization in spherical dipole components
     e_sph: Complex[Array, " 3"] = _cartesian_to_spherical_dipole(efield)
 
     M_total: Complex[Array, ""] = jnp.zeros((), dtype=jnp.complex128)
 
     for q_idx, q in enumerate((-1, 0, 1)):
-        mp: int = m + q  # final state m'
+        mp: int = m + q
         eq: Complex[Array, ""] = e_sph[q_idx]
 
         for lp in (l - 1, l + 1):
@@ -197,17 +201,14 @@ def dipole_matrix_element_single(
             if abs(mp) > lp:
                 continue
 
-            # Radial integral B^{l'}(|k|)
             B_lp: Float[Array, ""] = radial_integral(
                 k_mag, r_grid, radial_values, lp
             )
 
-            # Gaunt coefficient G(l, m, l', m')
             G: Float[Array, ""] = GAUNT_TABLE[
                 l, m + L_MAX, q + 1, lp, mp + L_MAX
             ]
 
-            # Spherical harmonic Y_{l'}^{m'}(k_hat)
             Y_lp_mp: Float[Array, ""] = real_spherical_harmonic(
                 lp, mp, theta_k, phi_k
             )
@@ -229,8 +230,6 @@ def dipole_intensity_orbital(
 ) -> Float[Array, " "]:
     r"""Compute ``|M|^2`` for one orbital.
 
-    Extended Summary
-    ----------------
     Computes the photoemission intensity for a single initial-state
     orbital characterized by quantum numbers (l, m) and a radial
     wavefunction sampled on a grid. The intensity is the squared
@@ -245,6 +244,8 @@ def dipole_intensity_orbital(
     non-negative by construction, and is differentiable with respect
     to all continuous inputs (k_vec, r_grid, radial_values, efield)
     through JAX automatic differentiation.
+
+    :see: :class:`~.test_dipole.TestDipoleIntensityOrbital`
 
     Parameters
     ----------
@@ -265,6 +266,12 @@ def dipole_intensity_orbital(
     -------
     intensity : Float[Array, " "]
         Squared modulus of the matrix element.
+
+    Notes
+    -----
+    The function computes the complex matrix element first. It then applies
+    the modulus squared once, after the coherent channel sum is complete.
+    Gradients flow through both operations for every continuous input.
     """
     M: Complex[Array, ""] = dipole_matrix_element_single(
         k_vec, r_grid, radial_values, l, m, efield
@@ -282,15 +289,12 @@ def dipole_intensities_all_orbitals(
 ) -> Float[Array, " O"]:
     r"""Compute ``|M|^2`` for all orbitals in the basis.
 
-    Extended Summary
-    ----------------
-    Iterates over every orbital in the Slater basis set, computes its
+    Scans over every orbital in the Slater basis set, computes its
     radial wavefunction from ``slater_params``, and evaluates the
-    squared dipole matrix element. The loop is unrolled at Python
-    trace time because each orbital has different static quantum
-    numbers (n, l, m) that determine the structure of the recurrence
-    relations and Gaunt table lookups. This means each orbital
-    produces a distinct sub-graph in the XLA program.
+    squared dipole matrix element. ``jax.lax.switch`` specializes one
+    branch per static ``(n, l, m)`` tuple, while ``jax.lax.scan`` carries
+    the differentiable exponent and coefficient arrays through the
+    orbital axis.
 
     For each orbital *o*, the function:
 
@@ -305,6 +309,8 @@ def dipole_intensities_all_orbitals(
 
     The results are stacked into a 1-D array of length equal to the
     number of orbitals in the basis.
+
+    :see: :class:`~.test_dipole.TestDipoleIntensitiesAllOrbitals`
 
     Parameters
     ----------
@@ -324,32 +330,76 @@ def dipole_intensities_all_orbitals(
 
     Notes
     -----
-    Because the loop is Python-level (not ``jax.lax.scan``), the
-    number of orbitals is baked into the traced program. Changing the
-    basis size requires re-tracing / re-JITting.
+    The number and quantum numbers of orbitals remain static PyTree metadata,
+    so changing the basis structure retraces the function. Slater exponents
+    and coefficients remain traced leaves with gradients through the scan.
     """
-    basis = slater_params.orbital_basis
+    basis: OrbitalBasis = slater_params.orbital_basis
     n_orbitals: int = len(basis.n_values)
-    results: list[Float[Array, ""]] = []
 
-    for o in range(n_orbitals):
-        n_o: int = basis.n_values[o]
-        l_o: int = basis.l_values[o]
-        m_o: int = basis.m_values[o]
-        zeta_o: Float[Array, ""] = slater_params.zeta[o]
-
-        # Compute radial wavefunction on the grid
-        R_values: Float[Array, " R"] = slater_radial(r_grid, n_o, zeta_o)
-
-        # Weight by multi-zeta coefficient (first column for single-zeta)
-        R_values = R_values * slater_params.coefficients[o, 0]
-
-        intensity: Float[Array, ""] = dipole_intensity_orbital(
-            k_vec, r_grid, R_values, l_o, m_o, efield
+    def _evaluate_orbital(
+        operand: tuple[Float[Array, ""], Float[Array, ""]],
+        *,
+        n: int,
+        l: int,
+        m: int,
+    ) -> Float[Array, ""]:
+        """Evaluate one statically specialized orbital branch."""
+        zeta_value: Float[Array, ""] = operand[0]
+        coefficient: Float[Array, ""] = operand[1]
+        radial_values: Float[Array, " R"] = (
+            slater_radial(r_grid, n, zeta_value) * coefficient
         )
-        results.append(intensity)
+        intensity: Float[Array, ""] = dipole_intensity_orbital(
+            k_vec,
+            r_grid,
+            radial_values,
+            l,
+            m,
+            efield,
+        )
+        return intensity
 
-    intensities: Float[Array, " O"] = jnp.stack(results)
+    orbital_branches: tuple[
+        Callable[
+            [tuple[Float[Array, ""], Float[Array, ""]]],
+            Float[Array, ""],
+        ],
+        ...,
+    ] = tuple(
+        partial(_evaluate_orbital, n=n, l=l, m=m)
+        for n, l, m in zip(
+            basis.n_values,
+            basis.l_values,
+            basis.m_values,
+            strict=True,
+        )
+    )
+
+    def _scan_orbital(
+        carry: None,
+        orbital_index: Integer[Array, ""],
+    ) -> tuple[None, Float[Array, ""]]:
+        """Evaluate one orbital while scanning traced parameter leaves."""
+        operand: tuple[Float[Array, ""], Float[Array, ""]] = (
+            slater_params.zeta[orbital_index],
+            slater_params.coefficients[orbital_index, 0],
+        )
+        intensity: Float[Array, ""] = jax.lax.switch(
+            orbital_index,
+            orbital_branches,
+            operand,
+        )
+        scan_output: tuple[None, Float[Array, ""]] = (carry, intensity)
+        return scan_output
+
+    orbital_indices: Integer[Array, " O"] = jnp.arange(n_orbitals)
+    scan_result: tuple[None, Float[Array, " O"]] = jax.lax.scan(
+        _scan_orbital,
+        None,
+        orbital_indices,
+    )
+    intensities: Float[Array, " O"] = scan_result[1]
     return intensities
 
 

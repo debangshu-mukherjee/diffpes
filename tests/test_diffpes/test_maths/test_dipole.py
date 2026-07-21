@@ -13,21 +13,17 @@ intensity function, output shapes for multi-orbital bases, and
 differentiability with respect to both the electric-field polarization
 vector and Slater orbital exponents (zeta).
 
-Routine Listings
-----------------
-:class:`TestDipoleMatrixElementSingle`
-    Tests for dipole_matrix_element_single.
-:class:`TestDipoleIntensityOrbital`
-    Tests for dipole_intensity_orbital.
-:class:`TestDipoleIntensitiesAllOrbitals`
-    Tests for dipole_intensities_all_orbitals.
 """
 
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype import beartype
+from beartype.typing import Any, Callable
+from jaxtyping import Array, Complex, Float, jaxtyped
 
-from diffpes.maths.dipole import (
+import diffpes
+from diffpes.maths import (
     dipole_intensities_all_orbitals,
     dipole_intensity_orbital,
     dipole_matrix_element_single,
@@ -37,7 +33,8 @@ from diffpes.types import make_orbital_basis, make_slater_params
 
 
 @pytest.fixture
-def r_grid():
+@jaxtyped(typechecker=beartype)
+def r_grid() -> Float[Array, " R"]:
     """Provide a dense radial grid for numerical integration.
 
     Returns a 5000-point grid from 1e-6 to 50.0 Bohr.  The small but
@@ -46,22 +43,28 @@ def r_grid():
     tails to decay below machine precision for typical Slater exponents
     (zeta ~ 1--2).
     """
-    return jnp.linspace(1e-6, 50.0, 5000)
+    grid: Float[Array, " R"] = jnp.linspace(1e-6, 50.0, 5000)
+    return grid
 
 
 @pytest.fixture
-def z_polarized():
+@jaxtyped(typechecker=beartype)
+def z_polarized() -> Complex[Array, " 3"]:
     """Provide a z-polarized electric-field vector.
 
     Returns the complex-valued polarization vector (0, 0, 1) which
     selects the q=0 (Delta m = 0) component of the dipole operator,
     corresponding to linearly polarized light along the z-axis.
     """
-    return jnp.array([0.0, 0.0, 1.0], dtype=jnp.complex128)
+    polarization: Complex[Array, " 3"] = jnp.array(
+        [0.0, 0.0, 1.0], dtype=jnp.complex128
+    )
+    return polarization
 
 
 @pytest.fixture
-def x_polarized():
+@jaxtyped(typechecker=beartype)
+def x_polarized() -> Complex[Array, " 3"]:
     """Provide an x-polarized electric-field vector.
 
     Returns the complex-valued polarization vector (1, 0, 0) which
@@ -69,7 +72,10 @@ def x_polarized():
     operator, corresponding to linearly polarized light along the
     x-axis.
     """
-    return jnp.array([1.0, 0.0, 0.0], dtype=jnp.complex128)
+    polarization: Complex[Array, " 3"] = jnp.array(
+        [1.0, 0.0, 0.0], dtype=jnp.complex128
+    )
+    return polarization
 
 
 class TestDipoleMatrixElementSingle:
@@ -82,9 +88,11 @@ class TestDipoleMatrixElementSingle:
     that the function is compatible with JAX JIT compilation, and that
     autodiff gradients with respect to the electric-field polarization
     vector are well-defined.
+
+    :see: :func:`~diffpes.maths.dipole_matrix_element_single`
     """
 
-    def test_s_orbital_nonzero(self, r_grid, z_polarized):
+    def test_s_orbital_nonzero(self, r_grid, z_polarized) -> None:
         """Verify the s -> p dipole transition is nonzero for z-polarization.
 
         Uses an n=1, zeta=1.0 Slater 1s orbital with z-polarized light and
@@ -92,7 +100,14 @@ class TestDipoleMatrixElementSingle:
         with q=0, so the matrix element must be nonzero.  Asserts
         ``|M| > 1e-6``
         to confirm the angular (Gaunt) and radial integrals both contribute.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        k_vec: Array
+        M: Array
+
         R_vals = slater_radial(r_grid, 1, 1.0)
         k_vec = jnp.array([0.0, 0.0, 1.0])
         M = dipole_matrix_element_single(
@@ -102,14 +117,21 @@ class TestDipoleMatrixElementSingle:
             f"Expected nonzero, got |M|={float(jnp.abs(M))}"
         )
 
-    def test_finite_output(self, r_grid, z_polarized):
+    def test_finite_output(self, r_grid, z_polarized) -> None:
         """Verify the matrix element is numerically finite for a p-orbital.
 
         Uses an n=2, zeta=2.0 Slater 2p (l=1, m=0) orbital with an
         off-axis k-vector (1.0, 0.5, 0.3) and z-polarization.  Asserts
         ``jnp.isfinite(M)`` to guard against NaN or Inf from the radial
         integration or angular coupling at arbitrary k-directions.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        k_vec: Array
+        M: Array
+
         R_vals = slater_radial(r_grid, 2, 2.0)
         k_vec = jnp.array([1.0, 0.5, 0.3])
         M = dipole_matrix_element_single(
@@ -117,7 +139,7 @@ class TestDipoleMatrixElementSingle:
         )
         assert jnp.isfinite(M)
 
-    def test_jit_compatible(self, r_grid, z_polarized):
+    def test_jit_compatible(self, r_grid, z_polarized) -> None:
         """Verify ``dipole_matrix_element_single`` is JAX-JIT-compatible.
 
         Wraps the function in ``jax.jit`` with k as the traced argument
@@ -125,7 +147,14 @@ class TestDipoleMatrixElementSingle:
         Uses an s-orbital (l=0, m=0) with k along z.  Asserts the JIT-
         compiled output is finite, confirming no Python-side control flow
         or non-JAX operations break tracing.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        f: Callable[..., Any]
+        M: Array
+
         R_vals = slater_radial(r_grid, 1, 1.0)
         f = jax.jit(
             lambda k: dipole_matrix_element_single(
@@ -135,7 +164,7 @@ class TestDipoleMatrixElementSingle:
         M = f(jnp.array([0.0, 0.0, 1.0]))
         assert jnp.isfinite(M)
 
-    def test_gradient_wrt_efield(self, r_grid):
+    def test_gradient_wrt_efield(self, r_grid) -> None:
         """Verify autodiff gradient of intensity w.r.t. polarization vector.
 
         Defines a scalar ``loss = |M(E)|^2`` for an s-orbital with k along z
@@ -144,11 +173,20 @@ class TestDipoleMatrixElementSingle:
         all three gradient components are finite, confirming the Gaunt
         lookup, radial integral, and complex-valued inner product are all
         smoothly differentiable.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        k_vec: Array
+        grad: Array
+
         R_vals = slater_radial(r_grid, 1, 1.0)
         k_vec = jnp.array([0.0, 0.0, 1.0])
 
         def loss(ef):
+            M: Array
+
             M = dipole_matrix_element_single(k_vec, r_grid, R_vals, 0, 0, ef)
             return jnp.abs(M) ** 2
 
@@ -164,22 +202,31 @@ class TestDipoleIntensityOrbital:
     physical constraint that intensity is non-negative and that the
     function is consistent with computing ``|M|^2`` directly from
     ``dipole_matrix_element_single``.
+
+    :see: :func:`~diffpes.maths.dipole_intensity_orbital`
     """
 
-    def test_non_negative(self, r_grid, z_polarized):
+    def test_non_negative(self, r_grid, z_polarized) -> None:
         """Verify photoemission intensity is non-negative.
 
         Uses an n=2, zeta=1.5 Slater p-orbital (l=1, m=0) with an
         off-axis k-vector and z-polarization.  Since intensity is defined
         as ``|M|^2``, it must be >= 0.  Asserts ``I >= 0.0`` as a basic
         physical sanity check.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        k_vec: Array
+        I: Array
+
         R_vals = slater_radial(r_grid, 2, 1.5)
         k_vec = jnp.array([0.5, 0.3, 0.8])
         I = dipole_intensity_orbital(k_vec, r_grid, R_vals, 1, 0, z_polarized)
         assert float(I) >= 0.0
 
-    def test_equals_abs_squared(self, r_grid, z_polarized):
+    def test_equals_abs_squared(self, r_grid, z_polarized) -> None:
         """Verify intensity equals the modulus squared of the matrix element.
 
         Computes both M and I independently for a 1s orbital (n=1,
@@ -187,7 +234,15 @@ class TestDipoleIntensityOrbital:
         asserts ``I == |M|^2`` to within 1e-12.  This cross-checks that
         ``dipole_intensity_orbital`` is a faithful wrapper around
         ``dipole_matrix_element_single``.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        R_vals: Array
+        k_vec: Array
+        M: Array
+        I: Array
+
         R_vals = slater_radial(r_grid, 1, 1.0)
         k_vec = jnp.array([0.0, 0.0, 1.5])
         M = dipole_matrix_element_single(
@@ -205,16 +260,26 @@ class TestDipoleIntensitiesAllOrbitals:
     output shape (one intensity per orbital), non-negativity for all
     orbitals, and differentiability of the total intensity with respect
     to the Slater exponent parameter zeta.
+
+    :see: :func:`~diffpes.maths.dipole_intensities_all_orbitals`
     """
 
-    def test_output_shape(self, r_grid, z_polarized):
+    def test_output_shape(self, r_grid, z_polarized) -> None:
         """Verify output has one intensity per orbital in the basis.
 
         Constructs a three-orbital basis (1s, 2pz, 2px) with corresponding
         Slater exponents and computes intensities at a single k-point.
         Asserts the output shape is ``(3,)``, matching the number of
         orbitals in the basis.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        basis: diffpes.types.OrbitalBasis
+        sp: diffpes.types.SlaterParams
+        k_vec: Array
+        I: Array
+
         basis = make_orbital_basis(
             n_values=(1, 2, 2),
             l_values=(0, 1, 1),
@@ -229,14 +294,22 @@ class TestDipoleIntensitiesAllOrbitals:
         I = dipole_intensities_all_orbitals(k_vec, r_grid, sp, z_polarized)
         assert I.shape == (3,)
 
-    def test_all_non_negative(self, r_grid, z_polarized):
+    def test_all_non_negative(self, r_grid, z_polarized) -> None:
         """Verify all orbital intensities are non-negative.
 
         Constructs a four-orbital basis (1s, 2py, 2pz, 2px) spanning all
         three p sub-orbitals plus s, with an off-axis k-vector and
         z-polarization.  Asserts ``I >= 0`` element-wise, confirming the
         ``|M|^2`` definition holds for every orbital in the batch.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        basis: diffpes.types.OrbitalBasis
+        sp: diffpes.types.SlaterParams
+        k_vec: Array
+        I: Array
+
         basis = make_orbital_basis(
             n_values=(1, 2, 2, 2),
             l_values=(0, 1, 1, 1),
@@ -251,7 +324,7 @@ class TestDipoleIntensitiesAllOrbitals:
         I = dipole_intensities_all_orbitals(k_vec, r_grid, sp, z_polarized)
         assert jnp.all(I >= 0.0)
 
-    def test_gradient_wrt_zeta(self, r_grid, z_polarized):
+    def test_gradient_wrt_zeta(self, r_grid, z_polarized) -> None:
         """Verify autodiff gradient of total intensity w.r.t. Slater exponent.
 
         Defines a scalar loss = sum(I) for a single 1s orbital and
@@ -260,7 +333,13 @@ class TestDipoleIntensitiesAllOrbitals:
         entire forward pipeline (Slater radial construction, radial
         integral, Gaunt coupling, intensity summation) supports reverse-
         mode AD -- a prerequisite for inverse fitting of orbital exponents.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        basis: diffpes.types.OrbitalBasis
+        grad: Array
+
         basis = make_orbital_basis(
             n_values=(1,),
             l_values=(0,),
@@ -269,6 +348,10 @@ class TestDipoleIntensitiesAllOrbitals:
         )
 
         def loss(zeta_val):
+            sp: diffpes.types.SlaterParams
+            k_vec: Array
+            I: Array
+
             sp = make_slater_params(
                 zeta=jnp.array([zeta_val]),
                 orbital_basis=basis,

@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-Reads VASP EIGENVAL files containing electronic band energies and
-returns a :class:`~diffpes.types.BandStructure` or
-:class:`~diffpes.types.SpinBandStructure` PyTree depending on the
-``return_mode`` parameter.
+Reads VASP EIGENVAL files containing electronic band energies and returns a
+band carrier. The :class:`~diffpes.types.BandStructure` carrier represents
+non-spin data. The :class:`~diffpes.types.SpinBandStructure` carrier represents
+spin data selected by the ``return_mode`` parameter.
 
 Routine Listings
 ----------------
@@ -22,8 +22,9 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
-from beartype.typing import Literal, Optional, Union
-from jaxtyping import Float
+from beartype import beartype
+from beartype.typing import Literal, Optional, TextIO, Union
+from jaxtyping import Float, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
@@ -41,7 +42,8 @@ from diffpes.types import (
 )
 
 
-def read_eigenval(
+@jaxtyped(typechecker=beartype)
+def read_eigenval(  # noqa: PLR0915
     filename: str = "EIGENVAL",
     fermi_energy: ScalarFloat = 0.0,
     return_mode: Literal["legacy", "full"] = "legacy",
@@ -52,8 +54,6 @@ def read_eigenval(
     (band energies) at each k-point. Supports both ISPIN=1 (non-
     polarized) and ISPIN=2 (spin-polarized) calculations.
 
-    Extended Summary
-    ----------------
     The EIGENVAL file format written by VASP consists of:
 
     * **Header** (6 lines):
@@ -72,36 +72,30 @@ def read_eigenval(
       - ISPIN=2: each band line has 3 values --
         ``band_index energy_up energy_down``.
 
+    :see: :class:`~.test_eigenval.TestReadEigenval`
+
     Implementation Logic
     --------------------
-    1. **Parse header** -- read the first 6 lines. Extract ``ISPIN``
-       from line 1 (4th integer) and ``NKPOINTS`` / ``NBANDS`` from
-       line 6.
+    1. **Read the spin and dimension metadata**::
 
-    2. **Allocate arrays** -- create ``(NKPOINTS, 4)`` for k-point
-       coordinates+weights and ``(NKPOINTS, NBANDS)`` for spin-up
-       eigenvalues. If ``ISPIN=2``, allocate a matching spin-down
-       array.
+           path: Path = Path(filename)
+           with path.open("r") as fid:
+               first_line: list[str] = fid.readline().split()
+               ispin: int = int(first_line[3])
 
-    3. **Read k-point blocks** -- for each k-point:
+       This fixes the static file layout before band arrays are allocated.
 
-       a. Read the next non-empty line and parse 4 floats for the
-          k-point coordinates and weight.
-       b. For each band, read the next non-empty line and extract the
-          eigenvalue(s). For spin-polarized files, store both spin-up
-          (column 1) and spin-down (column 2).
+    2. **Sort each spin channel by band energy**::
 
-    4. **Sort eigenvalues** -- sort bands by energy within each
-       k-point (ascending) for both spin channels. This ensures
-       consistent band ordering even if VASP wrote them unordered.
+           eigen_up = np.take_along_axis(eigen_up, order_up, axis=1)
 
-    5. **Construct return value**:
+       This gives every k-point the ascending band convention used downstream.
 
-       * ``return_mode="legacy"`` or ISPIN=1: return a
-         ``BandStructure`` with only spin-up eigenvalues, 3D k-point
-         coordinates, and k-point weights.
-       * ``return_mode="full"`` with ISPIN=2: return a
-         ``SpinBandStructure`` containing both spin channels.
+    3. **Return the requested band carrier**::
+
+           return bands
+
+       The return-mode branch binds scalar or spin-resolved data to one output.
 
     Parameters
     ----------
@@ -110,7 +104,7 @@ def read_eigenval(
     fermi_energy : ScalarFloat, optional
         Fermi level in eV used to reference the eigenvalues.
         Python scalars and traced scalar arrays are accepted. Default is 0.0.
-    return_mode : {"legacy", "full"}, optional
+    return_mode : Literal["legacy", "full"], optional
         ``"legacy"`` (default) returns a ``BandStructure`` with only
         spin-up eigenvalues (backward-compatible). ``"full"`` returns
         a ``SpinBandStructure`` with both spin channels when ISPIN=2,
@@ -142,6 +136,10 @@ def read_eigenval(
     alongside the eigenvalues in the returned PyTree for downstream
     consumers to apply the shift if needed.
     """
+    fid: TextIO
+    k: int
+    b: int
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         header: list[int] = [int(x) for x in fid.readline().split()]
@@ -166,21 +164,27 @@ def read_eigenval(
         for k in range(nkpoints):
             kpoint_line: str = _read_next_nonempty_line(fid)
             if not kpoint_line:
-                msg = "Unexpected EOF while reading EIGENVAL k-point block."
+                msg: str = (
+                    "Unexpected EOF while reading EIGENVAL k-point block."
+                )
                 raise ValueError(msg)
             kpoint_vals: list[float] = [float(x) for x in kpoint_line.split()]
             if len(kpoint_vals) < KPOINT_LINE_VALUES:
-                msg = "Invalid EIGENVAL k-point line; expected 4 values."
+                msg: str = "Invalid EIGENVAL k-point line; expected 4 values."
                 raise ValueError(msg)
             kpoints[k, :] = kpoint_vals[:KPOINT_LINE_VALUES]
             for b in range(nbands):
                 band_line: str = _read_next_nonempty_line(fid)
                 if not band_line:
-                    msg = "Unexpected EOF while reading EIGENVAL band line."
+                    msg: str = (
+                        "Unexpected EOF while reading EIGENVAL band line."
+                    )
                     raise ValueError(msg)
                 vals: list[float] = [float(x) for x in band_line.split()]
                 if len(vals) < BAND_LINE_MIN_VALUES:
-                    msg = "Invalid EIGENVAL band line; expected band energy."
+                    msg: str = (
+                        "Invalid EIGENVAL band line; expected band energy."
+                    )
                     raise ValueError(msg)
                 eigenvalues_up[k, b] = vals[EIG_UP_INDEX]
                 if (
@@ -188,7 +192,7 @@ def read_eigenval(
                     and eigenvalues_down is not None
                 ):
                     if len(vals) < BAND_LINE_SPIN_VALUES:
-                        msg = (
+                        msg: str = (
                             "Invalid spin-polarized EIGENVAL band line; "
                             "expected spin-down energy."
                         )
@@ -203,23 +207,26 @@ def read_eigenval(
         and ispin == ISPIN_SPIN_POLARIZED
         and eigenvalues_down is not None
     ):
-        return make_spin_band_structure(
-            eigenvalues_up=jnp.asarray(eigenvalues_up),
-            eigenvalues_down=jnp.asarray(eigenvalues_down),
+        bands: Union[BandStructure, SpinBandStructure] = (
+            make_spin_band_structure(
+                eigenvalues_up=jnp.asarray(eigenvalues_up),
+                eigenvalues_down=jnp.asarray(eigenvalues_down),
+                kpoints=jnp.asarray(kpoints[:, :3]),
+                kpoint_weights=jnp.asarray(kpoints[:, 3]),
+                fermi_energy=fermi_energy,
+            )
+        )
+    else:
+        bands = make_band_structure(
+            eigenvalues=jnp.asarray(eigenvalues_up),
             kpoints=jnp.asarray(kpoints[:, :3]),
             kpoint_weights=jnp.asarray(kpoints[:, 3]),
             fermi_energy=fermi_energy,
         )
-    bands: BandStructure = make_band_structure(
-        eigenvalues=jnp.asarray(eigenvalues_up),
-        kpoints=jnp.asarray(kpoints[:, :3]),
-        kpoint_weights=jnp.asarray(kpoints[:, 3]),
-        fermi_energy=fermi_energy,
-    )
     return bands
 
 
-def _read_next_nonempty_line(fid) -> str:  # noqa: ANN001
+def _read_next_nonempty_line(fid: TextIO) -> str:
     """Read and return the next non-empty line, or ``""`` at EOF.
 
     Extended Summary
@@ -240,7 +247,7 @@ def _read_next_nonempty_line(fid) -> str:  # noqa: ANN001
 
     Parameters
     ----------
-    fid : file-like
+    fid : TextIO
         Open file handle positioned somewhere within the EIGENVAL file.
 
     Returns
@@ -249,12 +256,15 @@ def _read_next_nonempty_line(fid) -> str:  # noqa: ANN001
         The next non-empty line (with trailing newline), or ``""`` if
         the end of the file is reached.
     """
+    result: str = ""
     while True:
         line: str = fid.readline()
         if not line:
-            return ""
+            break
         if line.strip():
-            return line
+            result = line
+            break
+    return result
 
 
 __all__: list[str] = [

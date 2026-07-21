@@ -1,185 +1,217 @@
-"""Test simulation and polarization parameter carriers.
+"""Validate simulation and polarization parameter carriers and factories.
 
-Extended Summary
-----------------
-Covers defaults, custom values, PyTree round trips, and factory rejection contracts for the carriers defined in ``diffpes.types.params``.
+The cases cover PyTree reconstruction, documented defaults, custom optical
+geometry, data-derived energy windows, and rejection of invalid parameters.
 """
 
 import chex
 import jax
 import jax.numpy as jnp
 
-from diffpes.types import make_polarization_config, make_simulation_params
+from diffpes.types import (
+    PolarizationConfig,
+    SimulationParams,
+    make_expanded_simulation_params,
+    make_polarization_config,
+    make_simulation_params,
+)
 from tests._assertions import assert_rejects
 
 
-class TestMakeSimulationParams(chex.TestCase):
-    """Tests for :func:`diffpes.types.params.make_simulation_params`.
+class TestSimulationParams:
+    """Validate :class:`~diffpes.types.SimulationParams` as a JAX PyTree.
 
-    Verifies correct construction of ``SimulationParams`` PyTrees including
-    default parameter values, custom value passthrough, and JAX PyTree
-    round-trip (flatten/unflatten) fidelity.
+    Differentiable broadening leaves and the static fidelity must survive JAX
+    flattening and reconstruction.
+
+    :see: :class:`~diffpes.types.SimulationParams`
     """
 
-    def test_defaults(self) -> None:
-        """Verify that default parameter values match expected constants.
+    def test_pytree_round_trip(self) -> None:
+        """Preserve broadening and fidelity fields through reconstruction.
 
-        Test Logic
-        ----------
-        1. **Construct with no arguments**:
-           Call ``make_simulation_params()`` with all defaults.
+        The check compares the 0.04 eV Gaussian width and 25,000-point static
+        fidelity before and after a JAX PyTree round trip.
 
-        2. **Assert each default value**:
-           Check ``energy_min`` (-3.0), ``energy_max`` (1.0),
-           ``fidelity`` (25000), ``sigma`` (0.04), and ``gamma`` (0.1)
-           against their documented default values.
-
-        Asserts
-        -------
-        Each default parameter matches the expected constant, confirming
-        the factory's default-value specification is correct.
+        Notes
+        -----
+        Constructs default parameters, flattens and unflattens them with JAX,
+        and compares traced and static fields independently.
         """
-        params = make_simulation_params()
+        params: SimulationParams = make_simulation_params()
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree.flatten(params)
+        restored: SimulationParams = jax.tree.unflatten(tree, leaves)
+
+        chex.assert_trees_all_close(restored.sigma, params.sigma)
+        chex.assert_equal(restored.fidelity, params.fidelity)
+
+
+class TestPolarizationConfig:
+    """Validate :class:`~diffpes.types.PolarizationConfig` field storage.
+
+    The carrier must retain differentiable angles and its static polarization
+    selector together.
+
+    :see: :class:`~diffpes.types.PolarizationConfig`
+    """
+
+    def test_stores_linear_vertical_geometry(self) -> None:
+        """Preserve an LVP selector and scalar incidence angles.
+
+        The check verifies the static LVP convention and the scalar shapes of
+        the two angular fields used to define the optical geometry.
+
+        Notes
+        -----
+        Constructs a 45-degree LVP configuration through the public factory
+        and checks the selector and array dimensions with Chex.
+        """
+        config: PolarizationConfig = make_polarization_config(
+            theta=0.7854,
+            phi=0.0,
+            polarization_type="LVP",
+        )
+
+        chex.assert_equal(config.polarization_type, "LVP")
+        chex.assert_shape(config.theta, ())
+        chex.assert_shape(config.phi, ())
+
+
+class TestMakeSimulationParams:
+    """Validate :func:`~diffpes.types.make_simulation_params`.
+
+    The factory must provide the documented ARPES defaults, preserve custom
+    values, and reject nonphysical windows and broadenings.
+
+    :see: :func:`~diffpes.types.make_simulation_params`
+    """
+
+    def test_constructs_documented_defaults(self) -> None:
+        """Construct the documented energy window and broadening defaults.
+
+        The check verifies ``[-3, 1]`` eV, 25,000 samples, and Gaussian and
+        Lorentzian widths of 0.04 eV and 0.1 eV.
+
+        Notes
+        -----
+        Calls the factory without arguments and compares all defining default
+        fields with independent constants using Chex.
+        """
+        params: SimulationParams = make_simulation_params()
+
         chex.assert_trees_all_close(params.energy_min, jnp.float64(-3.0))
         chex.assert_trees_all_close(params.energy_max, jnp.float64(1.0))
         chex.assert_equal(params.fidelity, 25000)
         chex.assert_trees_all_close(params.sigma, jnp.float64(0.04))
         chex.assert_trees_all_close(params.gamma, jnp.float64(0.1))
 
-    def test_custom_values(self) -> None:
-        """Verify that custom parameter values are stored correctly.
+    def test_preserves_custom_temperature(self) -> None:
+        """Preserve an explicit 300 K simulation temperature.
 
-        Test Logic
-        ----------
-        1. **Construct with custom arguments**:
-           Call the factory with non-default values for all parameters,
-           including ``temperature=300.0`` and ``photon_energy=21.2``.
+        The check verifies user values override defaults after conversion to a
+        scalar float64 JAX array.
 
-        2. **Spot-check one custom field**:
-           Assert that ``params.temperature`` equals the supplied
-           ``300.0`` as a float64 JAX scalar.
-
-        Asserts
-        -------
-        ``params.temperature`` matches the custom input value,
-        confirming that user-supplied arguments override defaults and
-        are correctly cast to float64.
+        Notes
+        -----
+        Constructs a custom parameter set and compares the stored temperature
+        with an independent 300 K scalar using Chex.
         """
-        params = make_simulation_params(
-            energy_min=-5.0,
-            energy_max=2.0,
-            fidelity=1000,
-            sigma=0.08,
-            gamma=0.2,
-            temperature=300.0,
-            photon_energy=21.2,
-        )
+        params: SimulationParams = make_simulation_params(temperature=300.0)
+
         chex.assert_trees_all_close(params.temperature, jnp.float64(300.0))
 
-    def test_pytree_compatible(self) -> None:
-        """Verify that SimulationParams survives a JAX PyTree round-trip.
+    def test_rejects_nonphysical_parameters(self) -> None:
+        """Reject negative broadening and a reversed energy window.
 
-        Test Logic
-        ----------
-        1. **Create params**:
-           Build a default ``SimulationParams`` instance.
+        The check covers both independent physical validation boundaries of
+        the base simulation-parameter factory.
 
-        2. **Flatten and unflatten**:
-           Use ``jax.tree.flatten`` and ``jax.tree.unflatten`` to
-           simulate the round-trip JAX performs during ``jit``/``grad``.
-
-        3. **Compare restored field**:
-           Assert that ``restored.sigma`` is close to the original
-           ``params.sigma``.
-
-        Asserts
-        -------
-        ``restored.sigma`` matches the original value, confirming that
-        both JAX-traced children and the auxiliary ``fidelity`` int
-        survive the flatten/unflatten round-trip.
+        Notes
+        -----
+        Uses the eager-and-JIT rejection helper with a negative Gaussian width
+        and then with ``energy_min`` greater than ``energy_max``.
         """
-        params = make_simulation_params()
-        leaves, treedef = jax.tree.flatten(params)
-        restored = jax.tree.unflatten(treedef, leaves)
-        chex.assert_trees_all_close(restored.sigma, params.sigma)
+        assert_rejects(
+            make_simulation_params, sigma=-1.0, match="sigma must be positive"
+        )
+        assert_rejects(
+            make_simulation_params,
+            energy_min=5.0,
+            energy_max=-5.0,
+            match="energy_min must be less than energy_max",
+        )
 
 
-class TestMakePolarizationConfig(chex.TestCase):
-    """Tests for :func:`diffpes.types.params.make_polarization_config`.
+class TestMakePolarizationConfig:
+    """Validate :func:`~diffpes.types.make_polarization_config`.
 
-    Verifies correct construction of ``PolarizationConfig`` PyTrees including
-    default polarization type and angular values, as well as explicit LVP
-    (linear vertical polarization) configuration.
+    The factory must supply an unpolarized default and reject selectors outside
+    the supported static convention set.
+
+    :see: :func:`~diffpes.types.make_polarization_config`
     """
 
-    def test_defaults(self) -> None:
-        """Verify that default polarization config is unpolarized with scalar angles.
+    def test_constructs_unpolarized_default(self) -> None:
+        """Construct an unpolarized configuration with scalar angles.
 
-        Test Logic
-        ----------
-        1. **Construct with no arguments**:
-           Call ``make_polarization_config()`` with all defaults.
+        The check verifies the default selector and scalar angle shapes without
+        assuming a downstream polarization-vector implementation.
 
-        2. **Assert polarization type**:
-           Check that ``polarization_type`` defaults to ``"unpolarized"``.
-
-        3. **Assert angle shapes**:
-           Confirm that ``theta`` and ``phi`` are 0-D scalar arrays.
-
-        Asserts
-        -------
-        Default polarization type is ``"unpolarized"`` and angular fields
-        are scalar JAX arrays, confirming the factory's default behavior.
+        Notes
+        -----
+        Calls the factory without arguments and checks the static selector and
+        traced array shapes with Chex.
         """
-        config = make_polarization_config()
+        config: PolarizationConfig = make_polarization_config()
+
         chex.assert_equal(config.polarization_type, "unpolarized")
         chex.assert_shape(config.theta, ())
         chex.assert_shape(config.phi, ())
 
-    def test_lvp(self) -> None:
-        """Verify that an LVP polarization config stores the correct type string.
+    def test_rejects_unknown_type(self) -> None:
+        """Reject a polarization selector outside the supported set.
 
-        Test Logic
-        ----------
-        1. **Construct with LVP settings**:
-           Call the factory with ``theta=0.7854``, ``phi=0.0``, and
-           ``polarization_type="LVP"`` (linear vertical polarization,
-           i.e., s-polarization).
+        The check isolates the static selector contract from all numerical
+        angle validation.
 
-        2. **Assert polarization type**:
-           Check that ``config.polarization_type`` is ``"LVP"``.
-
-        Asserts
-        -------
-        The auxiliary ``polarization_type`` string is stored as ``"LVP"``,
-        confirming that user-supplied string arguments are passed through
-        unchanged.
+        Notes
+        -----
+        Supplies ``polarization_type="unknown"`` and matches the factory's
+        allowed-selector diagnostic.
         """
-        config = make_polarization_config(
-            theta=0.7854,
-            phi=0.0,
-            polarization_type="LVP",
+        assert_rejects(
+            make_polarization_config,
+            polarization_type="unknown",
+            match="polarization_type must be one of",
         )
-        chex.assert_equal(config.polarization_type, "LVP")
 
 
-def test_simulation_params_reject_audit_probes() -> None:
-    """Reject both invalid simulation-parameter probes from the audit."""
-    assert_rejects(
-        make_simulation_params, sigma=-1.0, match="sigma must be positive"
-    )
-    assert_rejects(
-        make_simulation_params,
-        energy_min=5.0,
-        energy_max=-5.0,
-        match="energy_min must be less than energy_max",
-    )
+class TestMakeExpandedSimulationParams:
+    """Validate :func:`~diffpes.types.make_expanded_simulation_params`.
 
+    The factory must derive its energy window from band extrema and symmetric
+    padding while retaining the differentiable dependence on those inputs.
 
-def test_polarization_config_rejects_unknown_type() -> None:
-    """Reject polarization selectors outside the static allowed set."""
-    assert_rejects(
-        make_polarization_config,
-        polarization_type="unknown",
-        match="polarization_type must be one of",
-    )
+    :see: :func:`~diffpes.types.make_expanded_simulation_params`
+    """
+
+    def test_derives_energy_window_from_bands(self) -> None:
+        """Expand band extrema by the requested energy padding.
+
+        For bands spanning ``[-2, 3]`` eV and padding 0.5 eV, the expected
+        simulation window is ``[-2.5, 3.5]`` eV.
+
+        Notes
+        -----
+        Supplies a two-by-two band array, constructs the expanded parameters,
+        and compares both derived bounds with the analytic extrema.
+        """
+        eigenbands: jax.Array = jnp.array([[-2.0, 0.0], [1.0, 3.0]])
+        params: SimulationParams = make_expanded_simulation_params(
+            eigenbands, energy_padding=0.5
+        )
+
+        chex.assert_trees_all_close(params.energy_min, jnp.float64(-2.5))
+        chex.assert_trees_all_close(params.energy_max, jnp.float64(3.5))

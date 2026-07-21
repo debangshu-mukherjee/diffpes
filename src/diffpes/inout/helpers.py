@@ -19,8 +19,9 @@ Routine Listings
 """
 
 import jax.numpy as jnp
+from beartype import beartype
 from beartype.typing import Optional, Union
-from jaxtyping import Array, Float, Int
+from jaxtyping import Array, Float, Int, jaxtyped
 
 from diffpes.types import (
     D_ORBITAL_SLICE,
@@ -33,43 +34,51 @@ from diffpes.types import (
 )
 
 
+@jaxtyped(typechecker=beartype)
 def select_atoms(
     orb: Union[OrbitalProjection, SpinOrbitalProjection],
     atom_indices: list[int],
 ) -> Union[OrbitalProjection, SpinOrbitalProjection]:
     """Extract orbital projections for a subset of atoms.
 
-    Extended Summary
-    ----------------
     Creates a new projection object containing only the atoms at the
     requested indices. This is the primary mechanism for isolating the
     contribution of specific atomic sites (e.g. surface atoms, a
     particular element) to the simulated ARPES spectrum.
 
+    :see: :class:`~.test_helpers.TestSelectAtoms`
+
     Implementation Logic
     --------------------
-    1. Convert ``atom_indices`` to a JAX ``int32`` index array.
-    2. Fancy-index the ``projections`` array along axis 2 (atom axis)
-       to extract the requested atoms.
-    3. If ``spin`` data is present (non-``None``), apply the same
-       fancy-indexing to the spin array.
-    4. If ``oam`` (orbital angular momentum) data is present, apply
-       the same fancy-indexing.
-    5. Construct and return a new object of the same type as the input
-       (``SpinOrbitalProjection`` or ``OrbitalProjection``) so that
-       downstream code can treat the result identically to the
-       original.
+    1. **Build the atom index**::
+
+           idx = jnp.asarray(atom_indices, dtype=jnp.int32)
+
+       The JAX index keeps the selection compatible with traced array access.
+    2. **Select each present array leaf**::
+
+           proj_sub = orb.projections[:, :, idx, :]
+           spin_sub = orb.spin[:, :, idx, :]
+           oam_sub = orb.oam[:, :, idx, :]
+
+       Each selection uses the same atom axis and preserves the other axes.
+    3. **Preserve the carrier type**::
+
+           result = SpinOrbitalProjection(...)
+           result = OrbitalProjection(...)
+
+       The branch returns the same projection carrier variant as the input.
 
     Parameters
     ----------
-    orb : OrbitalProjection or SpinOrbitalProjection
+    orb : Union[OrbitalProjection, SpinOrbitalProjection]
         Full orbital projections with shape ``(K, B, A, 9)``.
     atom_indices : list[int]
         0-based indices of atoms to select.
 
     Returns
     -------
-    OrbitalProjection or SpinOrbitalProjection
+    result : Union[OrbitalProjection, SpinOrbitalProjection]
         Projections restricted to the specified atoms.
         Shape ``(K, B, len(atom_indices), 9)``.
         Preserves the input type.
@@ -89,28 +98,29 @@ def select_atoms(
     if orb.oam is not None:
         oam_sub = orb.oam[:, :, idx, :]
     if isinstance(orb, SpinOrbitalProjection):
-        result_soc: SpinOrbitalProjection = SpinOrbitalProjection(
+        result: Union[OrbitalProjection, SpinOrbitalProjection] = (
+            SpinOrbitalProjection(
+                projections=proj_sub,
+                spin=spin_sub,
+                oam=oam_sub,
+            )
+        )
+    else:
+        result = OrbitalProjection(
             projections=proj_sub,
-            spin=spin_sub,  # type: ignore[arg-type]
+            spin=spin_sub,
             oam=oam_sub,
         )
-        return result_soc
-    result: OrbitalProjection = OrbitalProjection(
-        projections=proj_sub,
-        spin=spin_sub,
-        oam=oam_sub,
-    )
     return result
 
 
+@jaxtyped(typechecker=beartype)
 def aggregate_atoms(
     orb: OrbitalProjection,
     atom_indices: Optional[list[int]] = None,
 ) -> Float[Array, "K B 9"]:
     """Sum orbital projections over a set of atoms.
 
-    Extended Summary
-    ----------------
     Produces a ``(K, B, 9)`` array where the atom axis has been
     summed out, giving the total orbital weight at each (k-point,
     band) pair. This is the standard reduction used before computing
@@ -118,27 +128,33 @@ def aggregate_atoms(
     only needs the aggregate orbital character rather than per-atom
     contributions.
 
+    :see: :class:`~.test_helpers.TestAggregateAtoms`
+
     Implementation Logic
     --------------------
-    1. If ``atom_indices`` is not ``None``, fancy-index the
-       ``projections`` array along axis 2 to restrict to the
-       requested atoms before summing.
-    2. If ``atom_indices`` is ``None``, use the full projections
-       array (all atoms).
-    3. Sum along axis 2 (the atom axis) using ``jnp.sum`` and
-       return the resulting ``(K, B, 9)`` array.
+    1. **Select the requested atom data**::
+
+           proj = orb.projections[:, :, idx, :]
+           proj = orb.projections
+
+       The optional index limits the reduction to the requested atoms.
+    2. **Sum the atom axis**::
+
+           result = jnp.sum(proj, axis=2)
+
+       The reduction keeps the k-point, band, and orbital axes explicit.
 
     Parameters
     ----------
     orb : OrbitalProjection
         Full orbital projections with shape ``(K, B, A, 9)``.
-    atom_indices : list[int] or None, optional
+    atom_indices : Optional[list[int]], optional
         0-based indices of atoms to sum over. If None, sums over
         all atoms.
 
     Returns
     -------
-    Float[Array, "K B 9"]
+    result : Float[Array, "K B 9"]
         Atom-summed orbital projections.
 
     Notes
@@ -157,26 +173,34 @@ def aggregate_atoms(
     return result
 
 
+@jaxtyped(typechecker=beartype)
 def reduce_orbitals(
     projections: Float[Array, "K B A 9"],
 ) -> Float[Array, "K B A 3"]:
     """Reduce 9 orbital channels to s/p/d totals.
 
-    Extended Summary
-    ----------------
     Collapses the 9-channel VASP orbital decomposition
     (``s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2``) into three
     angular-momentum shell totals. This is useful for coarse-grained
     orbital-character analysis (e.g. fat-band coloring by s/p/d
     weight).
 
+    :see: :class:`~.test_helpers.TestReduceOrbitals`
+
     Implementation Logic
     --------------------
-    1. Extract the ``s`` channel (index 0) as-is -- shape ``(K, B, A)``.
-    2. Sum the three ``p`` channels (indices 1:4) along the last axis.
-    3. Sum the five ``d`` channels (indices 4:9) along the last axis.
-    4. Stack ``[s_total, p_total, d_total]`` along a new trailing axis
-       to produce shape ``(K, B, A, 3)``.
+    1. **Compute shell totals**::
+
+           s_total = projections[..., S_IDX]
+           p_total = jnp.sum(projections[..., P_ORBITAL_SLICE], axis=-1)
+           d_total = jnp.sum(projections[..., D_ORBITAL_SLICE], axis=-1)
+
+       The fixed slices apply the public VASP orbital ordering.
+    2. **Stack the shell axis**::
+
+           reduced = jnp.stack([s_total, p_total, d_total], axis=-1)
+
+       The new trailing axis stores the s, p, and d totals in that order.
 
     Parameters
     ----------
@@ -185,7 +209,7 @@ def reduce_orbitals(
 
     Returns
     -------
-    Float[Array, "K B A 3"]
+    reduced : Float[Array, "K B A 3"]
         Reduced projections: ``[s_total, p_total, d_total]``.
 
     Notes
@@ -208,6 +232,7 @@ def reduce_orbitals(
     return reduced
 
 
+@jaxtyped(typechecker=beartype)
 def check_consistency(
     bands: BandStructure,
     orb: Union[OrbitalProjection, SpinOrbitalProjection],
@@ -215,36 +240,43 @@ def check_consistency(
 ) -> None:
     """Check dimension agreement across parsed VASP files.
 
-    Extended Summary
-    ----------------
     Validates that the k-point and band dimensions are consistent
     between the EIGENVAL-derived band structure, the PROCAR-derived
     orbital projections, and (optionally) the KPOINTS-derived path
     metadata. This is a defensive check intended to catch mismatches
     caused by mixing output files from different VASP runs.
 
+    :see: :class:`~.test_helpers.TestCheckConsistency`
+
     Implementation Logic
     --------------------
-    1. Extract ``nkpoints`` and ``nbands`` from ``bands.eigenvalues``
-       (shape ``(K, B)``) and ``orb.projections`` (shape
-       ``(K, B, A, 9)``).
-    2. Compare the k-point counts between EIGENVAL and PROCAR. Raise
-       ``ValueError`` with a descriptive message if they disagree.
-    3. Compare the band counts between EIGENVAL and PROCAR. Raise
-       ``ValueError`` if they disagree.
-    4. If ``kpath`` is provided and its mode is ``"Line-mode"``,
-       compare the total k-point count from KPOINTS
-       (``kpath.num_kpoints``) against the EIGENVAL k-point count.
-       Only check when ``num_kpoints > 0`` (i.e. the KPOINTS file
-       provides a concrete count).
+    1. **Read the shared dimensions**::
+
+           nk_bands = int(bands.eigenvalues.shape[0])
+           nb_bands = int(bands.eigenvalues.shape[1])
+           nk_procar = int(orb.projections.shape[0])
+           nb_procar = int(orb.projections.shape[1])
+
+       These static dimensions identify incompatible parser outputs early.
+    2. **Compare the band and k-point axes**::
+
+           if nk_bands != nk_procar:
+           if nb_bands != nb_procar:
+
+       Each mismatch raises ``ValueError`` with both observed sizes.
+    3. **Check optional line-mode metadata**::
+
+           if nk_kpath > 0 and nk_bands != nk_kpath:
+
+       A positive KPOINTS count must agree with the EIGENVAL count.
 
     Parameters
     ----------
     bands : BandStructure
         Parsed EIGENVAL data.
-    orb : OrbitalProjection
+    orb : Union[OrbitalProjection, SpinOrbitalProjection]
         Parsed PROCAR data.
-    kpath : KPathInfo or None, optional
+    kpath : Optional[KPathInfo], optional
         Parsed KPOINTS data.
 
     Raises
@@ -265,7 +297,7 @@ def check_consistency(
     nb_procar: int = int(orb.projections.shape[1])
 
     if nk_bands != nk_procar:
-        msg = (
+        msg: str = (
             f"K-point count mismatch: EIGENVAL has {nk_bands}, "
             f"PROCAR has {nk_procar}."
         )

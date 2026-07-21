@@ -85,10 +85,14 @@ myst_enable_extensions = [
     "colon_fence",  # Enable ::: and ```{directive} fenced directives
 ]
 # "autodoc": silence the non-actionable "error while formatting signature"
-# warnings emitted when sphinx_autodoc_typehints introspects @chex.all_variants
-# test methods (the generated ``test_*__with_jit`` / ``__without_jit`` variants
-# have no resolvable signature).
-suppress_warnings = ["myst.mathjax", "autodoc"]
+# warnings emitted when sphinx_autodoc_typehints introspects generated Chex or
+# Hypothesis test wrappers. These wrappers have no stable local signature for
+# Sphinx to publish, while their original test method remains documented.
+suppress_warnings = [
+    "myst.mathjax",
+    "autodoc",
+    "sphinx_autodoc_typehints.local_function",
+]
 
 # Ensure MyST parses all dollar-delimited math correctly
 myst_dmath_double_inline = True

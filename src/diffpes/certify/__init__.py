@@ -12,41 +12,143 @@ JAX-native numerical carriers.
 The submodules are organized as follows:
 
 - :mod:`canonical`
-    Deterministic scientific-record representations.
+    Canonical scientific-record representations for certification.
 - :mod:`checksums`
-    Streaming non-security consistency checksums.
+    Non-security consistency checksums for scientific records.
 - :mod:`checks`
-    Stable pure-JAX scientific predicate registry.
+    Register pure JAX scientific certification checks.
 - :mod:`contracts`
-    Composable semantic and information-loss contracts.
+    Semantic contracts for composable certified transformations.
 - :mod:`registry`
-    Stable model and transformation identities.
+    Deterministic registries for certified models and transformations.
 - :mod:`provenance`
-    Artifact lineage and claim-invalidation propagation.
+    Artifact lineage and semantic information-loss graphs.
 - :mod:`dependencies`
-    JAXPR dependencies, JVP/VJP sensitivities, and information spectra.
+    Trace differentiable information flow through forward models.
 - :mod:`evidence`
-    Continuous numerical evidence and derivative checks.
+    Build differentiable evidence for certified forward models.
 - :mod:`policy`
-    Declarative cumulative certification levels.
+    Evaluate cumulative scientific-certification policies.
 - :mod:`execution`
-    Prepared and compiled certified forward execution.
+    Execute JAX-native certified forward models.
 - :mod:`inspect`
-    Human-readable certificate summaries and differences.
+    Human-readable inspection of forward-model certificates.
+- :mod:`models`
+    Register built-in certified DiffPES forward models.
+
+Routine Listings
+----------------
+:func:`achieved_levels`
+    Return certification level names achieved by a concrete report.
+:func:`artifact_ref`
+    Build separate byte, normalized-content, and semantic identities.
+:func:`build_provenance`
+    Build a deterministic provenance DAG and propagate information.
+:func:`canonical_json`
+    Return deterministic typed JSON bytes for ``value``.
+:func:`canonical_pytree`
+    Return canonical bytes for a supported carrier or PyTree.
+:func:`certify_forward`
+    Execute a prepared model and produce a certified JAX PyTree.
+:func:`checksum_bytes`
+    Return a non-security consistency checksum for ``data``.
+:func:`checksum_chunks`
+    Compute a consistency checksum over consecutive byte chunks.
+:func:`checksum_file`
+    Stream exact file bytes into a consistency checksum.
+:func:`checksum_pytree`
+    Stream a canonical carrier into a consistency checksum.
+:func:`compose_transformations`
+    Compose contracts and raise if any requirement is unsatisfied.
+:func:`dependency_map`
+    Trace leaf-level structural and local numerical dependencies.
+:func:`derivative_evidence`
+    Compare JAX information flow with batched finite differences.
+:func:`diff_certificates`
+    Compare two certificates by scientific meaning and record class.
+:func:`effective_information`
+    Return propagated semantics, losses, and invalidations for one node.
+:func:`evaluate_claim`
+    Evaluate a numerical claim and preserve residual and margin leaves.
+:func:`evaluate_domain`
+    Evaluate a symmetric domain predicate around a reference value.
+:func:`evaluate_evidence`
+    Compare measured values with an external numerical reference.
+:func:`evaluate_policy`
+    Derive cumulative certification outcomes from numerical claims.
+:func:`execute_tb_radial`
+    Execute the radial ARPES model from one certification input PyTree.
+:func:`explain_claim`
+    Explain one claim and the numerical evidence supporting it.
+:func:`freeze_registry`
+    Prevent later registration and return the final immutable snapshot.
+:func:`get_check`
+    Resolve a registered JAX certification check.
+:func:`get_model`
+    Resolve an exact registered model.
+:func:`get_transformation`
+    Resolve an exact registered transformation contract.
+:func:`information_spectrum`
+    Estimate the leading local information spectrum matrix-free.
+:func:`invalidated_claims`
+    Return every claim invalidated at or upstream of one output.
+:func:`iter_canonical_pytree_chunks`
+    Yield canonical carrier bytes in bounded chunks.
+:func:`lineage`
+    Return the transitive parent-node lineage of one output.
+:func:`linearized_forward`
+    Evaluate a forward model and retain its JVP linearization.
+:func:`list_checks`
+    List registered checks in deterministic identity order.
+:func:`list_models`
+    Return model specifications in deterministic identity order.
+:func:`list_registered_models`
+    Return an immutable deterministic snapshot including executors.
+:func:`list_transformations`
+    Return transformation contracts in deterministic identity order.
+:func:`parse_checksum`
+    Parse and validate one checksum string.
+:func:`prepare_certification`
+    Resolve static scientific records before compiled execution.
+:func:`register_builtin_models`
+    Register built-in models and information-loss transformations.
+:func:`register_check`
+    Register a stable predicate identity and pure JAX callable.
+:func:`register_model`
+    Register an exact model identity once.
+:func:`register_transformation`
+    Register an exact transformation contract once.
+:func:`registry_snapshot`
+    Return one internally consistent immutable registry snapshot.
+:func:`result_checksum`
+    Identify a result under a declared numerical configuration.
+:func:`semantic_checksum`
+    Identify content together with its declared scientific meaning.
+:func:`sensitivity_map`
+    Measure scaled JVP sensitivities for a batch of tangent directions.
+:func:`summarize_certificate`
+    Return a deterministic human-readable certificate summary.
+:func:`tb_radial_model_spec`
+    Return the stable scientific specification for radial ARPES.
+:func:`validate_composition`
+    Validate and conservatively compose transformation semantics.
+:func:`validate_contract`
+    Return structural errors for a raw or deserialized contract.
+:func:`validate_provenance`
+    Independently re-evaluate graph structure and derived state.
+:func:`validate_registry`
+    Recompute registry structure and consistency checksums.
+:func:`verify_certificate`
+    Re-evaluate numerical claim and policy consistency without a rerun.
 """
 
 from .canonical import (
-    CANONICAL_JSON_VERSION,
-    CANONICAL_PYTREE_VERSION,
-    CanonicalizationError,
     canonical_json,
     canonical_pytree,
     iter_canonical_pytree_chunks,
 )
-from .checks import CheckFunction, get_check, list_checks, register_check
+from .checks import get_check, list_checks, register_check
 from .checksums import (
-    CHECKSUM_ALGORITHM,
-    CHECKSUM_FORMAT_VERSION,
     artifact_ref,
     checksum_bytes,
     checksum_chunks,
@@ -57,11 +159,7 @@ from .checksums import (
     semantic_checksum,
 )
 from .contracts import (
-    CompositionReport,
-    ContractError,
-    TransformationContract,
     compose_transformations,
-    make_transformation_contract,
     validate_composition,
     validate_contract,
 )
@@ -82,25 +180,14 @@ from .execution import (
     prepare_certification,
     verify_certificate,
 )
-from .inspect import (
-    CertificateDiff,
-    diff_certificates,
-    explain_claim,
-    summarize_certificate,
-)
+from .inspect import diff_certificates, explain_claim, summarize_certificate
 from .models import (
-    TB_RADIAL_MODEL_ID,
-    TB_RADIAL_MODEL_VERSION,
     execute_tb_radial,
     register_builtin_models,
     tb_radial_model_spec,
 )
-from .policy import POLICY_IDS, achieved_levels, evaluate_policy
+from .policy import achieved_levels, evaluate_policy
 from .provenance import (
-    InformationState,
-    ProvenanceError,
-    ProvenanceGraph,
-    ProvenanceReport,
     build_provenance,
     effective_information,
     invalidated_claims,
@@ -108,11 +195,6 @@ from .provenance import (
     validate_provenance,
 )
 from .registry import (
-    RegisteredModel,
-    RegisteredTransformation,
-    RegistryError,
-    RegistryReport,
-    RegistrySnapshot,
     freeze_registry,
     get_model,
     get_transformation,
@@ -126,28 +208,6 @@ from .registry import (
 )
 
 __all__: list[str] = [
-    "CANONICAL_JSON_VERSION",
-    "CANONICAL_PYTREE_VERSION",
-    "CHECKSUM_ALGORITHM",
-    "CHECKSUM_FORMAT_VERSION",
-    "CheckFunction",
-    "POLICY_IDS",
-    "CanonicalizationError",
-    "CertificateDiff",
-    "CompositionReport",
-    "ContractError",
-    "InformationState",
-    "ProvenanceError",
-    "ProvenanceGraph",
-    "ProvenanceReport",
-    "RegisteredModel",
-    "RegisteredTransformation",
-    "RegistryError",
-    "RegistryReport",
-    "RegistrySnapshot",
-    "TB_RADIAL_MODEL_ID",
-    "TB_RADIAL_MODEL_VERSION",
-    "TransformationContract",
     "achieved_levels",
     "artifact_ref",
     "build_provenance",
@@ -182,7 +242,6 @@ __all__: list[str] = [
     "list_checks",
     "list_registered_models",
     "list_transformations",
-    "make_transformation_contract",
     "parse_checksum",
     "prepare_certification",
     "register_model",

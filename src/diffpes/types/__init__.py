@@ -39,14 +39,200 @@ The submodules are organized as follows:
 - :mod:`volumetric`
     Volumetric data structures for VASP CHGCAR files.
 - :mod:`context`
-    High-level VASP workflow input data structures.
+    Structured inputs for high-level VASP simulation workflows.
 - :mod:`certification`
-    JAX-native scientific-assurance carriers and factory functions.
+    JAX-native carriers for certified forward-model executions.
+- :mod:`certification_constants`
+    Static identifiers and schema constants for forward certification.
+- :mod:`contracts`
+    Static carriers for certified transformation contracts.
+- :mod:`inspection`
+    Types-owned records produced by certificate inspection.
+- :mod:`provenance`
+    Types-owned carriers for artifact provenance and information flow.
 
 Routine Listings
 ----------------
+:class:`ArtifactRef`
+    Store static identity and role for one source or derived artifact.
+:class:`CertificationClaim`
+    Store a named claim and its continuous numerical evidence.
+:class:`CertificationContext`
+    Store prepared selections and references for compiled certification.
+:class:`CertifiedResult`
+    Store a numerical result paired with its differentiable certificate.
+:class:`CertificateDiff`
+    Store categorized differences between two forward certificates.
+:obj:`CheckFunction`
+    Callable signature for a pure JAX certification check.
+:obj:`CANONICAL_ARRAY_CHUNK_BYTES`
+    Array chunk size used by canonical PyTree encoding in bytes.
+:obj:`CANONICAL_JSON_PREFIX`
+    Domain prefix for canonical JSON consistency checksums.
+:obj:`CANONICAL_JSON_VERSION`
+    Version of the canonical JSON representation.
+:obj:`CANONICAL_PYTREE_PREFIX`
+    Domain prefix for canonical PyTree consistency checksums.
+:obj:`CANONICAL_PYTREE_VERSION`
+    Version of the canonical PyTree representation.
+:obj:`CANONICAL_SUPPORTED_ARRAY_KINDS`
+    NumPy dtype kinds accepted by canonical array encoding.
+:obj:`CERTIFICATE_ARRAY_KINDS`
+    NumPy dtype kinds accepted in persisted certificates.
+:obj:`CERTIFICATE_ARRAY_PREVIEW_ITEMS`
+    Maximum array elements shown by certificate inspection.
+:obj:`CERTIFICATE_DOCUMENT_KEYS`
+    Required top-level keys in a certificate document.
+:obj:`CERTIFICATE_FORMAT`
+    Stable identifier for the forward-certificate document format.
+:obj:`CERTIFICATE_H5_GROUP`
+    Reserved HDF5 group containing attached certificates.
+:obj:`CERTIFICATE_SCHEMA_MAJOR`
+    Supported major version of the certificate schema.
+:obj:`CERTIFICATE_SCHEMA_MINOR`
+    Supported minor version of the certificate schema.
+:obj:`CERTIFICATE_SCHEMA_PATTERN`
+    Pattern matching supported certificate schema versions.
+:obj:`CERTIFICATION_IDENTIFIER_PATTERN`
+    Pattern matching permanent certification identifiers.
+:obj:`CERTIFICATION_LEVEL_IDS`
+    Ordered cumulative scientific-certification level identifiers.
+:obj:`CERTIFICATION_LEVEL_PREFIXES`
+    Evidence prefixes required by each certification level.
+:obj:`CERTIFICATION_POLICY_IDS`
+    Stable identifiers of built-in cumulative policies.
+:obj:`CERTIFICATION_POLICY_LEVEL_COUNT`
+    Number of required levels for each built-in policy.
+:obj:`CERTIFICATION_SEMVER_PATTERN`
+    Pattern matching certification semantic versions.
+:obj:`CHECKSUM_ALGORITHM`
+    Name of the non-security consistency-checksum algorithm.
+:obj:`CHECKSUM_FILE_CHUNK_BYTES`
+    File chunk size used by streaming consistency checksums in bytes.
+:obj:`CHECKSUM_FORMAT_VERSION`
+    Version of the consistency-checksum text format.
+:obj:`CHECKSUM_PATTERN`
+    Pattern matching formatted consistency-checksum records.
+:obj:`CHECKSUM_RECORD_KIND_PATTERN`
+    Pattern matching consistency-checksum record-kind identifiers.
+:obj:`TB_RADIAL_INPUT_COUNT`
+    Number of positional inputs accepted by the radial ARPES model adapter.
+:obj:`TB_RADIAL_MODEL_ID`
+    Permanent identifier of the radial ARPES forward model.
+:obj:`TB_RADIAL_MODEL_VERSION`
+    Semantic version of the radial ARPES forward model.
+:class:`CompositionReport`
+    Store a conservative transformation-composition result.
+:class:`ConventionRef`
+    Store a versioned semantic convention used by a scientific model.
+:class:`DependencyMap`
+    Store declared and JAXPR-observed dependency relations.
+:class:`DerivativeEvidence`
+    Store JVP, VJP, reference, and information-spectrum evidence.
+:class:`DomainPredicate`
+    Store a static declaration of one model-domain predicate.
+:class:`DomainResult`
+    Store the traced evaluation of one declared domain predicate.
+:class:`EvidenceRef`
+    Store numerical evidence with static method and source identity.
+:class:`EvidenceReport`
+    Store the offline consistency outcome for one evidence record.
+:class:`ExecutionManifest`
+    Store software and execution identity prepared at the I/O boundary.
+:class:`ForwardCertificate`
+    Store the complete assurance record for one forward execution.
+:class:`ForwardModelSpec`
+    Store the identity of a differentiable forward model.
+:class:`InformationSpectrum`
+    Store a matrix-free information spectrum in input coordinates.
+:class:`InformationState`
+    Store effective semantic state for one artifact or result node.
+:class:`PolicyReport`
+    Store a traced policy truth table for derived certification levels.
+:class:`ProvenanceGraph`
+    Store a validated lineage graph and its propagated semantics.
+:class:`ProvenanceReport`
+    Store a structural and semantic provenance-validation report.
+:class:`RegisteredModel`
+    Store a frozen binding between a model spec and its executor.
+:class:`RegisteredTransformation`
+    Store a frozen transformation and its consistency checksum.
+:class:`RegistryReport`
+    Store the structural validation result for one registry snapshot.
+:class:`RegistrySnapshot`
+    Store an immutable deterministic snapshot of registry entries.
+:class:`ReproductionReport`
+    Store a numerical comparison from deliberate forward re-execution.
+:class:`SensitivityMap`
+    Store scaled sensitivities from inputs to output projections.
+:class:`TransformationContract`
+    Store the static semantic contract for one registered transformation.
+:class:`TransformationRecord`
+    Store one transformation and its semantic information effects.
+:class:`VerificationReport`
+    Store an offline certificate-verification outcome.
+:func:`make_artifact_ref`
+    Create a validated artifact reference.
+:func:`make_certification_claim`
+    Create a claim retaining both continuous and discrete evidence.
+:func:`make_certification_context`
+    Create a prepared certification context.
+:func:`make_certified_result`
+    Pair any JAX-compatible result value with a forward certificate.
+:func:`make_certificate_diff`
+    Construct a validated certificate-difference record.
+:func:`make_composition_report`
+    Create a validated immutable transformation-composition report.
+:func:`make_convention_ref`
+    Create a validated convention reference.
+:func:`make_dependency_map`
+    Create a structural dependency map.
+:func:`make_derivative_evidence`
+    Create validated derivative and local-information evidence.
+:func:`make_domain_predicate`
+    Create a validated domain-predicate declaration.
+:func:`make_domain_result`
+    Create one traced domain evaluation.
+:func:`make_evidence_ref`
+    Create validated vector-valued numerical evidence.
+:func:`make_evidence_report`
+    Create an offline evidence-verification report.
+:func:`make_execution_manifest`
+    Create a validated execution manifest.
+:func:`make_forward_certificate`
+    Create and cross-validate a complete forward certificate.
+:func:`make_forward_model_spec`
+    Create a validated stable forward-model specification.
+:func:`make_information_spectrum`
+    Create a validated local information spectrum.
+:func:`make_information_state`
+    Create a validated semantic-information state for one graph node.
+:func:`make_policy_report`
+    Create a validated policy truth table.
+:func:`make_provenance_graph`
+    Create a validated immutable provenance graph carrier.
+:func:`make_provenance_report`
+    Create a validated structural and semantic provenance report.
+:func:`make_registered_model`
+    Create a validated model-registry binding.
+:func:`make_registered_transformation`
+    Create a validated transformation-registry binding.
+:func:`make_registry_report`
+    Create a validated structural registry report.
+:func:`make_registry_snapshot`
+    Create an immutable registry snapshot.
+:func:`make_reproduction_report`
+    Create a report comparing a result with its re-execution.
+:func:`make_sensitivity_map`
+    Create a named, scaled local-sensitivity map.
+:func:`make_transformation_contract`
+    Create a validated immutable transformation contract.
+:func:`make_transformation_record`
+    Create a validated information-aware transformation record.
+:func:`make_verification_report`
+    Create an offline certificate-verification report.
 :class:`ArpesSpectrum`
-    PyTree for ARPES simulation output.
+    Store ARPES simulation output in a JAX PyTree.
 :obj:`ATTR_AUX`
     HDF5 attribute name storing auxiliary PyTree data as JSON.
 :obj:`ATTR_NONE`
@@ -60,7 +246,7 @@ Routine Listings
 :obj:`BAND_NDIM`
     Expected dimensionality of band-energy arrays.
 :class:`BandStructure`
-    PyTree for electronic band structure.
+    Store electronic band-structure data in a JAX PyTree.
 :obj:`BOHR_TO_ANGSTROM`
     Bohr radius in Angstrom.
 :obj:`COORDINATE_MODE_TOKENS`
@@ -74,15 +260,15 @@ Routine Listings
 :obj:`CROSS_SECTION_SIGMA_S`
     Yeh-Lindau s-subshell cross sections on the tabulation grid.
 :class:`CrystalGeometry`
-    PyTree for crystal geometry from VASP POSCAR.
+    Store VASP POSCAR crystal geometry in a JAX PyTree.
 :obj:`D_ORBITAL_SLICE`
     Slice selecting the five d orbitals.
 :class:`DensityOfStates`
-    PyTree for density of states.
+    Store density-of-states data in a JAX PyTree.
 :class:`DiagonalizedBands`
-    PyTree for diagonalized electronic structure.
+    Store diagonalized electronic-structure data in a JAX PyTree.
 :obj:`DosType`
-    Density-of-states carrier union used by workflow contexts.
+    Supported density-of-states containers.
 :obj:`EIG_DOWN_INDEX`
     Column index of spin-down eigenvalues in EIGENVAL.
 :obj:`EIG_UP_INDEX`
@@ -94,7 +280,7 @@ Routine Listings
 :obj:`FLOAT_TOKEN_RE`
     Compiled regex matching floating-point tokens.
 :class:`FullDensityOfStates`
-    PyTree for complete density of states with spin and PDOS.
+    Store spin-resolved total and projected DOS data in a JAX PyTree.
 :obj:`GAUNT_IMAG_TOL`
     Tolerance for discarding imaginary Gaunt residues.
 :obj:`HBAR_C_EV_A`
@@ -114,7 +300,7 @@ Routine Listings
 :obj:`KPATH_AUX_WITH_COORD_MODE_LEN`
     KPathInfo auxiliary-data length including a coordinate mode.
 :class:`KPathInfo`
-    PyTree for k-point path metadata.
+    Store k-point path metadata in a JAX PyTree.
 :obj:`KPOINT_LINE_VALUES`
     Tokens on an EIGENVAL k-point line.
 :obj:`L_MAX`
@@ -138,7 +324,7 @@ Routine Listings
 :func:`make_diagonalized_bands`
     Create a validated ``DiagonalizedBands`` instance.
 :func:`make_expanded_simulation_params`
-    Build simulation parameters with an automatically derived energy window.
+    Build simulation parameters with auto-derived energy window.
 :func:`make_full_density_of_states`
     Create a validated ``FullDensityOfStates`` instance.
 :func:`make_graphene_model`
@@ -168,7 +354,7 @@ Routine Listings
 :func:`make_volumetric_data`
     Create a validated ``VolumetricData`` instance.
 :func:`make_workflow_context`
-    Create a ``WorkflowContext`` instance from parsed inputs.
+    Create a workflow context from parsed VASP inputs.
 :obj:`ME_EV`
     Electron rest energy in eV.
 :obj:`MIN_SUM`
@@ -194,19 +380,19 @@ Routine Listings
 :obj:`ORBITAL_INDEX`
     Mapping from orbital name to VASP orbital index.
 :class:`OrbitalBasis`
-    PyTree for orbital quantum number metadata.
+    Store orbital quantum-number metadata in a JAX PyTree.
 :class:`OrbitalProjection`
-    PyTree for orbital-resolved band projections.
+    Store orbital-resolved band projections in a JAX PyTree.
 :obj:`P_ORBITAL_SLICE`
     Slice selecting the three p orbitals.
 :obj:`PHASE_LOSS_MESSAGE`
     Warning text for PROCAR magnitude-only eigenvectors.
 :class:`PolarizationConfig`
-    PyTree for photon polarization geometry.
+    Store photon-polarization geometry in a JAX PyTree.
 :obj:`PRESET_NAMES`
     Recognized band-scatter plotting preset names.
 :obj:`ProjectionType`
-    Orbital-projection carrier union used by workflow contexts.
+    Supported orbital-projection containers.
 :obj:`S_IDX`
     Index of the s orbital.
 :obj:`SCALAR_LINE_COMPONENTS`
@@ -222,33 +408,33 @@ Routine Listings
 :obj:`ScalarNumeric`
     Union of ``int``, ``float``, ``complex``, and ``Num[Array, " "]``.
 :class:`SelfEnergyConfig`
-    PyTree for energy-dependent self-energy (lifetime broadening).
+    Store energy-dependent self-energy data in a JAX PyTree.
 :class:`SimulationParams`
-    PyTree for ARPES simulation parameters.
+    Store ARPES simulation parameters in a JAX PyTree.
 :class:`SlaterParams`
-    PyTree for Slater radial wavefunction parameters.
+    Store Slater radial-wavefunction parameters in a JAX PyTree.
 :obj:`SMALL_ARGUMENT`
     Small-argument cutoff for spherical Bessel seeds.
 :obj:`SOC_BLOCKS`
     PROCAR block count for SOC calculations.
 :class:`SOCVolumetricData`
-    PyTree for volumetric data from SOC CHGCAR files.
+    Store SOC CHGCAR volumetric-grid data in a JAX PyTree.
 :obj:`SPIN_COLS`
     DOSCAR column count with spin polarization.
 :class:`SpinBandStructure`
-    PyTree for spin-resolved electronic band structure.
+    Store spin-resolved electronic band-structure data in a JAX PyTree.
 :class:`SpinOrbitalProjection`
-    PyTree for orbital projections with mandatory spin data.
+    Store orbital projections with spin data in a JAX PyTree.
 :class:`TBModel`
-    PyTree for tight-binding model parameters (legacy).
+    Store tight-binding parameters in a JAX PyTree.
 :class:`VolumetricData`
-    PyTree for volumetric grid data from CHGCAR.
+    Store CHGCAR volumetric-grid data in a JAX PyTree.
 :obj:`WEIGHT_COMPONENT_COUNT`
     Tokens on a weighted k-point line.
 :obj:`WEIGHT_COMPONENT_INDEX`
     Index of the weight token on a k-point line.
 :class:`WorkflowContext`
-    PyTree bundling parsed inputs for high-level VASP workflows.
+    Store parsed VASP inputs for high-level workflow helpers.
 :obj:`XYZ_COMPONENTS`
     Number of Cartesian vector components.
 
@@ -284,6 +470,7 @@ from .certification import (
     CertificationClaim,
     CertificationContext,
     CertifiedResult,
+    CheckFunction,
     ConventionRef,
     DependencyMap,
     DerivativeEvidence,
@@ -296,6 +483,10 @@ from .certification import (
     ForwardModelSpec,
     InformationSpectrum,
     PolicyReport,
+    RegisteredModel,
+    RegisteredTransformation,
+    RegistryReport,
+    RegistrySnapshot,
     ReproductionReport,
     SensitivityMap,
     TransformationRecord,
@@ -316,10 +507,44 @@ from .certification import (
     make_forward_model_spec,
     make_information_spectrum,
     make_policy_report,
+    make_registered_model,
+    make_registered_transformation,
+    make_registry_report,
+    make_registry_snapshot,
     make_reproduction_report,
     make_sensitivity_map,
     make_transformation_record,
     make_verification_report,
+)
+from .certification_constants import (
+    CANONICAL_ARRAY_CHUNK_BYTES,
+    CANONICAL_JSON_PREFIX,
+    CANONICAL_JSON_VERSION,
+    CANONICAL_PYTREE_PREFIX,
+    CANONICAL_PYTREE_VERSION,
+    CANONICAL_SUPPORTED_ARRAY_KINDS,
+    CERTIFICATE_ARRAY_KINDS,
+    CERTIFICATE_ARRAY_PREVIEW_ITEMS,
+    CERTIFICATE_DOCUMENT_KEYS,
+    CERTIFICATE_FORMAT,
+    CERTIFICATE_H5_GROUP,
+    CERTIFICATE_SCHEMA_MAJOR,
+    CERTIFICATE_SCHEMA_MINOR,
+    CERTIFICATE_SCHEMA_PATTERN,
+    CERTIFICATION_IDENTIFIER_PATTERN,
+    CERTIFICATION_LEVEL_IDS,
+    CERTIFICATION_LEVEL_PREFIXES,
+    CERTIFICATION_POLICY_IDS,
+    CERTIFICATION_POLICY_LEVEL_COUNT,
+    CERTIFICATION_SEMVER_PATTERN,
+    CHECKSUM_ALGORITHM,
+    CHECKSUM_FILE_CHUNK_BYTES,
+    CHECKSUM_FORMAT_VERSION,
+    CHECKSUM_PATTERN,
+    CHECKSUM_RECORD_KIND_PATTERN,
+    TB_RADIAL_INPUT_COUNT,
+    TB_RADIAL_MODEL_ID,
+    TB_RADIAL_MODEL_VERSION,
 )
 from .constants import (
     ATTR_AUX,
@@ -379,6 +604,12 @@ from .context import (
     WorkflowContext,
     make_workflow_context,
 )
+from .contracts import (
+    CompositionReport,
+    TransformationContract,
+    make_composition_report,
+    make_transformation_contract,
+)
 from .dos import (
     DensityOfStates,
     FullDensityOfStates,
@@ -389,6 +620,7 @@ from .geometry import (
     CrystalGeometry,
     make_crystal_geometry,
 )
+from .inspection import CertificateDiff, make_certificate_diff
 from .kpath import (
     KPathInfo,
     make_kpath_info,
@@ -399,6 +631,14 @@ from .params import (
     make_expanded_simulation_params,
     make_polarization_config,
     make_simulation_params,
+)
+from .provenance import (
+    InformationState,
+    ProvenanceGraph,
+    ProvenanceReport,
+    make_information_state,
+    make_provenance_graph,
+    make_provenance_report,
 )
 from .radial_params import (
     OrbitalBasis,
@@ -442,7 +682,33 @@ __all__: list[str] = [
     "BAND_NDIM",
     "BandStructure",
     "BOHR_TO_ANGSTROM",
+    "CANONICAL_ARRAY_CHUNK_BYTES",
+    "CANONICAL_JSON_PREFIX",
+    "CANONICAL_JSON_VERSION",
+    "CANONICAL_PYTREE_PREFIX",
+    "CANONICAL_PYTREE_VERSION",
+    "CANONICAL_SUPPORTED_ARRAY_KINDS",
+    "CERTIFICATE_ARRAY_KINDS",
+    "CERTIFICATE_ARRAY_PREVIEW_ITEMS",
+    "CERTIFICATE_DOCUMENT_KEYS",
+    "CERTIFICATE_FORMAT",
+    "CERTIFICATE_H5_GROUP",
+    "CERTIFICATE_SCHEMA_MAJOR",
+    "CERTIFICATE_SCHEMA_MINOR",
+    "CERTIFICATE_SCHEMA_PATTERN",
+    "CERTIFICATION_IDENTIFIER_PATTERN",
+    "CERTIFICATION_LEVEL_IDS",
+    "CERTIFICATION_LEVEL_PREFIXES",
+    "CERTIFICATION_POLICY_IDS",
+    "CERTIFICATION_POLICY_LEVEL_COUNT",
+    "CERTIFICATION_SEMVER_PATTERN",
+    "CHECKSUM_ALGORITHM",
+    "CHECKSUM_FILE_CHUNK_BYTES",
+    "CHECKSUM_FORMAT_VERSION",
+    "CHECKSUM_PATTERN",
+    "CHECKSUM_RECORD_KIND_PATTERN",
     "COORDINATE_MODE_TOKENS",
+    "CompositionReport",
     "CROSS_SECTION_ENERGIES",
     "CROSS_SECTION_SIGMA_D",
     "CROSS_SECTION_SIGMA_P",
@@ -451,6 +717,8 @@ __all__: list[str] = [
     "CertificationClaim",
     "CertificationContext",
     "CertifiedResult",
+    "CertificateDiff",
+    "CheckFunction",
     "ConventionRef",
     "D_ORBITAL_SLICE",
     "DensityOfStates",
@@ -475,6 +743,7 @@ __all__: list[str] = [
     "HBAR_C_EV_A",
     "HBAR_EV_S",
     "INTENSITY_NDIM",
+    "InformationState",
     "InformationSpectrum",
     "ISPIN2_BLOCKS",
     "ISPIN_SPIN_POLARIZED",
@@ -494,6 +763,8 @@ __all__: list[str] = [
     "make_certification_claim",
     "make_certification_context",
     "make_certified_result",
+    "make_certificate_diff",
+    "make_composition_report",
     "make_convention_ref",
     "make_crystal_geometry",
     "make_density_of_states",
@@ -511,11 +782,18 @@ __all__: list[str] = [
     "make_full_density_of_states",
     "make_graphene_model",
     "make_information_spectrum",
+    "make_information_state",
     "make_kpath_info",
     "make_orbital_basis",
     "make_orbital_projection",
     "make_polarization_config",
     "make_policy_report",
+    "make_provenance_graph",
+    "make_provenance_report",
+    "make_registered_model",
+    "make_registered_transformation",
+    "make_registry_report",
+    "make_registry_snapshot",
     "make_reproduction_report",
     "make_self_energy_config",
     "make_simulation_params",
@@ -526,6 +804,7 @@ __all__: list[str] = [
     "make_spin_orbital_projection",
     "make_tb_model",
     "make_transformation_record",
+    "make_transformation_contract",
     "make_verification_report",
     "make_volumetric_data",
     "make_workflow_context",
@@ -549,6 +828,12 @@ __all__: list[str] = [
     "PolicyReport",
     "PRESET_NAMES",
     "ProjectionType",
+    "ProvenanceGraph",
+    "ProvenanceReport",
+    "RegisteredModel",
+    "RegisteredTransformation",
+    "RegistryReport",
+    "RegistrySnapshot",
     "ReproductionReport",
     "S_IDX",
     "SCALAR_LINE_COMPONENTS",
@@ -568,6 +853,10 @@ __all__: list[str] = [
     "SpinBandStructure",
     "SpinOrbitalProjection",
     "TBModel",
+    "TB_RADIAL_INPUT_COUNT",
+    "TB_RADIAL_MODEL_ID",
+    "TB_RADIAL_MODEL_VERSION",
+    "TransformationContract",
     "TransformationRecord",
     "VolumetricData",
     "VerificationReport",

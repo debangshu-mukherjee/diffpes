@@ -1,9 +1,14 @@
-"""Tests for differentiable certification evidence."""
+"""Tests for differentiable certification evidence.
+
+The tests cover public behavior, differentiability, validation, and stable
+scientific identity in the supported certification regime.
+"""
 
 import jax
 import jax.numpy as jnp
+from beartype.typing import Any
 
-from diffpes.certify.evidence import (
+from diffpes.certify import (
     derivative_evidence,
     evaluate_claim,
     evaluate_domain,
@@ -11,13 +16,27 @@ from diffpes.certify.evidence import (
 )
 
 
-class TestEvidence:
-    """Verify continuous residuals remain available to autodiff."""
+class TestEvaluateClaim:
+    """Verify :func:`~diffpes.certify.evaluate_claim`.
 
-    def test_claim_retains_differentiable_margin(self):
-        """Differentiate the tolerance margin beneath a Boolean claim."""
+    The cases cover the public behavior in the supported certification regime.
 
-        def margin(measured):
+    :see: :func:`~diffpes.certify.evaluate_claim`
+    """
+
+    def test_claim_retains_differentiable_margin(self) -> None:
+        """Differentiate the tolerance margin beneath a Boolean claim.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+
+        def margin(measured: Any) -> Any:
+            claim: Any
             claim = evaluate_claim(
                 "claim.test",
                 "subject.test",
@@ -30,16 +49,52 @@ class TestEvidence:
 
         assert jnp.allclose(jax.grad(margin)(jnp.array([0.25])), -1.0)
 
-    def test_domain_reports_signed_margin(self):
-        """Preserve distance to the validity boundary."""
+
+class TestEvaluateDomain:
+    """Verify :func:`~diffpes.certify.evaluate_domain`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.evaluate_domain`
+    """
+
+    def test_domain_reports_signed_margin(self) -> None:
+        """Preserve distance to the validity boundary.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        result: Any
         result = evaluate_domain(
             "domain.test", jnp.array(1.2), jnp.array(1.0), jnp.array(0.5)
         )
         assert bool(result.passed)
         assert jnp.allclose(result.margin, 0.3)
 
-    def test_external_evidence_preserves_residual(self):
-        """Record numerical comparison arrays without reducing them."""
+
+class TestEvaluateEvidence:
+    """Verify :func:`~diffpes.certify.evaluate_evidence`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.evaluate_evidence`
+    """
+
+    def test_external_evidence_preserves_residual(self) -> None:
+        """Record numerical comparison arrays without reducing them.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        result: Any
         result = evaluate_evidence(
             "evidence.test",
             "method.closed_form",
@@ -49,8 +104,26 @@ class TestEvidence:
         )
         assert jnp.allclose(result.residual, jnp.array([0.1, -0.1]))
 
-    def test_derivative_evidence_matches_quadratic(self):
-        """Compare retained JVPs and VJPs against central differences."""
+
+class TestDerivativeEvidence:
+    """Verify :func:`~diffpes.certify.derivative_evidence`.
+
+    The cases cover the public behavior in the supported certification regime.
+
+    :see: :func:`~diffpes.certify.derivative_evidence`
+    """
+
+    def test_derivative_evidence_matches_quadratic(self) -> None:
+        """Compare retained JVPs and VJPs against central differences.
+
+        The case uses explicit inputs in the supported certification regime.
+        It checks the public result or the documented failure state.
+
+        Notes
+        -----
+        The test compares the result with explicit numerical or structural assertions.
+        """
+        result: Any
         result = derivative_evidence(
             lambda x: x**2,
             jnp.array([2.0]),

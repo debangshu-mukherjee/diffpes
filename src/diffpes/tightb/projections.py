@@ -29,8 +29,6 @@ def eigenvector_orbital_weights(
 ) -> Float[Array, "K B O"]:
     r"""Compute orbital weights from eigenvectors.
 
-    Extended Summary
-    ----------------
     For each eigenstate ``|psi_{k,b}>`` expanded in the orbital basis
 
     .. math::
@@ -54,6 +52,8 @@ def eigenvector_orbital_weights(
     photoemission matrix element calculations (where the full complex
     coefficients are also needed; see ``orbital_coefficients``).
 
+    :see: :class:`~.test_projections.TestEigenvectorOrbitalWeights`
+
     Parameters
     ----------
     eigenvectors : Complex[Array, "K B O"]
@@ -71,7 +71,8 @@ def eigenvector_orbital_weights(
     expressions are mathematically identical for complex arrays and
     produce the same JAX trace; the former is marginally more readable.
     """
-    return jnp.abs(eigenvectors) ** 2
+    weights: Float[Array, "K B O"] = jnp.abs(eigenvectors) ** 2
+    return weights
 
 
 @jaxtyped(typechecker=beartype)
@@ -83,8 +84,6 @@ def orbital_coefficients(
     For full matrix element calculation the complex coefficients
     c_{k,b,orb} are needed (not just ``|c|^2``).
 
-    Extended Summary
-    ----------------
     This is an **identity function**: it returns its input unchanged.
     Its purpose is purely semantic -- to make call sites self-documenting
     when both ``eigenvector_orbital_weights`` (which squares the
@@ -109,6 +108,8 @@ def orbital_coefficients(
     are real and non-negative.  In that regime, coherent interference
     terms are approximate.
 
+    :see: :class:`~.test_projections.TestOrbitalCoefficients`
+
     Parameters
     ----------
     eigenvectors : Complex[Array, "K B O"]
@@ -125,7 +126,8 @@ def orbital_coefficients(
     ``orbital_coefficients`` adds zero overhead -- the function
     compiles away entirely.
     """
-    return eigenvectors
+    coefficients: Complex[Array, "K B O"] = eigenvectors
+    return coefficients
 
 
 __all__: list[str] = [

@@ -8,7 +8,7 @@ Defines the PyTree type for energy-dependent self-energy
 Routine Listings
 ----------------
 :class:`SelfEnergyConfig`
-    PyTree for energy-dependent self-energy (lifetime broadening).
+    Store energy-dependent self-energy data in a JAX PyTree.
 :func:`make_self_energy_config`
     Create a validated ``SelfEnergyConfig`` instance.
 
@@ -29,10 +29,8 @@ from .aliases import ScalarFloat
 
 
 class SelfEnergyConfig(eqx.Module):
-    """PyTree for energy-dependent self-energy (lifetime broadening).
+    """Store energy-dependent self-energy data in a JAX PyTree.
 
-    Extended Summary
-    ----------------
     Models the imaginary part of the electronic self-energy
     Im[Sigma(E)] as a function of binding energy. In the forward
     ARPES simulator this replaces the scalar Lorentzian half-width
@@ -55,6 +53,9 @@ class SelfEnergyConfig(eqx.Module):
     self-energy shape, enabling inverse fitting of lifetime
     broadening from experimental data.
 
+
+    :see: :class:`~.test_self_energy.TestSelfEnergyConfig`
+
     Attributes
     ----------
     coefficients : Float[Array, " P"]
@@ -72,8 +73,7 @@ class SelfEnergyConfig(eqx.Module):
         for constant and polynomial modes. JAX-traced when present.
     mode : str
         One of ``"constant"``, ``"polynomial"``, ``"tabulated"``.
-        Stored as auxiliary data (static) because it selects
-        different code branches in the forward simulator.
+        **Static** -- a compile-time constant; changing it triggers retracing.
 
     Notes
     -----
@@ -95,7 +95,7 @@ class SelfEnergyConfig(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_self_energy_config(
+def make_self_energy_config(  # noqa: DOC503
     gamma: ScalarFloat = 0.1,
     mode: str = "constant",
     coefficients: Optional[Float[Array, " Pc"]] = None,
@@ -103,8 +103,6 @@ def make_self_energy_config(
 ) -> SelfEnergyConfig:
     """Create a validated ``SelfEnergyConfig`` instance.
 
-    Extended Summary
-    ----------------
     Factory function that validates inputs and constructs a
     ``SelfEnergyConfig`` PyTree. Performs mode validation (only
     ``"constant"``, ``"polynomial"``, ``"tabulated"`` are accepted)
@@ -116,20 +114,36 @@ def make_self_energy_config(
     ``None``, a single-element array ``[gamma]`` is created
     automatically.
 
+    :see: :class:`~.test_self_energy.TestMakeSelfEnergyConfig`
+
     Implementation Logic
     --------------------
-    1. **Validate mode**: raise ``ValueError`` if ``mode`` is not one
-       of the three supported strings.
-    2. **Default coefficients**: if ``coefficients`` is ``None``,
-       create ``jnp.asarray([gamma], dtype=jnp.float64)`` -- a
-       single-element array holding the constant broadening.
-       Otherwise cast the provided array to ``jnp.float64``.
-    3. **Cast energy_nodes**: if provided, cast to ``jnp.float64``;
-       otherwise leave as ``None``.
-    4. **Validate tabulated mode**: raise ``ValueError`` if
-       ``mode == "tabulated"`` but ``energy_nodes`` is ``None``,
-       because interpolation requires an energy grid.
-    5. **Construct** the ``SelfEnergyConfig`` Equinox module and return.
+    1. **Prepare the normalized values**::
+
+           nodes_arr = None
+
+       This expression gives the later validation steps a stable shape and
+       dtype.
+
+    2. **Apply static validation**::
+
+           mode not in ('constant', 'polynomial', 'tabulated')
+
+       This predicate rejects invalid structure before JAX traces the
+       numerical checks.
+
+    3. **Apply traced validation**::
+
+           ~jnp.all(jnp.isfinite(coeff_arr))
+
+       This predicate remains active during eager and compiled execution.
+
+    4. **Return the named instance**::
+
+           return config
+
+       The explicit name keeps the implementation and the Returns section
+       synchronized.
 
     Parameters
     ----------
@@ -139,13 +153,14 @@ def make_self_energy_config(
         Default is 0.1.
     mode : str, optional
         Self-energy model. One of ``"constant"``, ``"polynomial"``,
-        ``"tabulated"``. Default is ``"constant"``.
-    coefficients : Float[Array, " P"], optional
+        ``"tabulated"`` (**static** -- a compile-time constant; changing it
+        triggers retracing). Default is ``"constant"``.
+    coefficients : Optional[Float[Array, " Pc"]], optional
         Explicit model coefficients. If ``None``, defaults to
         ``[gamma]``. For polynomial mode, these are the polynomial
         coefficients ``[a0, a1, ...]``. For tabulated mode, these
         are the broadening values at each energy node.
-    energy_nodes : Float[Array, " P"], optional
+    energy_nodes : Optional[Float[Array, " Pn"]], optional
         Energy grid (eV) for tabulated mode. Must have the same
         length as ``coefficients`` in tabulated mode. Ignored for
         other modes. Default is ``None``.
@@ -164,6 +179,14 @@ def make_self_energy_config(
     EquinoxRuntimeError
         If coefficients are non-finite or tabulated energy nodes are
         non-finite or not strictly increasing.
+
+    Notes
+    -----
+    Static validation raises ``ValueError`` before traced construction for an
+    unsupported mode, an invalid node-mode combination, or unequal tabulated
+    lengths. Traced validation uses ``eqx.error_if`` and raises
+    ``EquinoxRuntimeError`` for non-finite coefficients or for tabulated nodes
+    that are non-finite or not strictly increasing.
 
     See Also
     --------
@@ -187,10 +210,10 @@ def make_self_energy_config(
         msg: str = "energy_nodes required for tabulated mode"
         raise ValueError(msg)
     if mode != "tabulated" and nodes_arr is not None:
-        msg = "energy_nodes are only valid for tabulated mode"
+        msg: str = "energy_nodes are only valid for tabulated mode"
         raise ValueError(msg)
     if nodes_arr is not None and nodes_arr.shape[0] != coeff_arr.shape[0]:
-        msg = "energy_nodes and coefficients must have the same length"
+        msg: str = "energy_nodes and coefficients must have the same length"
         raise ValueError(msg)
 
     def validate_and_create() -> SelfEnergyConfig:
@@ -211,11 +234,12 @@ def make_self_energy_config(
                 ~(jnp.all(jnp.diff(nodes_arr) > 0.0)),
                 "make_self_energy_config: energy nodes strictly increasing",
             )
-        return SelfEnergyConfig(
+        validated_config: SelfEnergyConfig = SelfEnergyConfig(
             coefficients=coeff_arr,
             energy_nodes=nodes_arr,
             mode=mode,
         )
+        return validated_config
 
     config: SelfEnergyConfig = validate_and_create()
     return config

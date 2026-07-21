@@ -2,10 +2,9 @@
 
 Extended Summary
 ----------------
-Reads VASP KPOINTS files and returns a
-:class:`~diffpes.types.KPathInfo` PyTree containing plotting labels and
-mode-specific metadata (automatic grid/shift, explicit weights, and
-line-mode segment endpoints).
+Reads VASP KPOINTS files and returns a :class:`~diffpes.types.KPathInfo`
+carrier containing plotting labels and mode-specific metadata: automatic
+grid and shift, explicit weights, and line-mode segment endpoints.
 
 Routine Listings
 ----------------
@@ -17,8 +16,9 @@ import re
 from pathlib import Path
 
 import jax.numpy as jnp
-from beartype.typing import Optional
-from jaxtyping import Array, Float, Int
+from beartype import beartype
+from beartype.typing import Optional, TextIO
+from jaxtyping import Array, Float, Int, jaxtyped
 
 from diffpes.types import (
     COORDINATE_MODE_TOKENS,
@@ -31,6 +31,7 @@ from diffpes.types import (
 )
 
 
+@jaxtyped(typechecker=beartype)
 def read_kpoints(  # noqa: PLR0915
     filename: str = "KPOINTS",
 ) -> KPathInfo:
@@ -41,18 +42,29 @@ def read_kpoints(  # noqa: PLR0915
     Line-mode (path segments), Automatic (Monkhorst-Pack/Gamma grids),
     and Explicit (listed k-points with optional weights).
 
+    :see: :class:`~.test_kpoints.TestReadKpoints`
+
     Implementation Logic
     --------------------
-    1. Parse comment, line-2 integer, and line-3 mode/scheme.
-    2. Dispatch by mode:
+    1. **Read the mode selector**::
 
-       - Line-mode: parse paired endpoint lines, derive segment count,
-         endpoint k-points, labels, and label indices.
-       - Automatic: parse grid and shift vectors.
-       - Explicit: parse listed k-points and weights.
+           mode_token: str = lines[2].strip()
+           mode_lower: str = mode_token.lower()
 
-    3. Construct ``KPathInfo`` with both legacy plotting fields and
-       richer mode-specific metadata.
+       This determines the static parser branch from the third KPOINTS record.
+
+    2. **Dispatch the selected layout**::
+
+           if "line" in mode_lower:
+               mode = "Line-mode"
+
+       The other branches parse automatic grids or explicit weighted points.
+
+    3. **Return normalized path metadata**::
+
+           return kpath
+
+       Each layout binds its fields through one factory.
 
     Parameters
     ----------
@@ -71,6 +83,9 @@ def read_kpoints(  # noqa: PLR0915
     returned object is the total count ``segments * points_per_segment``,
     preserving existing plotting behavior.
     """
+    fid: TextIO
+    seg: int
+
     path: Path = Path(filename)
     with path.open("r") as fid:
         comment: str = fid.readline().strip()
@@ -217,6 +232,9 @@ def _parse_explicit_kpoints(
         If a coordinate line cannot be parsed or has fewer than 3
         numeric tokens.
     """
+    stripped: str
+
+    exc: ValueError
     points: list[list[float]] = []
     weights: list[float] = []
     for stripped in lines:
@@ -226,7 +244,9 @@ def _parse_explicit_kpoints(
         try:
             parts = [float(x) for x in stripped.split()]
         except ValueError as exc:
-            msg = f"Invalid explicit KPOINTS coordinate line: {stripped!r}"
+            msg: str = (
+                f"Invalid explicit KPOINTS coordinate line: {stripped!r}"
+            )
             raise ValueError(msg) from exc
         if len(parts) < XYZ_COMPONENTS:
             msg = "Explicit KPOINTS line must contain at least 3 coordinates."
@@ -236,7 +256,11 @@ def _parse_explicit_kpoints(
             weights.append(parts[WEIGHT_COMPONENT_INDEX])
         else:
             weights.append(1.0)
-    return points, weights
+    explicit_kpoints: tuple[list[list[float]], list[float]] = (
+        points,
+        weights,
+    )
+    return explicit_kpoints
 
 
 def _looks_like_kpoint_line(line: str) -> bool:
@@ -262,15 +286,19 @@ def _looks_like_kpoint_line(line: str) -> bool:
         all be converted to ``float``; ``False`` otherwise.
     """
     parts: list[str] = line.split()
+    looks_like_kpoint: bool = False
     if len(parts) < XYZ_COMPONENTS:
-        return False
-    try:
-        float(parts[0])
-        float(parts[1])
-        float(parts[2])
-    except ValueError:
-        return False
-    return True
+        looks_like_kpoint = False
+    else:
+        try:
+            float(parts[0])
+            float(parts[1])
+            float(parts[2])
+        except ValueError:
+            looks_like_kpoint = False
+        else:
+            looks_like_kpoint = True
+    return looks_like_kpoint
 
 
 def _parse_grid(line: str) -> list[int]:
@@ -301,13 +329,14 @@ def _parse_grid(line: str) -> list[int]:
     """
     vals: list[str] = line.split()
     if len(vals) < XYZ_COMPONENTS:
-        msg = "Automatic KPOINTS grid line must have 3 values."
+        msg: str = "Automatic KPOINTS grid line must have 3 values."
         raise ValueError(msg)
-    return [
+    grid: list[int] = [
         int(round(float(vals[0]))),
         int(round(float(vals[1]))),
         int(round(float(vals[2]))),
     ]
+    return grid
 
 
 def _parse_shift(line: str) -> list[float]:
@@ -337,9 +366,10 @@ def _parse_shift(line: str) -> list[float]:
     """
     vals: list[str] = line.split()
     if len(vals) < XYZ_COMPONENTS:
-        msg = "Automatic KPOINTS shift line must have 3 values."
+        msg: str = "Automatic KPOINTS shift line must have 3 values."
         raise ValueError(msg)
-    return [float(vals[0]), float(vals[1]), float(vals[2])]
+    shift: list[float] = [float(vals[0]), float(vals[1]), float(vals[2])]
+    return shift
 
 
 def _extract_coords(line: str) -> list[float]:
@@ -369,9 +399,14 @@ def _extract_coords(line: str) -> list[float]:
     """
     tokens: list[str] = FLOAT_TOKEN_RE.findall(line)
     if len(tokens) < XYZ_COMPONENTS:
-        msg = f"Could not parse k-point coordinates from line: {line!r}"
+        msg: str = f"Could not parse k-point coordinates from line: {line!r}"
         raise ValueError(msg)
-    return [float(tokens[0]), float(tokens[1]), float(tokens[2])]
+    coordinates: list[float] = [
+        float(tokens[0]),
+        float(tokens[1]),
+        float(tokens[2]),
+    ]
+    return coordinates
 
 
 def _extract_label(line: str) -> str:
@@ -419,11 +454,11 @@ def _extract_label(line: str) -> str:
     _min_parts_with_label: int = 4
     match: Optional[re.Match[str]] = re.search(r"!\s*(\S+)", line)
     if match:
-        return match.group(1)
-    parts: list[str] = line.split()
-    if len(parts) > _min_parts_with_label:
-        return parts[-1]
-    return ""
+        label: str = match.group(1)
+    else:
+        parts: list[str] = line.split()
+        label = parts[-1] if len(parts) > _min_parts_with_label else ""
+    return label
 
 
 __all__: list[str] = [

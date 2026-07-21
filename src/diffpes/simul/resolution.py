@@ -42,8 +42,6 @@ def apply_momentum_broadening(
     This smears sharp spectral features in momentum, mimicking the
     experimental point-spread function in the angular direction.
 
-    Extended Summary
-    ----------------
     In a real ARPES experiment, the finite angular acceptance of the
     electron analyser and the finite spot size of the photon beam
     lead to a momentum-space resolution function. This is well
@@ -52,33 +50,39 @@ def apply_momentum_broadening(
     with a normalized Gaussian kernel, which is efficient and
     JAX-differentiable.
 
+    :see: :class:`~.test_resolution.TestApplyMomentumBroadening`
+
     Implementation Logic
     --------------------
-    1. **Guard against zero dk**:
-       ``safe_dk = max(dk, 1e-12)``
-       Prevents division by zero if ``dk`` is exactly zero. The
-       resulting extremely narrow kernel effectively becomes an
-       identity operation.
+    1. **Guard the Gaussian width**::
 
-    2. **Build Gaussian kernel matrix**:
-       ``G_{ij} = exp(-0.5 * ((k_i - k_j) / safe_dk)^2)``
-       The kernel is a ``(K, K)`` matrix where each element measures
-       the Gaussian overlap between k-points ``i`` and ``j``. The
-       k-distances are cumulative path lengths along the k-path,
-       accounting for non-uniform k-point spacing.
+           safe_dk: Float[Array, ""] = jnp.maximum(dk_arr, EPS)
 
-    3. **Row-normalize the kernel**:
-       Each row of the kernel is divided by its sum so that the
-       convolution conserves total spectral weight. A safety guard
-       replaces zero row sums with 1.0 to avoid division by zero
-       (which could occur if k-points are extremely far apart
-       relative to ``dk``).
+       This guard prevents division by zero. A zero width produces an
+       effectively diagonal kernel.
 
-    4. **Apply via matrix multiplication**:
-       ``I_broadened = G @ I``
-       The ``(K, K) @ (K, E)`` product applies the normalized
-       Gaussian weights to each energy column independently,
-       producing the momentum-broadened intensity of shape ``(K, E)``.
+    2. **Build the Gaussian kernel**::
+
+           kernel: Float[Array, " K K"] = jnp.exp(
+               -0.5 * scaled_distances**2
+           )
+
+       Each matrix element measures the Gaussian overlap between two
+       k-points. The cumulative distances support nonuniform spacing.
+
+    3. **Normalize each row**::
+
+           kernel = safe_divide(kernel, row_sum)
+
+       The normalization preserves the spectral weight at each output
+       k-point. The safe division also protects an empty numerical row.
+
+    4. **Apply the kernel**::
+
+           broadened: Float[Array, "K E"] = kernel @ intensity
+
+       The matrix product applies the momentum response independently to
+       every energy column.
 
     Parameters
     ----------

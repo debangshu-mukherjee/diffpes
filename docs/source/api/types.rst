@@ -1,7 +1,8 @@
 diffpes.types
 =============
 
-PyTree-compatible data structures and factory functions for crystal geometry, band structures, orbital projections, simulation parameters, and polarization configurations.
+PyTree-compatible data structures and factories for physical inputs, forward
+outputs, certification records, transformation contracts, and provenance.
 
 .. automodule:: diffpes.types
    :members:

@@ -32,7 +32,7 @@ Submodules
     HDF5 persistence, and plotting helpers for ARPES simulation input.
 
 :mod:`diffpes.certify`
-    JAX-native certified forward execution, provenance, evidence, policy
+    JAX-native scientific certification, provenance, evidence, policy
     evaluation, information-flow diagnostics, and inspection.
 
 :mod:`diffpes.maths`
@@ -52,8 +52,8 @@ Submodules
     ARPES-side adapters for external electronic-structure sources.
 
 :mod:`diffpes.types`
-    PyTree-compatible data structures and factory functions for crystal
-    geometry, bands, projections, and simulation parameters.
+    PyTree-compatible physical inputs, forward outputs, certification records,
+    transformation contracts, and provenance carriers.
 
 :mod:`diffpes.utils`
     Mathematical utilities: the Faddeeva function and z-score

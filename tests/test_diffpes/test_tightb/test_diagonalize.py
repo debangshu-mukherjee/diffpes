@@ -12,22 +12,17 @@ shape conventions, the VASP adapter's approximate eigenvector
 normalization from DFT projections, and the phase-loss warning/error
 policy for VASP projection data.
 
-Routine Listings
-----------------
-:class:`TestDiagonalizeSingleK`
-    Tests for diagonalize_single_k.
-:class:`TestDiagonalizeTB`
-    Tests for diagonalize_tb.
-:class:`TestVaspToDiagonalized`
-    Tests for vasp_to_diagonalized.
 """
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
+from beartype.typing import Any, Callable
+from jaxtyping import Array
 
-from diffpes.tightb.diagonalize import (
+import diffpes
+from diffpes.tightb import (
     diagonalize_single_k,
     diagonalize_tb,
     vasp_to_diagonalized,
@@ -48,9 +43,11 @@ class TestDiagonalizeSingleK:
     verify that eigenvalues are real-valued (as guaranteed by the
     spectral theorem for Hermitian matrices) and that eigenvectors
     form an orthonormal set (U^dag U = I).
+
+    :see: :func:`~diffpes.tightb.diagonalize_single_k`
     """
 
-    def test_eigenvalues_real(self):
+    def test_eigenvalues_real(self) -> None:
         """Verify eigenvalues of a Hermitian matrix are real-valued.
 
         Constructs a 2x2 Hermitian matrix with off-diagonal complex
@@ -58,14 +55,21 @@ class TestDiagonalizeSingleK:
         Diagonalizes and asserts the eigenvalue dtype is ``jnp.float64``,
         confirming the solver correctly extracts real eigenvalues from
         the complex Hermitian input.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        H: Array
+        evals: Array
+        evecs: Array
+
         H = jnp.array(
             [[1.0, 0.5 + 0.1j], [0.5 - 0.1j, 2.0]], dtype=jnp.complex128
         )
         evals, evecs = diagonalize_single_k(H)
         assert evals.dtype == jnp.float64
 
-    def test_eigenvectors_orthogonal(self):
+    def test_eigenvectors_orthogonal(self) -> None:
         """Verify eigenvectors are orthonormal (U^dag U = I).
 
         Constructs a real-symmetric 2x2 matrix with on-site energies 1.0
@@ -73,7 +77,15 @@ class TestDiagonalizeSingleK:
         the overlap matrix U^dag U.  Asserts it equals the 2x2 identity
         to within 1e-10, confirming the eigenvectors form a unitary
         transformation.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        H: Array
+        evals: Array
+        evecs: Array
+        overlap: Array
+
         H = jnp.array([[1.0, 0.5], [0.5, 2.0]], dtype=jnp.complex128)
         evals, evecs = diagonalize_single_k(H)
         overlap = evecs.conj().T @ evecs
@@ -89,9 +101,11 @@ class TestDiagonalizeTB:
     ascending eigenvalue ordering, differentiability with respect to
     hopping parameters, and the eigenvector indexing convention
     [k, band, orbital].
+
+    :see: :func:`~diffpes.tightb.diagonalize_tb`
     """
 
-    def test_output_shapes(self):
+    def test_output_shapes(self) -> None:
         """Verify output shapes match (K, B) eigenvalues and (K, B, O) eigenvectors.
 
         Constructs a graphene model (2 orbitals) and diagonalizes at 2
@@ -99,7 +113,14 @@ class TestDiagonalizeTB:
         shape is (2, 2, 2), and kpoints shape is (2, 3).  This confirms
         the function correctly maps K k-points through a B=O=2 orbital
         tight-binding model.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        model: diffpes.types.TBModel
+        kpoints: Array
+        diag: diffpes.types.DiagonalizedBands
+
         model = make_graphene_model()
         kpoints = jnp.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
         diag = diagonalize_tb(model, kpoints)
@@ -107,7 +128,7 @@ class TestDiagonalizeTB:
         assert diag.eigenvectors.shape == (2, 2, 2)
         assert diag.kpoints.shape == (2, 3)
 
-    def test_eigenvalues_sorted(self):
+    def test_eigenvalues_sorted(self) -> None:
         """Verify eigenvalues are sorted in ascending order at each k-point.
 
         Diagonalizes the graphene model at 3 k-points and checks that
@@ -115,7 +136,16 @@ class TestDiagonalizeTB:
         ascending-energy convention is required by downstream band-
         structure analysis code that assumes band indices correspond to
         energy ordering.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        i: int
+
+        model: diffpes.types.TBModel
+        kpoints: Array
+        diag: diffpes.types.DiagonalizedBands
+
         model = make_graphene_model()
         kpoints = jnp.array(
             [[0.0, 0.0, 0.0], [0.1, 0.2, 0.0], [0.3, 0.1, 0.0]]
@@ -126,7 +156,7 @@ class TestDiagonalizeTB:
                 diag.eigenvalues[i, 1]
             )
 
-    def test_differentiable(self):
+    def test_differentiable(self) -> None:
         """Verify eigenvalue sum is differentiable w.r.t. hopping parameters.
 
         Uses the 1D chain model (t=-1.0) at a single k-point (0.25, 0, 0).
@@ -135,11 +165,21 @@ class TestDiagonalizeTB:
         gradient elements are finite, confirming the Hamiltonian
         construction and eigendecomposition are end-to-end differentiable
         -- a prerequisite for inverse band-structure fitting.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        model: diffpes.types.TBModel
+        kpoints: Array
+        grad: Array
+
         model = make_1d_chain_model(t=-1.0)
         kpoints = jnp.array([[0.25, 0.0, 0.0]])
 
         def loss(hop):
+            m: Array
+            d: diffpes.types.DiagonalizedBands
+
             m = eqx.tree_at(lambda item: item.hopping_params, model, hop)
             d = diagonalize_tb(m, kpoints)
             return jnp.sum(d.eigenvalues)
@@ -147,7 +187,7 @@ class TestDiagonalizeTB:
         grad = jax.grad(loss)(model.hopping_params)
         assert jnp.all(jnp.isfinite(grad))
 
-    def test_eigenvectors_shape_convention(self):
+    def test_eigenvectors_shape_convention(self) -> None:
         """Verify eigenvector indexing: eigenvectors[k, band, orbital].
 
         Diagonalizes the graphene model at a single k-point and asserts
@@ -155,13 +195,21 @@ class TestDiagonalizeTB:
         Also verifies that each band's eigenvector is normalized
         (``sum |c_o|^2 = 1``) to within 1e-10, confirming the convention
         that the last axis indexes orbital coefficients.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        model: diffpes.types.TBModel
+        kpoints: Array
+        diag: diffpes.types.DiagonalizedBands
+        norms: Array
+
         model = make_graphene_model()
         kpoints = jnp.array([[0.0, 0.0, 0.0]])
         diag = diagonalize_tb(model, kpoints)
-        # K=1, B=2, O=2
+
         assert diag.eigenvectors.shape == (1, 2, 2)
-        # Eigenvectors should be normalized per band
+
         norms = jnp.sum(jnp.abs(diag.eigenvectors[0]) ** 2, axis=1)
         assert jnp.allclose(norms, 1.0, atol=1e-10)
 
@@ -176,9 +224,11 @@ class TestVaspToDiagonalized:
     from first-principles inputs.  Tests cover output shapes, eigenvector
     normalization, the default warning on phase-information loss, and the
     error-mode policy that rejects phase-less approximation.
+
+    :see: :func:`~diffpes.tightb.vasp_to_diagonalized`
     """
 
-    def test_output_shapes(self):
+    def test_output_shapes(self) -> None:
         """Verify output shapes match the input band structure dimensions.
 
         Constructs synthetic VASP-like inputs with K=5 k-points, B=3
@@ -188,7 +238,18 @@ class TestVaspToDiagonalized:
         suppress the phase-loss warning.  Asserts the output eigenvalues
         shape is (5, 3) and eigenvectors shape is (5, 3, 3), where the
         last dimension matches the number of orbitals in the basis.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        K: int
+        B: int
+        A: int
+        bands: diffpes.types.BandStructure
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+        diag: diffpes.types.DiagonalizedBands
+
         K, B, A = 5, 3, 2
         bands = make_band_structure(
             eigenvalues=jnp.zeros((K, B)),
@@ -208,7 +269,7 @@ class TestVaspToDiagonalized:
         assert diag.eigenvalues.shape == (K, B)
         assert diag.eigenvectors.shape == (K, B, 3)
 
-    def test_eigenvectors_normalized(self):
+    def test_eigenvectors_normalized(self) -> None:
         """Verify approximate eigenvectors from VASP projections are normalized.
 
         Constructs a 2-orbital basis (1s, 2pz) with synthetic projections
@@ -219,15 +280,28 @@ class TestVaspToDiagonalized:
         that ``sum(|c_o|^2, axis=-1) = 1.0`` for all (k, band) pairs to
         within 1e-10, confirming the normalization step works correctly
         even when raw VASP projections do not sum to unity.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        K: int
+        B: int
+        A: int
+        bands: diffpes.types.BandStructure
+        proj: Array
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+        diag: diffpes.types.DiagonalizedBands
+        norms: Array
+
         K, B, A = 3, 2, 1
         bands = make_band_structure(
             eigenvalues=jnp.zeros((K, B)),
             kpoints=jnp.zeros((K, 3)),
         )
         proj = jnp.zeros((K, B, A, 9))
-        proj = proj.at[:, :, :, 0].set(0.3)  # s
-        proj = proj.at[:, :, :, 2].set(0.7)  # pz
+        proj = proj.at[:, :, :, 0].set(0.3)
+        proj = proj.at[:, :, :, 2].set(0.7)
         orb_proj = make_orbital_projection(projections=proj)
         basis = make_orbital_basis(
             n_values=(1, 2),
@@ -240,7 +314,7 @@ class TestVaspToDiagonalized:
         norms = jnp.sum(jnp.abs(diag.eigenvectors) ** 2, axis=-1)
         assert jnp.allclose(norms, 1.0, atol=1e-10)
 
-    def test_warns_by_default(self):
+    def test_warns_by_default(self) -> None:
         """Verify the default phase_loss policy emits a RuntimeWarning.
 
         Calls ``vasp_to_diagonalized`` without specifying ``phase_loss``
@@ -249,7 +323,14 @@ class TestVaspToDiagonalized:
         complex" is raised, informing the user that VASP PROCAR
         projections are real-valued and cannot reconstruct the complex
         eigenvector phases.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        bands: diffpes.types.BandStructure
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+
         bands = make_band_structure(
             eigenvalues=jnp.zeros((1, 1)),
             kpoints=jnp.zeros((1, 3)),
@@ -265,7 +346,7 @@ class TestVaspToDiagonalized:
         with pytest.warns(RuntimeWarning, match="cannot recover complex"):
             _ = vasp_to_diagonalized(bands, orb_proj, basis)
 
-    def test_phase_loss_error_mode_raises(self):
+    def test_phase_loss_error_mode_raises(self) -> None:
         """Verify phase_loss="error" raises ValueError instead of warning.
 
         Calls ``vasp_to_diagonalized`` with ``phase_loss="error"`` for
@@ -273,7 +354,14 @@ class TestVaspToDiagonalized:
         "cannot recover complex" is raised, providing a strict mode for
         callers who require complex eigenvector phases and should not
         silently proceed with a phase-less approximation.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        bands: diffpes.types.BandStructure
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+
         bands = make_band_structure(
             eigenvalues=jnp.zeros((1, 1)),
             kpoints=jnp.zeros((1, 3)),
@@ -291,14 +379,21 @@ class TestVaspToDiagonalized:
                 bands, orb_proj, basis, phase_loss="error"
             )
 
-    def test_invalid_phase_loss_raises(self):
+    def test_invalid_phase_loss_raises(self) -> None:
         """Verify that an unrecognised phase_loss value raises an error.
 
         The ``phase_loss`` parameter is annotated ``Literal['warn',
         'ignore', 'error']``, so beartype rejects any other string.
         Passes ``phase_loss="bad"`` (via an unsafe cast) and asserts
         that any exception is raised.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        bands: diffpes.types.BandStructure
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+
         bands = make_band_structure(
             eigenvalues=jnp.zeros((1, 1)),
             kpoints=jnp.zeros((1, 3)),
@@ -314,14 +409,21 @@ class TestVaspToDiagonalized:
         with pytest.raises(Exception):
             _ = vasp_to_diagonalized(bands, orb_proj, basis, phase_loss="bad")
 
-    def test_f_orbital_raises(self):
+    def test_f_orbital_raises(self) -> None:
         """Verify that an f-orbital (l=3) in the basis raises ValueError.
 
         VASP PROCAR covers only s, p, d channels (9-orbital set).
         Passing an f-orbital (l=3, m=0) to ``vasp_to_diagonalized``
         should raise a ``ValueError`` indicating the orbital is not in
         the VASP 9-orbital set.
-        """
+
+        Notes
+        -----
+        Builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        bands: diffpes.types.BandStructure
+        orb_proj: diffpes.types.OrbitalProjection
+        basis: diffpes.types.OrbitalBasis
+
         bands = make_band_structure(
             eigenvalues=jnp.zeros((1, 1)),
             kpoints=jnp.zeros((1, 3)),
