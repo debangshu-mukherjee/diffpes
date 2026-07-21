@@ -62,3 +62,23 @@ Validation and regression tests for :mod:`diffpes.certify`.
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_certify.test_reproduction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_certify.test_resolvers
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_certify.test_scalability
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: tests.test_diffpes.test_certify.test_waivers
+   :members:
+   :undoc-members:
+   :show-inheritance:

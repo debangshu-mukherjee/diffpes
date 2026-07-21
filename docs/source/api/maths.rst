@@ -1,7 +1,8 @@
 diffpes.maths
 =============
 
-Angular matrix elements for dipole photoemission: Gaunt coefficients, real spherical harmonics, and dipole matrix element assembly.
+Differentiable Cartesian rotations and angular matrix elements for dipole
+photoemission.
 
 .. automodule:: diffpes.maths
    :members:

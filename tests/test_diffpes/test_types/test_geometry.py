@@ -34,12 +34,11 @@ class TestCrystalGeometry:
         then uses Chex for the numerical and static comparisons.
         """
         lattice: Float[Array, "3 3"] = jnp.eye(3) * 3.0
-        coords: Float[Array, "1 3"] = jnp.zeros((1, 3))
+        positions: Float[Array, "1 3"] = jnp.zeros((1, 3))
         geometry: CrystalGeometry = make_crystal_geometry(
             lattice=lattice,
-            coords=coords,
-            symbols=("Si",),
-            atom_counts=[1],
+            positions=positions,
+            species=("Si",),
         )
         leaves: list[object]
         tree: jax.tree_util.PyTreeDef
@@ -47,7 +46,7 @@ class TestCrystalGeometry:
         restored: CrystalGeometry = jax.tree.unflatten(tree, leaves)
 
         chex.assert_trees_all_close(restored.lattice, geometry.lattice)
-        chex.assert_equal(restored.symbols, geometry.symbols)
+        chex.assert_equal(restored.species, geometry.species)
 
 
 class TestMakeCrystalGeometry:
@@ -74,17 +73,14 @@ class TestMakeCrystalGeometry:
         lattice: Float[Array, "3 3"] = jnp.eye(3) * lattice_constant
         geometry: CrystalGeometry = make_crystal_geometry(
             lattice=lattice,
-            coords=jnp.zeros((1, 3)),
-            symbols=("X",),
-            atom_counts=[1],
+            positions=jnp.zeros((1, 3)),
+            species=("X",),
         )
         expected: Float[Array, "3 3"] = (
             jnp.eye(3) * 2.0 * jnp.pi / lattice_constant
         )
 
-        chex.assert_trees_all_close(
-            geometry.reciprocal_lattice, expected, atol=1e-10
-        )
+        chex.assert_trees_all_close(geometry.reciprocal, expected, atol=1e-10)
 
     def test_rejects_left_handed_lattice(self) -> None:
         """Reject a finite real-space lattice with negative handedness.
@@ -100,8 +96,7 @@ class TestMakeCrystalGeometry:
         assert_rejects(
             make_crystal_geometry,
             lattice=jnp.diag(jnp.array([1.0, 1.0, -1.0])),
-            coords=jnp.zeros((1, 3)),
-            symbols=("X",),
-            atom_counts=[1],
+            positions=jnp.zeros((1, 3)),
+            species=("X",),
             match="lattice must be right-handed",
         )

@@ -2,10 +2,9 @@
 
 Extended Summary
 ----------------
-This module defines the :class:`CrystalGeometry` PyTree for
-crystal structures parsed from VASP POSCAR files. Includes real-space
-lattice vectors, reciprocal lattice, atomic coordinates, element
-symbols, and atom counts per species.
+This module defines the :class:`CrystalGeometry` PyTree for crystal
+structures parsed from VASP POSCAR files. It stores real-space lattice
+vectors, reciprocal lattice vectors, atomic positions, and species.
 
 Routine Listings
 ----------------
@@ -16,17 +15,15 @@ Routine Listings
 
 Notes
 -----
-JAX stores the ``symbols`` field as auxiliary PyTree data because JAX cannot
-trace Python strings. JAX stores all numerical fields as arrays for
-compatibility with its transformations.
+JAX stores the ``species`` field as auxiliary PyTree data because JAX cannot
+trace Python strings. JAX stores all numerical fields as arrays.
 """
 
 import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Union
-from jax.core import Tracer
-from jaxtyping import Array, Float, Int, jaxtyped
+from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
 
@@ -39,11 +36,11 @@ class CrystalGeometry(eqx.Module):
 
     This type contains the complete crystal structure from a VASP POSCAR file.
     It contains real-space lattice vectors, the reciprocal lattice,
-    fractional coordinates, element symbols, and atom counts. Together, these
-    fields describe the periodic crystal for an ARPES simulation.
+    fractional positions, and per-atom species. Together, these fields
+    describe the periodic crystal for an ARPES simulation.
 
     JAX stores the numerical fields as PyTree children. JAX tracing can access
-    these fields. JAX stores the ``symbols`` tuple as auxiliary data because
+    these fields. JAX stores the ``species`` tuple as auxiliary data because
     JAX cannot trace Python strings.
 
 
@@ -53,19 +50,18 @@ class CrystalGeometry(eqx.Module):
     ----------
     lattice : Float[Array, "3 3"]
         Real-space lattice vectors as rows (angstroms).
-    reciprocal_lattice : Float[Array, "3 3"]
+    reciprocal : Float[Array, "3 3"]
         Reciprocal lattice vectors as rows (1/angstroms).
-    coords : Float[Array, "N 3"]
-        Fractional atomic coordinates.
-    symbols : tuple[str, ...]
-        Element symbols for each species (**static** -- compile-time
-        constants; changing them triggers retracing).
-    atom_counts : Int[Array, " S"]
-        Number of atoms per species.
+    positions : Float[Array, "N 3"]
+        Fractional atomic positions.
+    species : tuple[str, ...]
+        Per-atom species symbols (**static** -- compile-time constants;
+        changing them triggers retracing). An empty tuple records unknown
+        species.
 
     Notes
     -----
-    The ``symbols`` field is a tuple of Python strings declared with
+    The ``species`` field is a tuple of Python strings declared with
     ``eqx.field(static=True)`` rather than as a traced leaf. Changing it
     triggers recompilation of any ``jit``-compiled function that
     receives this PyTree.
@@ -77,10 +73,9 @@ class CrystalGeometry(eqx.Module):
     """
 
     lattice: Float[Array, "3 3"]
-    reciprocal_lattice: Float[Array, "3 3"]
-    coords: Float[Array, "N 3"]
-    symbols: tuple[str, ...] = eqx.field(static=True)
-    atom_counts: Int[Array, " S"]
+    reciprocal: Float[Array, "3 3"]
+    positions: Float[Array, "N 3"]
+    species: tuple[str, ...] = eqx.field(static=True)
 
 
 def _compute_reciprocal_lattice(
@@ -139,17 +134,13 @@ def _compute_reciprocal_lattice(
 @jaxtyped(typechecker=beartype)
 def make_crystal_geometry(  # noqa: DOC503
     lattice: Union[Float[Array, "3 3"], "list[list[ScalarNumeric]]"],
-    coords: Float[Array, "N 3"],
-    symbols: tuple[str, ...],
-    atom_counts: Union[Int[Array, " S"], "list[int]"],
+    positions: Float[Array, "N 3"],
+    species: tuple[str, ...],
 ) -> CrystalGeometry:
     """Create a validated CrystalGeometry instance.
 
-    The factory validates and normalizes the inputs. It then computes
-    the reciprocal lattice from the real-space lattice so the caller
-    does not need to supply it. The factory casts numerical arrays to the
-    applicable JAX dtypes. Real-valued fields use float64, and atom counts use
-    int32.
+    The factory validates the real-space lattice and fractional positions. It
+    computes the reciprocal lattice and casts numerical arrays to float64.
 
     :see: :class:`~.test_geometry.TestMakeCrystalGeometry`
 
@@ -164,14 +155,14 @@ def make_crystal_geometry(  # noqa: DOC503
 
     2. **Apply static validation**::
 
-           symbols and len(symbols) != counts_arr.shape[0]
+           species and len(species) != positions_arr.shape[0]
 
        This predicate rejects invalid structure before JAX traces the
        numerical checks.
 
     3. **Apply traced validation**::
 
-           jnp.sum(counts_arr) != coords_arr.shape[0]
+           ~jnp.all(jnp.isfinite(positions_arr))
 
        This predicate remains active during eager and compiled execution.
 
@@ -186,13 +177,12 @@ def make_crystal_geometry(  # noqa: DOC503
     ----------
     lattice : Union[Float[Array, "3 3"], "list[list[ScalarNumeric]]"]
         Real-space lattice vectors as rows (angstroms).
-    coords : Float[Array, "N 3"]
-        Fractional atomic coordinates.
-    symbols : tuple[str, ...]
-        Element symbols for each species (**static** -- a compile-time
-        constant; changing them triggers retracing).
-    atom_counts : Union[Int[Array, " S"], "list[int]"]
-        Number of atoms per species.
+    positions : Float[Array, "N 3"]
+        Fractional atomic positions.
+    species : tuple[str, ...]
+        Per-atom species symbols (**static** -- compile-time constants;
+        changing them triggers retracing). Use an empty tuple when the source
+        does not identify species.
 
     Returns
     -------
@@ -203,21 +193,19 @@ def make_crystal_geometry(  # noqa: DOC503
     Raises
     ------
     ValueError
-        If a non-empty symbol tuple differs from the number of species,
-        or if the atom counts do not sum to the number of positions. Empty
-        symbols remain valid for VASP 4 files without a species line.
+        If a non-empty species tuple differs from the number of positions.
+        Empty species remain valid for VASP 4 files without a species line.
     EquinoxRuntimeError
-        If coordinates or lattice entries are non-finite. The function also
+        If positions or lattice entries are non-finite. The function also
         rejects a left-handed lattice or a lattice that violates the numerical
         stability limits.
 
     Notes
     -----
     Static validation raises ``ValueError`` before traced construction when
-    species counts disagree or concrete atom counts do not sum to positions.
-    Traced validation uses ``eqx.error_if`` and raises
-    ``EquinoxRuntimeError`` for inconsistent traced counts, non-finite data,
-    or a lattice that fails the orientation and conditioning limits.
+    species and position counts disagree. Traced validation uses
+    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` for non-finite data or
+    a lattice that fails the orientation and conditioning limits.
 
     See Also
     --------
@@ -226,26 +214,17 @@ def make_crystal_geometry(  # noqa: DOC503
         derive the reciprocal lattice.
     """
     lattice_arr: Float[Array, "3 3"] = jnp.asarray(lattice, dtype=jnp.float64)
-    coords_arr: Float[Array, "N 3"] = jnp.asarray(coords, dtype=jnp.float64)
-    counts_arr: Int[Array, " S"] = jnp.asarray(atom_counts, dtype=jnp.int32)
+    positions_arr: Float[Array, "N 3"] = jnp.asarray(
+        positions,
+        dtype=jnp.float64,
+    )
 
-    if symbols and len(symbols) != counts_arr.shape[0]:
-        msg: str = "make_crystal_geometry: symbols and atom_counts must agree"
-        raise ValueError(msg)
-    if (
-        not isinstance(counts_arr, Tracer)
-        and int(jnp.sum(counts_arr)) != coords_arr.shape[0]
-    ):
-        msg: str = "make_crystal_geometry: atom_counts must sum to positions"
+    if species and len(species) != positions_arr.shape[0]:
+        msg: str = "make_crystal_geometry: species must match positions"
         raise ValueError(msg)
 
     def validate_and_create() -> CrystalGeometry:
-        nonlocal coords_arr, counts_arr, lattice_arr
-        counts_arr = eqx.error_if(
-            counts_arr,
-            jnp.sum(counts_arr) != coords_arr.shape[0],
-            "make_crystal_geometry: atom_counts must sum to positions",
-        )
+        nonlocal lattice_arr, positions_arr
         lattice_arr = eqx.error_if(
             lattice_arr,
             ~(jnp.all(jnp.isfinite(lattice_arr))),
@@ -272,20 +251,19 @@ def make_crystal_geometry(  # noqa: DOC503
             condition_number > _MAX_LATTICE_CONDITION_NUMBER,
             "make_crystal_geometry: lattice condition number exceeds limit",
         )
-        coords_arr = eqx.error_if(
-            coords_arr,
-            ~(jnp.all(jnp.isfinite(coords_arr))),
-            "make_crystal_geometry: coords finite",
+        positions_arr = eqx.error_if(
+            positions_arr,
+            ~(jnp.all(jnp.isfinite(positions_arr))),
+            "make_crystal_geometry: positions must be finite",
         )
         reciprocal: Float[Array, "3 3"] = _compute_reciprocal_lattice(
             lattice_arr
         )
         validated_geometry: CrystalGeometry = CrystalGeometry(
             lattice=lattice_arr,
-            reciprocal_lattice=reciprocal,
-            coords=coords_arr,
-            symbols=symbols,
-            atom_counts=counts_arr,
+            reciprocal=reciprocal,
+            positions=positions_arr,
+            species=species,
         )
         return validated_geometry
 

@@ -23,6 +23,11 @@ Validation and regression tests for :mod:`diffpes.simul`.
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: tests.test_diffpes.test_simul.test_kinematics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: tests.test_diffpes.test_simul.test_oam
    :members:
    :undoc-members:

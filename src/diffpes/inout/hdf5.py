@@ -15,10 +15,10 @@ Routine Listings
 
 Notes
 -----
-The codec supports all nineteen types-owned Equinox carriers. Dataclass fields
-define the serialization metadata. The codec stores dynamic fields as datasets
-or recursive module groups. It encodes ``eqx.field(static=True)`` values as
-tuple-preserving JSON.
+The codec supports all twenty-two numerical types-owned carriers.
+Dataclass fields define the serialization metadata.
+The codec stores dynamic fields as datasets or recursive module groups.
+It encodes ``eqx.field(static=True)`` values as tuple-preserving JSON.
 """
 
 import json
@@ -44,7 +44,10 @@ from diffpes.types import (
     CrystalGeometry,
     DensityOfStates,
     DiagonalizedBands,
+    ExperimentGeometry,
     FullDensityOfStates,
+    KGrid,
+    KPath,
     KPathInfo,
     OrbitalBasis,
     OrbitalProjection,
@@ -69,7 +72,10 @@ def _pytree_classes() -> tuple[type[eqx.Module], ...]:
         CrystalGeometry,
         DensityOfStates,
         DiagonalizedBands,
+        ExperimentGeometry,
         FullDensityOfStates,
+        KGrid,
+        KPath,
         KPathInfo,
         OrbitalBasis,
         OrbitalProjection,

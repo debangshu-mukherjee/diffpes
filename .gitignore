@@ -137,3 +137,12 @@ target/
 
 # Symlink to the private planning repo (not part of this package)
 /diffpes-plans
+
+# Chinook from https://github.com/qmlab-ubc-ca/chinook (untracked)
+/chinook
+
+# dynamics-w90 code from https://github.com/michaelschueler/dynamics-w90 (untracked)
+/dynamics-w90
+
+# aurelia code from https://github.com/qmlab-ubc-ca/aurelia (untracked)
+/aurelia

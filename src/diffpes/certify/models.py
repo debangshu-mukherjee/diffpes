@@ -35,13 +35,16 @@ from diffpes.types import (
     make_domain_predicate,
     make_domain_result,
     make_forward_model_spec,
+    make_registration_handshake,
     make_transformation_contract,
 )
 
 from .checks import list_checks, register_check
 from .registry import (
+    list_handshakes,
     list_models,
     list_transformations,
+    register_handshake,
     register_model,
     register_transformation,
 )
@@ -248,6 +251,61 @@ def _register_transformations() -> None:
             destroys=("absolute_intensity_calibration",),
             invalidates_claims=("claim.intensity.absolute_calibration",),
         ),
+        make_transformation_contract(
+            "org.diffpes.transform.kspace.fractional_cartesian",
+            "1.0.0",
+            requires=(
+                "fractional_reciprocal_coordinates",
+                "reciprocal_lattice_basis",
+            ),
+            produces=("cartesian_reciprocal_coordinates",),
+            preserves=(
+                "physical_wavevector",
+                "convention.reciprocal_basis_rows",
+            ),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.kinematics.detector_angle_kpar",
+            "1.0.0",
+            requires=(
+                "detector_angles",
+                "photoelectron_kinetic_energy",
+                "sample_detector_geometry",
+            ),
+            produces=("parallel_momentum",),
+            preserves=(
+                "photoelectron_direction",
+                "convention.detector_slit_frame",
+            ),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.kinematics.inner_potential",
+            "1.0.0",
+            requires=(
+                "photoelectron_kinetic_energy",
+                "parallel_momentum",
+                "inner_potential",
+            ),
+            produces=("out_of_plane_momentum",),
+            preserves=(
+                "complex_evanescent_branch",
+                "convention.positive_kz_branch",
+            ),
+        ),
+        make_transformation_contract(
+            "org.diffpes.transform.polarization.detector_frame",
+            "1.0.0",
+            requires=(
+                "laboratory_polarization",
+                "sample_detector_geometry",
+            ),
+            produces=("sample_frame_polarization",),
+            preserves=(
+                "polarization_norm",
+                "polarization_helicity",
+                "convention.sample_rotation_rz_rx_ry",
+            ),
+        ),
     )
     existing: set[tuple[str, str]] = {
         (item.transformation_id, item.transformation_version)
@@ -260,6 +318,32 @@ def _register_transformations() -> None:
         )
         if key not in existing:
             register_transformation(contract)
+
+
+def _register_plan03_handshake() -> None:
+    """Register the Plan 03 certification handshake idempotently."""
+    owner_id: str = "org.diffpes.plan.03"
+    existing: set[str] = {item.owner_id for item in list_handshakes()}
+    if owner_id in existing:
+        return
+    handshake: Any = make_registration_handshake(
+        owner_id=owner_id,
+        transformation_refs=(
+            "org.diffpes.transform.kspace.fractional_cartesian@1.0.0",
+            "org.diffpes.transform.kinematics.detector_angle_kpar@1.0.0",
+            "org.diffpes.transform.kinematics.inner_potential@1.0.0",
+            "org.diffpes.transform.polarization.detector_frame@1.0.0",
+        ),
+        evidence_ids=(
+            "org.diffpes.evidence.03.graphene.closed_form",
+            "org.diffpes.evidence.03.damascelli.kinematics",
+            "org.diffpes.evidence.03.chinook.kz",
+            "org.diffpes.evidence.03.chinook.tilt",
+            "org.diffpes.evidence.03.chinook.mesh",
+            "org.diffpes.evidence.03.polarization.spherical_basis",
+        ),
+    )
+    register_handshake(handshake)
 
 
 def _check_positive_photon_energy(inputs: tuple[Any, ...]) -> DomainResult:
@@ -345,6 +429,7 @@ def register_builtin_models() -> None:
         register_model(tb_radial_model_spec(), execute_tb_radial)
     _register_transformations()
     _register_checks()
+    _register_plan03_handshake()
 
 
 __all__: list[str] = [

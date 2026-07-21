@@ -1,7 +1,8 @@
 diffpes.simul
 =============
 
-ARPES simulation functions at six complexity levels, plus spectral broadening, photoionization cross sections, polarization utilities, and orbital angular momentum.
+Free-electron kinematics and ARPES simulation functions at six complexity
+levels.
 
 .. automodule:: diffpes.simul
    :members:

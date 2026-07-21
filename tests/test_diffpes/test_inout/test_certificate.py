@@ -16,6 +16,8 @@ from beartype.typing import Any
 
 from diffpes.inout import (
     attach_certificate_h5,
+    certificate_identity,
+    finalize_certificate,
     load_certificate_h5,
     load_certificate_json,
     save_certificate_json,
@@ -308,7 +310,7 @@ class TestSaveCertificateJson:
         document = _read_json(first)
         assert document["format"] == CERTIFICATE_FORMAT
         assert document["consistency_checksum"] == (
-            "crc32:certificate-json-v1:f09dec09"
+            "crc32:certificate-json-v1:2ec9ad51"
         )
         jvp_node = document["certificate"]["fields"]["derivatives"]["fields"][
             "jvp_probes"
@@ -345,6 +347,59 @@ class TestSaveCertificateJson:
         assert list(tmp_path.iterdir()) == [path]
 
 
+class TestCertificateIdentity:
+    """Verify :func:`~diffpes.inout.certificate_identity`.
+
+    The cases separate scientific identity from audit execution fields.
+
+    :see: :func:`~diffpes.inout.certificate_identity`
+    """
+
+    def test_audit_fields_do_not_change_scientific_identity(self) -> None:
+        """Keep one identity across distinct execution IDs and timestamps.
+
+        The scientific identity must exclude both declared audit fields.
+
+        Notes
+        -----
+        The test changes only the two fields classified as audit metadata.
+        """
+        left: ForwardCertificate = sample_certificate(
+            execution_id="audit-left",
+            started_at_utc="2026-07-20T00:00:00Z",
+        )
+        right: ForwardCertificate = sample_certificate(
+            execution_id="audit-right",
+            started_at_utc="2026-07-21T00:00:00Z",
+        )
+        assert left.manifest.execution_id != right.manifest.execution_id
+        assert certificate_identity(left) == certificate_identity(right)
+
+
+class TestFinalizeCertificate:
+    """Verify :func:`~diffpes.inout.finalize_certificate`.
+
+    The case replaces the compiled placeholder at the canonical I/O boundary.
+
+    :see: :func:`~diffpes.inout.finalize_certificate`
+    """
+
+    def test_final_identity_matches_canonical_record(self) -> None:
+        """Replace an arbitrary checksum with the computed scientific identity.
+
+        The stored identity must equal a new computation from the result.
+
+        Notes
+        -----
+        The test finalizes the complete shared certificate fixture once.
+        """
+        certificate: ForwardCertificate = sample_certificate()
+        finalized: ForwardCertificate = finalize_certificate(certificate)
+        assert finalized.certificate_checksum == certificate_identity(
+            finalized
+        )
+
+
 class TestLoadCertificateJson:
     """Verify :func:`~diffpes.inout.load_certificate_json`.
 
@@ -376,6 +431,27 @@ class TestLoadCertificateJson:
         path.write_text(json.dumps(document), encoding="utf-8")
 
         with pytest.raises(ValueError, match="checksum mismatch"):
+            load_certificate_json(path)
+
+    def test_internal_identity_mismatch_is_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        """Reject an internal identity mismatch after storage CRC recalculation.
+
+        The reader must validate the internal identity independently.
+
+        Notes
+        -----
+        The test changes only the identity field and updates the outer CRC32.
+        """
+        path: Path = tmp_path / "identity.json"
+        save_certificate_json(sample_certificate(), path)
+        document: dict[str, Any] = _read_json(path)
+        document["certificate"]["fields"]["certificate_checksum"] = (
+            "crc32:canonical-1:certificate:00000000"
+        )
+        _write_document(path, document)
+        with pytest.raises(ValueError, match="canonical identity mismatch"):
             load_certificate_json(path)
 
     def test_unknown_schema_major_is_rejected_before_interpretation(

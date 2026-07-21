@@ -48,7 +48,7 @@ kpath = read_kpoints(fixtures + "KPOINTS_line")
 dos = read_doscar(fixtures + "DOSCAR")
 volume = read_chgcar(fixtures + "CHGCAR_charge")
 
-print(geometry.symbols, geometry.coords.shape)       # ('Si', 'O') (6, 3)
+print(geometry.species, geometry.positions.shape)    # per-atom species, (6, 3)
 print(bands.eigenvalues.shape, bands.kpoints.shape)  # (1, 1) (1, 3)
 print(projection.projections.shape)                  # (2, 2, 1, 9)
 print(kpath.mode, tuple(kpath.labels))               # Line-mode ('G', 'X', 'M')
@@ -67,8 +67,8 @@ directory.
 
 - **`read_poscar`** returns a `CrystalGeometry`. It applies the universal
   scaling factor to `lattice [3, 3]`. It derives
-  `reciprocal_lattice [3, 3]` and converts `coords [N, 3]` to fractional
-  coordinates. The result also contains `symbols` and `atom_counts`. The
+  `reciprocal [3, 3]` and converts `positions [N, 3]` to fractional
+  coordinates. The result also contains per-atom `species`. The
   reader supports VASP 4, VASP 5+, and `Selective dynamics` blocks.
 - **`read_eigenval`** parses eigenvalues at each k-point. It sorts the bands
   by energy at each point. In `"full"` mode, `ISPIN=2` files return both

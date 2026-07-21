@@ -40,6 +40,8 @@ Routine Listings
     Column index of spin-up eigenvalues in EIGENVAL.
 :obj:`ENERGY_AXIS_NDIM`
     Expected dimensionality of energy-axis arrays.
+:obj:`EKIN_FLOOR_EV`
+    Set the physical kinetic-energy floor in eV.
 :obj:`EPS`
     Epsilon floor guarding divisions and norms.
 :obj:`FLOAT_TOKEN_RE`
@@ -50,6 +52,8 @@ Routine Listings
     Reduced Planck constant times c in eV Angstrom.
 :obj:`HBAR_EV_S`
     Reduced Planck constant in eV s.
+:obj:`HBAR_SQ_OVER_2ME_EV_ANG2`
+    Store the free-electron dispersion constant in eV Angstrom squared.
 :obj:`INTENSITY_NDIM`
     Expected dimensionality of intensity arrays.
 :obj:`ISPIN2_BLOCKS`
@@ -64,6 +68,8 @@ Routine Listings
     KPathInfo auxiliary-data length including a coordinate mode.
 :obj:`KPOINT_LINE_VALUES`
     Tokens on an EIGENVAL k-point line.
+:obj:`K_PREFACTOR_INV_ANG_SQRT_EV`
+    Store the momentum prefactor in inverse Angstrom per square-root eV.
 :obj:`L_MAX`
     Maximum angular momentum supported by the precomputed table.
 :obj:`LATTICE_ROWS`
@@ -110,6 +116,8 @@ Routine Listings
     PROCAR block count for SOC calculations.
 :obj:`SPIN_COLS`
     DOSCAR column count with spin polarization.
+:obj:`TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2`
+    Store the inverse free-electron dispersion constant.
 :obj:`WEIGHT_COMPONENT_COUNT`
     Tokens on a weighted k-point line.
 :obj:`WEIGHT_COMPONENT_INDEX`
@@ -146,6 +154,7 @@ D_ORBITAL_SLICE: Final[slice] = slice(4, 9)
 EIG_DOWN_INDEX: Final[int] = 2
 EIG_UP_INDEX: Final[int] = 1
 ENERGY_AXIS_NDIM: Final[int] = 1
+EKIN_FLOOR_EV: Final[float] = 1e-2
 EPS: Final[float] = 1e-12
 FLOAT_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
     r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
@@ -153,6 +162,11 @@ FLOAT_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
 GAUNT_IMAG_TOL: Final[float] = 1e-12
 HBAR_C_EV_A: Final[float] = 1973.269804
 HBAR_EV_S: Final[float] = 6.582119569e-16
+HBAR_SQ_OVER_2ME_EV_ANG2: Final[float] = 3.8099821
+TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2: Final[float] = 1.0 / HBAR_SQ_OVER_2ME_EV_ANG2
+K_PREFACTOR_INV_ANG_SQRT_EV: Final[float] = (
+    TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2**0.5
+)
 INTENSITY_NDIM: Final[int] = 2
 ISPIN2_BLOCKS: Final[int] = 2
 ISPIN_SPIN_POLARIZED: Final[int] = 2
@@ -267,11 +281,13 @@ __all__: list[str] = [
     "EIG_DOWN_INDEX",
     "EIG_UP_INDEX",
     "ENERGY_AXIS_NDIM",
+    "EKIN_FLOOR_EV",
     "EPS",
     "FLOAT_TOKEN_RE",
     "GAUNT_IMAG_TOL",
     "HBAR_C_EV_A",
     "HBAR_EV_S",
+    "HBAR_SQ_OVER_2ME_EV_ANG2",
     "INTENSITY_NDIM",
     "ISPIN2_BLOCKS",
     "ISPIN_SPIN_POLARIZED",
@@ -279,6 +295,7 @@ __all__: list[str] = [
     "KPATH_AUX_WITH_COMMENT_LEN",
     "KPATH_AUX_WITH_COORD_MODE_LEN",
     "KPOINT_LINE_VALUES",
+    "K_PREFACTOR_INV_ANG_SQRT_EV",
     "L_MAX",
     "LATTICE_ROWS",
     "M_D",
@@ -302,6 +319,7 @@ __all__: list[str] = [
     "SMALL_ARGUMENT",
     "SOC_BLOCKS",
     "SPIN_COLS",
+    "TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2",
     "WEIGHT_COMPONENT_COUNT",
     "WEIGHT_COMPONENT_INDEX",
     "XYZ_COMPONENTS",

@@ -285,8 +285,8 @@ def check_consistency(
     -----
     This function does not verify atom counts (PROCAR vs POSCAR)
     because ``BandStructure`` does not carry atom information.
-    For atom-count checks, compare ``orb.projections.shape[2]``
-    against ``geometry.atom_counts.sum()`` manually.
+    For atom-count checks, compare ``orb.projections.shape[2]`` against
+    ``geometry.positions.shape[0]`` manually.
     """
     nk_bands: int = int(bands.eigenvalues.shape[0])
     nb_bands: int = int(bands.eigenvalues.shape[1])

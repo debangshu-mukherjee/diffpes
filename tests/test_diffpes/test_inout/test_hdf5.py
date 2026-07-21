@@ -586,18 +586,17 @@ class TestCrystalGeometry(chex.TestCase):
         td: str
 
         lattice: Array
-        coords: Array
+        positions: Array
         geo: diffpes.types.CrystalGeometry
         path: Path
         loaded: Any
 
         lattice = jnp.eye(3) * 5.43
-        coords = jnp.array([[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]])
+        positions = jnp.array([[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]])
         geo = make_crystal_geometry(
             lattice=lattice,
-            coords=coords,
-            symbols=("Si",),
-            atom_counts=[2],
+            positions=positions,
+            species=("Si", "Si"),
         )
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "geo.h5"
@@ -605,17 +604,16 @@ class TestCrystalGeometry(chex.TestCase):
             loaded = load_from_h5(path, name="geo")
         chex.assert_trees_all_close(loaded.lattice, geo.lattice, atol=1e-12)
         chex.assert_trees_all_close(
-            loaded.reciprocal_lattice,
-            geo.reciprocal_lattice,
+            loaded.reciprocal,
+            geo.reciprocal,
             atol=1e-12,
         )
-        chex.assert_trees_all_close(loaded.coords, geo.coords, atol=1e-12)
         chex.assert_trees_all_close(
-            loaded.atom_counts,
-            geo.atom_counts,
-            atol=0,
+            loaded.positions,
+            geo.positions,
+            atol=1e-12,
         )
-        assert loaded.symbols == ("Si",)
+        assert loaded.species == ("Si", "Si")
 
 
 class TestSaveToH5(chex.TestCase):

@@ -9,6 +9,8 @@ import jax.numpy as jnp
 from beartype.typing import Any
 
 from diffpes.certify import (
+    clear_dependency_cache,
+    dependency_cache_info,
     dependency_map,
     information_spectrum,
     linearized_forward,
@@ -112,6 +114,30 @@ class TestInformationSpectrum:
         assert jnp.allclose(singular(x), 4.0, rtol=1e-12)
         assert jnp.allclose(jax.grad(singular)(x), 2.0, rtol=1e-9)
 
+    def test_zero_rank_uses_finite_condition_sentinel(self) -> None:
+        """Represent a zero-information model with a finite condition value.
+
+        Zero marks the absence of an active information direction.
+
+        Notes
+        -----
+        The constant model has a zero Jacobian at every input value.
+        """
+
+        def constant(value: Any) -> Any:
+            constant_value: Any = jnp.zeros_like(value)
+            return constant_value
+
+        result: Any = information_spectrum(
+            constant,
+            jnp.array([2.0]),
+            rank=1,
+            iterations=3,
+        )
+        assert int(result.effective_rank) == 0
+        assert float(result.condition_estimate) == 0.0
+        assert bool(jnp.isfinite(result.condition_estimate))
+
 
 class TestSensitivityMap:
     """Verify :func:`~diffpes.certify.sensitivity_map`.
@@ -146,3 +172,65 @@ class TestSensitivityMap:
         )
         assert result.sensitivities.shape == (1, 1)
         assert jnp.allclose(result.sensitivities, 4.0)
+
+
+class TestClearDependencyCache:
+    """Verify :func:`~diffpes.certify.clear_dependency_cache`.
+
+    The case clears all structural entries and all counters.
+
+    :see: :func:`~diffpes.certify.clear_dependency_cache`
+    """
+
+    def test_clear_removes_entries_and_counters(self) -> None:
+        """Clear the cache after one structural dependency analysis.
+
+        The cache must report no entries, hits, or misses after the clear.
+
+        Notes
+        -----
+        The test computes one linear dependency map before it clears the cache.
+        """
+
+        def forward(value: Any) -> Any:
+            result: Any = 2.0 * value
+            return result
+
+        dependency_map(
+            "org.diffpes.model.cache.clear",
+            forward,
+            jnp.array([1.0]),
+        )
+        clear_dependency_cache()
+        info: tuple[int, int, int] = dependency_cache_info()
+        assert info == (0, 0, 0)
+
+
+class TestDependencyCacheInfo:
+    """Verify :func:`~diffpes.certify.dependency_cache_info`.
+
+    The case counts one cache hit for one repeated static model shape.
+
+    :see: :func:`~diffpes.certify.dependency_cache_info`
+    """
+
+    def test_static_model_shape_has_one_structural_miss(self) -> None:
+        """Verify one structural miss across two map evaluations.
+
+        The repeated model ID, callable, shape, and dtype use one cache entry.
+
+        Notes
+        -----
+        The test clears the cache and calls the same linear model two times.
+        """
+
+        def forward(value: Any) -> Any:
+            result: Any = 2.0 * value
+            return result
+
+        clear_dependency_cache()
+        inputs: Any = jnp.array([1.0, 2.0])
+        dependency_map("org.diffpes.model.cache", forward, inputs)
+        dependency_map("org.diffpes.model.cache", forward, inputs)
+        info: tuple[int, int, int] = dependency_cache_info()
+        assert info == (1, 1, 1)

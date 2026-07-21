@@ -1,15 +1,21 @@
-"""Validate ARPES polarization and dipole matrix element functions.
+"""Validate ARPES polarization and detector-frame functions.
 
 Extended Summary
 ----------------
 Exercise build_polarization_vectors, build_efield, and
 dipole_matrix_elements. Verify the polarization basis and each field
-mode. Check dipole matrix element shape and sign.
+mode. Check dipole matrix element shape and sign. Compare the detector frame
+with an offline table from the pinned Chinook source.
 
 """
 
+import json
+from pathlib import Path
+
 import chex
+import jax
 import jax.numpy as jnp
+import pytest
 from beartype.typing import Any, Callable
 from jaxtyping import Array
 
@@ -17,8 +23,15 @@ import diffpes
 from diffpes.simul import (
     build_efield,
     build_polarization_vectors,
+    detector_angles_to_kpar,
+    detector_rotation,
     dipole_matrix_elements,
+    final_state_k_inv_ang,
     photon_wavevector,
+    polarization_from_angles,
+    polarization_to_spherical,
+    rotate_frame_vectors,
+    rotate_polarization_grid,
 )
 from diffpes.types import make_polarization_config
 
@@ -128,6 +141,61 @@ class TestBuildPolarizationVectors(chex.TestCase):
         e_s, e_p = build_polarization_vectors(0.5, 0.0)
         chex.assert_shape(e_s, (3,))
         chex.assert_shape(e_p, (3,))
+
+    def test_is_smooth_across_the_old_collinearity_threshold(self) -> None:
+        """Keep one transverse frame across near-normal incidence angles.
+
+        The basis must not jump when the photon direction crosses the former
+        reference-axis threshold. Its angle Jacobian must match the analytic
+        trigonometric basis on both sides.
+
+        Notes
+        -----
+        Evaluate two angles around ``arccos(0.99)`` at a fixed azimuth. Compare
+        both bases and both theta derivatives with their closed forms.
+        """
+        phi: Array = jnp.asarray(0.37)
+        threshold: Array = jnp.arccos(jnp.asarray(0.99))
+        theta: Array = threshold + jnp.asarray([-1e-6, 1e-6])
+        e_s: Array
+        e_p: Array
+        e_s, e_p = jax.vmap(
+            lambda value: build_polarization_vectors(value, phi)
+        )(theta)
+        expected_s: Array = jnp.asarray([jnp.sin(phi), -jnp.cos(phi), 0.0])
+        expected_p: Array = jnp.stack(
+            (
+                -jnp.cos(theta) * jnp.cos(phi),
+                -jnp.cos(theta) * jnp.sin(phi),
+                jnp.sin(theta),
+            ),
+            axis=-1,
+        )
+        derivative: Array = jax.vmap(
+            jax.jacfwd(lambda value: build_polarization_vectors(value, phi)[1])
+        )(theta)
+        expected_derivative: Array = jnp.stack(
+            (
+                jnp.sin(theta) * jnp.cos(phi),
+                jnp.sin(theta) * jnp.sin(phi),
+                jnp.cos(theta),
+            ),
+            axis=-1,
+        )
+
+        chex.assert_trees_all_close(
+            e_s,
+            jnp.broadcast_to(expected_s, (2, 3)),
+            rtol=0.0,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(e_p, expected_p, rtol=0.0, atol=1e-14)
+        chex.assert_trees_all_close(
+            derivative,
+            expected_derivative,
+            rtol=0.0,
+            atol=1e-14,
+        )
 
 
 class TestPhotonWavevector(chex.TestCase):
@@ -521,3 +589,473 @@ class TestDipoleMatrixElements(chex.TestCase):
         m = dipole_matrix_elements(efield)
         for i in range(9):
             assert float(m[i]) >= 0.0
+
+
+class TestPolarizationFromAngles(chex.TestCase):
+    """Validate :func:`diffpes.simul.polarization.polarization_from_angles`.
+
+    The tests verify each static polarization selector and the traced linear
+    angle against the transverse basis.
+
+    :see: :func:`~diffpes.simul.polarization_from_angles`
+    """
+
+    def test_constructs_standard_states(self) -> None:
+        """Verify standard states against the transverse basis.
+
+        The test constructs all static states at one incidence geometry and
+        compares each vector with its closed-form basis combination.
+
+        Notes
+        -----
+        Evaluate one generic incidence geometry. Compare four polarization
+        kinds with the analytic transverse-basis combinations at 1e-14.
+        """
+        theta: Array = jnp.asarray(0.7)
+        phi: Array = jnp.asarray(-0.2)
+        e_s: Array
+        e_p: Array
+        e_s, e_p = build_polarization_vectors(theta, phi)
+        circular: Array = polarization_from_angles(theta, phi, "c+")
+        linear: Array = polarization_from_angles(
+            theta,
+            phi,
+            "linear",
+            polarization_angle=jnp.pi / 4.0,
+        )
+        chex.assert_trees_all_close(
+            polarization_from_angles(theta, phi, "s"),
+            e_s.astype(jnp.complex128),
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            polarization_from_angles(theta, phi, "p"),
+            e_p.astype(jnp.complex128),
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            circular,
+            (e_s + 1j * e_p) / jnp.sqrt(2.0),
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            linear,
+            (e_s + e_p) / jnp.sqrt(2.0),
+            atol=1e-14,
+        )
+
+    def test_rejects_unknown_kind(self) -> None:
+        """Verify rejection of an unknown polarization kind.
+
+        The test calls the constructor with an unregistered static selector
+        and checks the specific validation error.
+
+        Notes
+        -----
+        Pass ``"unknown"`` as the static selector. Require ``ValueError``
+        with the polarization-kind message.
+        """
+        with pytest.raises(ValueError, match="kind must be one of"):
+            polarization_from_angles(0.5, 0.0, "unknown")
+
+
+class TestPolarizationToSpherical(chex.TestCase):
+    """Validate :func:`diffpes.simul.polarization.polarization_to_spherical`.
+
+    The tests pin the Condon-Shortley convention, norm preservation, and the
+    complex-linear derivative.
+
+    :see: :func:`~diffpes.simul.polarization_to_spherical`
+    """
+
+    def test_matches_closed_form_states(self) -> None:
+        """Verify circular and linear closed-form states.
+
+        The test transforms both helicities and Cartesian x polarization and
+        compares their spherical components with analytic values.
+
+        Notes
+        -----
+        Build two circular states and one linear state. Compare their ordered
+        spherical components with the Condon-Shortley values at 1e-15.
+        """
+        root_two: Array = jnp.sqrt(jnp.asarray(2.0))
+        sigma_plus: Array = (
+            jnp.asarray(
+                [1.0, 1j, 0.0],
+                dtype=jnp.complex128,
+            )
+            / root_two
+        )
+        sigma_minus: Array = (
+            jnp.asarray(
+                [1.0, -1j, 0.0],
+                dtype=jnp.complex128,
+            )
+            / root_two
+        )
+        x_linear: Array = jnp.asarray(
+            [1.0, 0.0, 0.0],
+            dtype=jnp.complex128,
+        )
+        chex.assert_trees_all_close(
+            polarization_to_spherical(sigma_plus),
+            jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.complex128),
+            atol=1e-15,
+        )
+        chex.assert_trees_all_close(
+            polarization_to_spherical(sigma_minus),
+            jnp.asarray([0.0, 0.0, -1.0], dtype=jnp.complex128),
+            atol=1e-15,
+        )
+        expected_x: Array = jnp.asarray(
+            [1.0 / root_two, 0.0, -1.0 / root_two],
+            dtype=jnp.complex128,
+        )
+        chex.assert_trees_all_close(
+            polarization_to_spherical(x_linear),
+            expected_x,
+            atol=1e-15,
+        )
+
+    def test_preserves_norm_and_jvp(self) -> None:
+        """Verify norm preservation and the complex-linear JVP.
+
+        The test transforms a generic complex vector and tangent, then checks
+        the norm identity and the exact transformed tangent.
+
+        Notes
+        -----
+        Apply a JAX JVP to a generic complex vector. Compare the norm and
+        tangent identities at 1e-14.
+        """
+        polarization: Array = jnp.asarray(
+            [0.3 + 0.2j, -0.4 + 0.1j, 0.5 - 0.7j],
+            dtype=jnp.complex128,
+        )
+        tangent: Array = jnp.asarray(
+            [-0.2 + 0.8j, 0.6 - 0.3j, 0.1 + 0.4j],
+            dtype=jnp.complex128,
+        )
+        spherical: Array
+        spherical_tangent: Array
+        spherical, spherical_tangent = jax.jvp(
+            polarization_to_spherical,
+            (polarization,),
+            (tangent,),
+        )
+        chex.assert_trees_all_close(
+            jnp.vdot(spherical, spherical).real,
+            jnp.vdot(polarization, polarization).real,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            spherical_tangent,
+            polarization_to_spherical(tangent),
+            atol=1e-14,
+        )
+
+
+class TestDetectorRotation(chex.TestCase):
+    """Validate :func:`diffpes.simul.polarization.detector_rotation`.
+
+    The tests compare both slit conventions with closed forms and exercise
+    their traced angle derivatives.
+
+    :see: :func:`~diffpes.simul.detector_rotation`
+    """
+
+    def test_rotates_reference_direction_for_both_slits(self) -> None:
+        """Verify both slit conventions against closed forms.
+
+        The test rotates the reference z direction and compares both results
+        with their analytic trigonometric expressions.
+
+        Notes
+        -----
+        Use two nonzero detector angles. Compare the horizontal and vertical
+        directions with their closed forms at 1e-14.
+        """
+        tx: Array = jnp.asarray(0.23)
+        ty: Array = jnp.asarray(-0.17)
+        z_axis: Array = jnp.asarray([0.0, 0.0, 1.0])
+        expected_h: Array = jnp.asarray(
+            [
+                jnp.sin(tx),
+                -jnp.cos(tx) * jnp.sin(ty),
+                jnp.cos(tx) * jnp.cos(ty),
+            ]
+        )
+        expected_v: Array = jnp.asarray(
+            [
+                jnp.sin(ty),
+                -jnp.sin(tx) * jnp.cos(ty),
+                jnp.cos(tx) * jnp.cos(ty),
+            ]
+        )
+        chex.assert_trees_all_close(
+            detector_rotation(tx, ty, "H") @ z_axis,
+            expected_h,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            detector_rotation(tx, ty, "V") @ z_axis,
+            expected_v,
+            atol=1e-14,
+        )
+
+    def test_is_proper_and_differentiable(self) -> None:
+        """Verify proper rotation and a nonzero angle derivative.
+
+        The test checks orthogonality, determinant, and the derivative of one
+        emitted-direction component with respect to the first angle.
+
+        Notes
+        -----
+        Compute one horizontal rotation. Differentiate its x direction and
+        compare the result with the analytic cosine at 1e-14.
+        """
+        angle: Array = jnp.asarray(0.31)
+        rotation: Array = detector_rotation(angle, -0.19, "H")
+        chex.assert_trees_all_close(
+            rotation @ rotation.T,
+            jnp.eye(3),
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(jnp.linalg.det(rotation), 1.0, atol=1e-14)
+        derivative: Array = jax.grad(
+            lambda value: detector_rotation(value, -0.19, "H")[0, 2]
+        )(angle)
+        chex.assert_trees_all_close(
+            derivative,
+            jnp.cos(angle),
+            atol=1e-14,
+        )
+
+    def test_matches_pinned_chinook_artifact(self) -> None:
+        """Match the pinned Chinook direction and polarization table.
+
+        The artifact records both declared coordinate remaps. It contains the
+        full rotation, direction, and three complex polarization states.
+
+        Notes
+        -----
+        Load gate 03.G4 without a Chinook import. Compare all points on the
+        two 5 by 5 angle grids at the recorded relative tolerance.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[3]
+        artifact_path: Path = (
+            repository_root
+            / "diffpes-plans"
+            / "verification"
+            / "kspace"
+            / "tilt_polarization_reference.json"
+        )
+        reference: dict[str, Any] = json.loads(
+            artifact_path.read_text(encoding="utf-8")
+        )
+        expected_mapping: dict[str, dict[str, str]] = {
+            "H": {
+                "active_rotation": "Rx(diffpes_ty) @ Ry(diffpes_tx)",
+                "gen_all_pol": (
+                    "chinook_theta=-diffpes_tx, chinook_phi=-diffpes_ty"
+                ),
+                "tilt_k_mesh": (
+                    "chinook_Tx=-diffpes_tx, chinook_Ty=diffpes_ty"
+                ),
+            },
+            "V": {
+                "active_rotation": "Rx(diffpes_tx) @ Ry(diffpes_ty)",
+                "gen_all_pol": (
+                    "chinook_theta=-diffpes_ty, chinook_phi=-diffpes_tx"
+                ),
+                "tilt_k_mesh": (
+                    "chinook_Tx=-diffpes_ty, chinook_Ty=diffpes_tx"
+                ),
+            },
+        }
+        self.assertEqual(reference["gate"], "03.G4")
+        self.assertEqual(reference["mapping"], expected_mapping)
+        tolerance: float = float(reference["rtol"])
+        polarization_records: dict[str, Any] = reference["polarization_inputs"]
+        slit: str
+        for slit in ("H", "V"):
+            records: list[dict[str, Any]] = [
+                record
+                for record in reference["records"]
+                if record["slit"] == slit
+            ]
+            axis_size: int = int(len(records) ** 0.5)
+            tx: Array = jnp.asarray(
+                [
+                    records[index * axis_size]["tx_rad"]
+                    for index in range(axis_size)
+                ]
+            )
+            ty: Array = jnp.asarray(
+                [records[index]["ty_rad"] for index in range(axis_size)]
+            )
+            expected_rotations: Array = jnp.asarray(
+                [record["rotation_matrix"] for record in records]
+            ).reshape(axis_size, axis_size, 3, 3)
+            actual_rotations: Array = jax.vmap(
+                lambda tx_value: jax.vmap(
+                    lambda ty_value: detector_rotation(
+                        tx_value, ty_value, slit
+                    )
+                )(ty)
+            )(tx)
+            chex.assert_trees_all_close(
+                actual_rotations,
+                expected_rotations,
+                rtol=tolerance,
+                atol=1e-12,
+            )
+            expected_directions: Array = jnp.asarray(
+                [record["detector_direction"] for record in records]
+            ).reshape(axis_size, axis_size, 3)
+            energy: Array = jnp.asarray(35.0)
+            momentum: Array = final_state_k_inv_ang(energy)
+            actual_k_parallel: Array = detector_angles_to_kpar(
+                tx[:, None],
+                ty[None, :],
+                energy,
+                slit,
+            )
+            chex.assert_trees_all_close(
+                actual_k_parallel / momentum,
+                expected_directions[..., :2],
+                rtol=tolerance,
+                atol=1e-12,
+            )
+            polarization_name: str
+            for polarization_name in ("s", "p", "c_plus"):
+                input_parts: dict[str, list[float]] = polarization_records[
+                    polarization_name
+                ]
+                polarization: Array = jnp.asarray(input_parts["real"]) + (
+                    1j * jnp.asarray(input_parts["imag"])
+                )
+                expected_parts: list[dict[str, list[float]]] = [
+                    record["rotated_polarizations"][polarization_name]
+                    for record in records
+                ]
+                expected_polarization: Array = (
+                    jnp.asarray([part["real"] for part in expected_parts])
+                    + 1j
+                    * jnp.asarray([part["imag"] for part in expected_parts])
+                ).reshape(axis_size, axis_size, 3)
+                actual_polarization: Array = rotate_polarization_grid(
+                    polarization,
+                    tx,
+                    ty,
+                    slit,
+                )
+                chex.assert_trees_all_close(
+                    actual_polarization,
+                    expected_polarization,
+                    rtol=tolerance,
+                    atol=1e-12,
+                )
+
+    def test_rejects_unknown_slit(self) -> None:
+        """Verify rejection of an unknown slit orientation.
+
+        The test calls the frame constructor with an unsupported static slit
+        value and checks the validation error.
+
+        Notes
+        -----
+        Pass ``"X"`` as the slit. Require ``ValueError`` with the slit
+        validation message.
+        """
+        with pytest.raises(ValueError, match="slit must be"):
+            detector_rotation(0.0, 0.0, "X")
+
+
+class TestRotateFrameVectors(chex.TestCase):
+    """Validate :func:`diffpes.simul.polarization.rotate_frame_vectors`.
+
+    The test checks the detector-grid shape, vector norms, and mapped frame
+    values for a real vector.
+
+    :see: :func:`~diffpes.simul.rotate_frame_vectors`
+    """
+
+    def test_maps_real_vector_over_grid(self) -> None:
+        """Verify mapped real-vector values and shape.
+
+        The test rotates one normalized vector over two angle axes and checks
+        each result against direct detector-frame multiplication.
+
+        Notes
+        -----
+        Use a 2 by 3 horizontal angle grid. Check its shape, norms, and one
+        direct matrix product at 1e-14.
+        """
+        vector: Array = jnp.asarray([0.0, 0.0, 1.0])
+        tx: Array = jnp.asarray([-0.2, 0.1])
+        ty: Array = jnp.asarray([-0.1, 0.0, 0.3])
+        rotated: Array = rotate_frame_vectors(vector, tx, ty, "H")
+        chex.assert_shape(rotated, (2, 3, 3))
+        chex.assert_trees_all_close(
+            jnp.linalg.norm(rotated, axis=-1),
+            jnp.ones((2, 3)),
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            rotated[1, 2],
+            detector_rotation(tx[1], ty[2], "H") @ vector,
+            atol=1e-14,
+        )
+
+
+class TestRotatePolarizationGrid(chex.TestCase):
+    """Validate :func:`diffpes.simul.polarization.rotate_polarization_grid`.
+
+    The test checks complex phase preservation, detector-grid shape, and
+    differentiation through the mapped detector angles.
+
+    :see: :func:`~diffpes.simul.rotate_polarization_grid`
+    """
+
+    def test_maps_complex_polarization_and_gradients(self) -> None:
+        """Verify complex grid values and angle gradients.
+
+        The test rotates a generic complex vector and compares one cell with
+        direct multiplication. It also checks a nonzero mapped derivative.
+
+        Notes
+        -----
+        Use a 2 by 2 vertical angle grid. Compare one cell and differentiate
+        one real component with respect to the first angle.
+        """
+        polarization: Array = jnp.asarray(
+            [0.2 + 0.5j, -0.3 + 0.1j, 0.7 - 0.2j],
+            dtype=jnp.complex128,
+        )
+        tx: Array = jnp.asarray([-0.2, 0.1])
+        ty: Array = jnp.asarray([0.0, 0.3])
+        rotated: Array = rotate_polarization_grid(
+            polarization,
+            tx,
+            ty,
+            "V",
+        )
+        chex.assert_shape(rotated, (2, 2, 3))
+        chex.assert_trees_all_close(
+            rotated[0, 1],
+            detector_rotation(tx[0], ty[1], "V") @ polarization,
+            atol=1e-14,
+        )
+        derivative: Array = jax.grad(
+            lambda angle: jnp.real(
+                rotate_polarization_grid(
+                    polarization,
+                    jnp.asarray([angle]),
+                    jnp.asarray([0.2]),
+                    "V",
+                )[0, 0, 1]
+            )
+        )(jnp.asarray(0.1))
+        assert jnp.abs(derivative) > 1e-6

@@ -9,6 +9,7 @@ their outputs. Git stores the reviewable plain-text sources.
 
 quickstart
 certified-forward-model
+geometry-and-kinematics
 ```
 
 - [Quickstart](quickstart.md): Build a synthetic band structure. Simulate two
@@ -17,6 +18,8 @@ certified-forward-model
 - [Inspect and persist a certified forward run](certified-forward-model.md):
   Read bounded claims and differentiable evidence. Save canonical JSON and
   attach the same record to an HDF5 result.
+- [Geometry and kinematics](geometry-and-kinematics.md): Build k-space rasters,
+  detector frames, inner-potential scans, and a geometry Jacobian.
 
 The project is developing more complete examples:
 

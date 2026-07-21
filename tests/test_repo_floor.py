@@ -777,6 +777,7 @@ class TestRepositoryArchitecture(chex.TestCase):
                 "pack",
                 "pair",
                 "parse",
+                "pass",
                 "perform",
                 "persist",
                 "pin",
@@ -801,11 +802,14 @@ class TestRepositoryArchitecture(chex.TestCase):
                 "recover",
                 "reduce",
                 "re-evaluate",
+                "re-execute",
                 "refuse",
                 "register",
                 "reject",
                 "remove",
                 "render",
+                "replace",
+                "repeat",
                 "report",
                 "replay",
                 "represent",
@@ -814,8 +818,10 @@ class TestRepositoryArchitecture(chex.TestCase):
                 "resolve",
                 "retain",
                 "return",
+                "reuse",
                 "round",
                 "round-trip",
+                "rotate",
                 "run",
                 "sanitize",
                 "save",
@@ -985,6 +991,11 @@ class TestRepositoryArchitecture(chex.TestCase):
             for path in sorted(repository_root.rglob("*.md"))
             if path.is_file()
             and not any(root in path.parents for root in excluded_roots)
+            and not any(
+                (parent / ".git").exists()
+                for parent in path.parents
+                if parent != repository_root
+            )
         )
         violations: list[str] = []
         path: Path

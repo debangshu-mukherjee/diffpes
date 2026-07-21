@@ -13,6 +13,8 @@ Routine Listings
 ----------------
 :class:`ArtifactRef`
     Store static identity and role for one source or derived artifact.
+:obj:`ArtifactResolver`
+    Resolve an artifact to normalized content and optional source bytes.
 :class:`CertificationClaim`
     Store a named claim and its continuous numerical evidence.
 :class:`CertificationContext`
@@ -53,14 +55,22 @@ Routine Listings
     Store the structural validation result for one registry snapshot.
 :class:`RegistrySnapshot`
     Store an immutable deterministic snapshot of registry entries.
+:class:`RegistrationHandshake`
+    Store declarative registration requirements for one plan owner.
 :class:`ReproductionReport`
     Store a numerical comparison from deliberate forward re-execution.
+:class:`HandshakeReport`
+    Store the validation outcome for one registration handshake.
 :class:`SensitivityMap`
     Store scaled sensitivities from inputs to output projections.
 :class:`TransformationRecord`
     Store one transformation and its semantic information effects.
 :class:`VerificationReport`
     Store an offline certificate-verification outcome.
+:class:`WaiverRecord`
+    Store a bounded policy-waiver declaration without changing claim status.
+:class:`WaiverReport`
+    Store the temporal validation outcome for one waiver.
 :func:`make_artifact_ref`
     Create a validated artifact reference.
 :func:`make_certification_claim`
@@ -101,14 +111,22 @@ Routine Listings
     Create a validated structural registry report.
 :func:`make_registry_snapshot`
     Create an immutable registry snapshot.
+:func:`make_registration_handshake`
+    Create declarative registration requirements for one plan owner.
 :func:`make_reproduction_report`
     Create a report comparing a result with its re-execution.
+:func:`make_handshake_report`
+    Create a report for one registration handshake.
 :func:`make_sensitivity_map`
     Create a named, scaled local-sensitivity map.
 :func:`make_transformation_record`
     Create a validated information-aware transformation record.
 :func:`make_verification_report`
     Create an offline certificate-verification report.
+:func:`make_waiver_record`
+    Create a bounded policy-waiver declaration.
+:func:`make_waiver_report`
+    Create a temporal waiver-validation report.
 """
 
 import json
@@ -162,6 +180,9 @@ class ArtifactRef(eqx.Module):
     semantic_checksum: str = eqx.field(static=True)
     locator: Optional[str] = eqx.field(static=True)
     role: str = eqx.field(static=True)
+
+
+type ArtifactResolver = Callable[[ArtifactRef], tuple[Any, Optional[bytes]]]
 
 
 class ConventionRef(eqx.Module):
@@ -439,6 +460,59 @@ class RegistryReport(eqx.Module):
     frozen: bool = eqx.field(static=True)
 
 
+class RegistrationHandshake(eqx.Module):
+    """Store declarative registration requirements for one plan owner.
+
+    The record names required identities without importing an unfinished
+    scientific kernel.
+
+    :see: :class:`~.test_certification.TestRegistrationHandshake`
+
+    Attributes
+    ----------
+    owner_id : str
+        Plan owner identity (**static**; changing it causes retracing).
+    model_refs : tuple[str, ...]
+        Required model identities (**static**; changing them causes retracing).
+    transformation_refs : tuple[str, ...]
+        Required transformation identities (**static**; changes cause
+        retracing).
+    convention_refs : tuple[str, ...]
+        Required convention identities (**static**; changes cause retracing).
+    evidence_ids : tuple[str, ...]
+        Required evidence identities (**static**; changing them causes
+        retracing).
+    """
+
+    owner_id: str = eqx.field(static=True)
+    model_refs: tuple[str, ...] = eqx.field(static=True)
+    transformation_refs: tuple[str, ...] = eqx.field(static=True)
+    convention_refs: tuple[str, ...] = eqx.field(static=True)
+    evidence_ids: tuple[str, ...] = eqx.field(static=True)
+
+
+class HandshakeReport(eqx.Module):
+    """Store the validation outcome for one registration handshake.
+
+    The report keeps a JAX Boolean outcome and static missing identities.
+
+    :see: :class:`~.test_certification.TestHandshakeReport`
+
+    Attributes
+    ----------
+    owner_id : str
+        Plan owner identity (**static**; changing it causes retracing).
+    complete : Bool[Array, ""]
+        Whether every declared identity has a registry binding.
+    missing_ids : tuple[str, ...]
+        Missing declared identities (**static**; changes cause retracing).
+    """
+
+    owner_id: str = eqx.field(static=True)
+    complete: Bool[Array, ""]
+    missing_ids: tuple[str, ...] = eqx.field(static=True)
+
+
 class TransformationRecord(eqx.Module):
     """Store one transformation and its semantic information effects.
 
@@ -647,7 +721,8 @@ class DerivativeEvidence(eqx.Module):
         declared physical units.
     condition_estimate : Float[Array, ""]
         Condition estimate retained as a differentiable JAX leaf in the
-        declared physical units.
+        declared physical units. Zero means that there is no active information
+        direction.
     finite : Bool[Array, ""]
         Finite retained as a differentiable JAX leaf in the declared
         physical units.
@@ -767,7 +842,8 @@ class InformationSpectrum(eqx.Module):
         declared physical units.
     condition_estimate : Float[Array, ""]
         Condition estimate retained as a differentiable JAX leaf in the
-        declared physical units.
+        declared physical units. Zero means that there is no active information
+        direction.
     threshold : Float[Array, ""]
         Threshold retained as a differentiable JAX leaf in the declared
         physical units.
@@ -911,6 +987,8 @@ class CertificationContext(eqx.Module):
     input_checksums : tuple[str, ...]
         Input checksums (**static** -- a compile-time constant;
         changing it triggers retracing).
+    waivers : tuple[WaiverRecord, ...]
+        Policy-waiver records (**static**; changing them causes retracing).
     """
 
     manifest: ExecutionManifest
@@ -921,6 +999,7 @@ class CertificationContext(eqx.Module):
     policy_id: str = eqx.field(static=True)
     check_ids: tuple[str, ...] = eqx.field(static=True)
     input_checksums: tuple[str, ...] = eqx.field(static=True)
+    waivers: tuple["WaiverRecord", ...] = eqx.field(static=True)
 
 
 class ForwardCertificate(eqx.Module):
@@ -978,6 +1057,8 @@ class ForwardCertificate(eqx.Module):
     extensions_json : str
         Extensions json (**static** -- a compile-time constant;
         changing it triggers retracing).
+    waivers : tuple[WaiverRecord, ...]
+        Policy-waiver records (**static**; changing them causes retracing).
     """
 
     manifest: ExecutionManifest
@@ -995,6 +1076,7 @@ class ForwardCertificate(eqx.Module):
     policy_id: str = eqx.field(static=True)
     certificate_checksum: str = eqx.field(static=True)
     extensions_json: str = eqx.field(static=True)
+    waivers: tuple["WaiverRecord", ...] = eqx.field(static=True)
 
 
 class CertifiedResult(eqx.Module):
@@ -1123,6 +1205,66 @@ class ReproductionReport(eqx.Module):
     max_abs_error: Float[Array, ""]
     max_rel_error: Float[Array, ""]
     tolerance: Float[Array, ""]
+
+
+class WaiverRecord(eqx.Module):
+    """Store a bounded policy-waiver declaration without changing claim status.
+
+    A waiver records review context only. It never changes a failed claim to
+    a passed claim.
+
+    :see: :class:`~.test_certification.TestWaiverRecord`
+
+    Attributes
+    ----------
+    waiver_id : str
+        Permanent waiver identity (**static**; changing it causes retracing).
+    policy_id : str
+        Applicable policy identity (**static**; changing it causes retracing).
+    claim_ids : tuple[str, ...]
+        Affected claim identities (**static**; changing them causes retracing).
+    author : str
+        Responsible reviewer (**static**; changing it causes retracing).
+    reason : str
+        Technical reason (**static**; changing it causes retracing).
+    issued_at_utc : str
+        Absolute UTC issue time (**static**; changing it causes retracing).
+    expires_at_utc : str
+        Absolute UTC expiry time (**static**; changing it causes retracing).
+    """
+
+    waiver_id: str = eqx.field(static=True)
+    policy_id: str = eqx.field(static=True)
+    claim_ids: tuple[str, ...] = eqx.field(static=True)
+    author: str = eqx.field(static=True)
+    reason: str = eqx.field(static=True)
+    issued_at_utc: str = eqx.field(static=True)
+    expires_at_utc: str = eqx.field(static=True)
+
+
+class WaiverReport(eqx.Module):
+    """Store the temporal validation outcome for one waiver.
+
+    The report distinguishes valid structure from active temporal scope.
+
+    :see: :class:`~.test_certification.TestWaiverReport`
+
+    Attributes
+    ----------
+    waiver_id : str
+        Permanent waiver identity (**static**; changing it causes retracing).
+    valid : Bool[Array, ""]
+        Whether the record has valid absolute UTC fields.
+    active : Bool[Array, ""]
+        Whether the waiver covers the selected UTC time.
+    errors : tuple[str, ...]
+        Validation errors (**static**; changing them causes retracing).
+    """
+
+    waiver_id: str = eqx.field(static=True)
+    valid: Bool[Array, ""]
+    active: Bool[Array, ""]
+    errors: tuple[str, ...] = eqx.field(static=True)
 
 
 def _require_text(value: str, name: str) -> str:
@@ -1930,6 +2072,8 @@ def make_evidence_ref(
         _float(tolerance, "tolerance", 1), "tolerance"
     )
     shape: tuple[int, ...] = measured_array.shape
+    if measured_array.size == 0:
+        raise ValueError("evidence numerical arrays must not be empty")
     if not (
         reference_array.shape
         == residual_array.shape
@@ -2040,6 +2184,8 @@ def make_certification_claim(  # noqa: PLR0913
         _float(tolerance, "tolerance", 1), "tolerance"
     )
     shape: tuple[int, ...] = measured_array.shape
+    if measured_array.size == 0:
+        raise ValueError("claim numerical arrays must not be empty")
     if not (
         reference_array.shape
         == residual_array.shape
@@ -2123,7 +2269,8 @@ def make_derivative_evidence(  # noqa: PLR0913
         traced numerical value in the declared physical units.
     condition_estimate : Any
         Condition estimate used to construct the validated carrier as a
-        traced numerical value in the declared physical units.
+        traced numerical value in the declared physical units. Zero means that
+        there is no active information direction.
     finite : Any
         Finite used to construct the validated carrier as a traced
         numerical value in the declared physical units.
@@ -2378,7 +2525,8 @@ def make_information_spectrum(
         traced numerical value in the declared physical units.
     condition_estimate : Any
         Condition estimate used to construct the validated carrier as a
-        traced numerical value in the declared physical units.
+        traced numerical value in the declared physical units. Zero means that
+        there is no active information direction.
     threshold : Any
         Threshold used to construct the validated carrier as a traced
         numerical value in the declared physical units.
@@ -2607,6 +2755,7 @@ def make_certification_context(
     policy_id: str = "org.diffpes.policy.research.v1",
     check_ids: tuple[str, ...] = (),
     input_checksums: tuple[str, ...] = (),
+    waivers: tuple[WaiverRecord, ...] = (),
 ) -> CertificationContext:
     """Create a prepared certification context.
 
@@ -2643,6 +2792,8 @@ def make_certification_context(
         Input checksums used to construct the validated carrier
         (**static** -- a compile-time constant; changing it triggers
         retracing).
+    waivers : tuple[WaiverRecord, ...]
+        Policy-waiver records. Default is an empty tuple.
 
     Returns
     -------
@@ -2673,6 +2824,7 @@ def make_certification_context(
         policy_id=_require_text(policy_id, "policy_id"),
         check_ids=_text_tuple(check_ids, "check_ids"),
         input_checksums=_text_tuple(input_checksums, "input_checksums"),
+        waivers=tuple(waivers),
     )
     return result
 
@@ -2703,6 +2855,7 @@ def make_forward_certificate(  # noqa: PLR0913
     policy_id: str,
     certificate_checksum: str,
     extensions_json: str = "{}",
+    waivers: tuple[WaiverRecord, ...] = (),
 ) -> ForwardCertificate:
     """Create and cross-validate a complete forward certificate.
 
@@ -2761,6 +2914,8 @@ def make_forward_certificate(  # noqa: PLR0913
         Extensions json used to construct the validated carrier
         (**static** -- a compile-time constant; changing it triggers
         retracing).
+    waivers : tuple[WaiverRecord, ...]
+        Policy-waiver records. Default is an empty tuple.
 
     Returns
     -------
@@ -2796,6 +2951,7 @@ def make_forward_certificate(  # noqa: PLR0913
         (evidence, "evidence_id"),
         (claims, "claim_id"),
         (domains, "predicate_id"),
+        (waivers, "waiver_id"),
     )
     for values, attribute in identity_groups:
         if not _unique_module_ids(values, attribute):
@@ -2818,6 +2974,7 @@ def make_forward_certificate(  # noqa: PLR0913
             certificate_checksum, "certificate_checksum"
         ),
         extensions_json=_json_object(extensions_json, "extensions_json"),
+        waivers=tuple(waivers),
     )
     return result
 
@@ -3035,8 +3192,202 @@ def make_reproduction_report(
     return result
 
 
+@jaxtyped(typechecker=beartype)
+def make_registration_handshake(
+    owner_id: str,
+    model_refs: tuple[str, ...] = (),
+    transformation_refs: tuple[str, ...] = (),
+    convention_refs: tuple[str, ...] = (),
+    evidence_ids: tuple[str, ...] = (),
+) -> RegistrationHandshake:
+    """Create declarative registration requirements for one plan owner.
+
+    The factory validates each static identity without importing a scientific
+    executor.
+
+    :see: :class:`~.test_certification.TestMakeRegistrationHandshake`
+
+    Parameters
+    ----------
+    owner_id : str
+        Plan owner identity (**static**; changing it causes retracing).
+    model_refs : tuple[str, ...]
+        Required model identities. Default is an empty tuple.
+    transformation_refs : tuple[str, ...]
+        Required transformation identities. Default is an empty tuple.
+    convention_refs : tuple[str, ...]
+        Required convention identities. Default is an empty tuple.
+    evidence_ids : tuple[str, ...]
+        Required evidence identities. Default is an empty tuple.
+
+    Returns
+    -------
+    result : RegistrationHandshake
+        Validated declarative registration requirements.
+
+    Notes
+    -----
+    The factory validates each static identity before module construction.
+    """
+    result: RegistrationHandshake = RegistrationHandshake(
+        owner_id=_require_text(owner_id, "owner_id"),
+        model_refs=_text_tuple(model_refs, "model_refs"),
+        transformation_refs=_text_tuple(
+            transformation_refs, "transformation_refs"
+        ),
+        convention_refs=_text_tuple(convention_refs, "convention_refs"),
+        evidence_ids=_text_tuple(evidence_ids, "evidence_ids"),
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_handshake_report(
+    owner_id: str,
+    complete: Any,
+    missing_ids: tuple[str, ...] = (),
+) -> HandshakeReport:
+    """Create a report for one registration handshake.
+
+    The report keeps the completion outcome as a JAX Boolean leaf.
+
+    :see: :class:`~.test_certification.TestMakeHandshakeReport`
+
+    Parameters
+    ----------
+    owner_id : str
+        Plan owner identity (**static**; changing it causes retracing).
+    complete : Any
+        Whether every declared identity has a registry binding.
+    missing_ids : tuple[str, ...]
+        Missing declared identities. Default is an empty tuple.
+
+    Returns
+    -------
+    result : HandshakeReport
+        Validated completion outcome and missing identities.
+
+    Notes
+    -----
+    The factory converts the completion outcome to a scalar JAX Boolean.
+    """
+    missing: tuple[str, ...] = _text_tuple(missing_ids, "missing_ids")
+    result: HandshakeReport = HandshakeReport(
+        owner_id=_require_text(owner_id, "owner_id"),
+        complete=_bool(complete, "complete", 0),
+        missing_ids=missing,
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_waiver_record(
+    waiver_id: str,
+    policy_id: str,
+    claim_ids: tuple[str, ...],
+    author: str,
+    reason: str,
+    issued_at_utc: str,
+    expires_at_utc: str,
+) -> WaiverRecord:
+    """Create a bounded policy-waiver declaration.
+
+    The factory validates static vocabulary. The waiver validator checks the
+    absolute UTC interval.
+
+    :see: :class:`~.test_certification.TestMakeWaiverRecord`
+
+    Parameters
+    ----------
+    waiver_id : str
+        Permanent waiver identity (**static**; changing it causes retracing).
+    policy_id : str
+        Applicable policy identity (**static**; changing it causes retracing).
+    claim_ids : tuple[str, ...]
+        Affected claim identities (**static**; changing them causes retracing).
+    author : str
+        Responsible reviewer (**static**; changing it causes retracing).
+    reason : str
+        Technical reason (**static**; changing it causes retracing).
+    issued_at_utc : str
+        Absolute UTC issue time (**static**; changing it causes retracing).
+    expires_at_utc : str
+        Absolute UTC expiry time (**static**; changing it causes retracing).
+
+    Returns
+    -------
+    result : WaiverRecord
+        Validated static waiver declaration.
+
+    Raises
+    ------
+    ValueError
+        If a required text field or claim identity is empty.
+
+    Notes
+    -----
+    The factory validates static text before it constructs the waiver record.
+    """
+    claims: tuple[str, ...] = _text_tuple(claim_ids, "claim_ids")
+    if not claims:
+        raise ValueError("claim_ids must contain at least one identity")
+    result: WaiverRecord = WaiverRecord(
+        waiver_id=_require_text(waiver_id, "waiver_id"),
+        policy_id=_require_text(policy_id, "policy_id"),
+        claim_ids=claims,
+        author=_require_text(author, "author"),
+        reason=_require_text(reason, "reason"),
+        issued_at_utc=_require_text(issued_at_utc, "issued_at_utc"),
+        expires_at_utc=_require_text(expires_at_utc, "expires_at_utc"),
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def make_waiver_report(
+    waiver_id: str,
+    valid: Any,
+    active: Any,
+    errors: tuple[str, ...] = (),
+) -> WaiverReport:
+    """Create a temporal waiver-validation report.
+
+    The report keeps validation outcomes as JAX Boolean leaves.
+
+    :see: :class:`~.test_certification.TestMakeWaiverReport`
+
+    Parameters
+    ----------
+    waiver_id : str
+        Permanent waiver identity (**static**; changing it causes retracing).
+    valid : Any
+        Whether the record has valid absolute UTC fields.
+    active : Any
+        Whether the waiver covers the selected UTC time.
+    errors : tuple[str, ...]
+        Validation errors. Default is an empty tuple.
+
+    Returns
+    -------
+    result : WaiverReport
+        Validated temporal outcome and errors.
+
+    Notes
+    -----
+    The factory converts temporal outcomes to scalar JAX Boolean leaves.
+    """
+    result: WaiverReport = WaiverReport(
+        waiver_id=_require_text(waiver_id, "waiver_id"),
+        valid=_bool(valid, "valid", 0),
+        active=_bool(active, "active", 0),
+        errors=tuple(errors),
+    )
+    return result
+
+
 __all__: list[str] = [
     "ArtifactRef",
+    "ArtifactResolver",
     "CertificationClaim",
     "CertificationContext",
     "CheckFunction",
@@ -3051,16 +3402,20 @@ __all__: list[str] = [
     "ExecutionManifest",
     "ForwardCertificate",
     "ForwardModelSpec",
+    "HandshakeReport",
     "InformationSpectrum",
     "PolicyReport",
     "RegisteredModel",
     "RegisteredTransformation",
     "RegistryReport",
     "RegistrySnapshot",
+    "RegistrationHandshake",
     "ReproductionReport",
     "SensitivityMap",
     "TransformationRecord",
     "VerificationReport",
+    "WaiverRecord",
+    "WaiverReport",
     "make_artifact_ref",
     "make_certification_claim",
     "make_certification_context",
@@ -3075,14 +3430,18 @@ __all__: list[str] = [
     "make_execution_manifest",
     "make_forward_certificate",
     "make_forward_model_spec",
+    "make_handshake_report",
     "make_information_spectrum",
     "make_policy_report",
     "make_registered_model",
     "make_registered_transformation",
     "make_registry_report",
     "make_registry_snapshot",
+    "make_registration_handshake",
     "make_reproduction_report",
     "make_sensitivity_map",
     "make_transformation_record",
     "make_verification_report",
+    "make_waiver_record",
+    "make_waiver_report",
 ]

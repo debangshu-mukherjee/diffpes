@@ -14,15 +14,28 @@ from diffpes.certify import (
     freeze_registry,
     get_model,
     get_transformation,
+    list_handshakes,
     list_models,
     list_registered_models,
     list_transformations,
+    packaged_model_card,
+    register_builtin_models,
+    register_handshake,
     register_model,
     register_transformation,
+    registry_manifest,
     registry_snapshot,
+    render_model_card,
+    validate_handshake,
     validate_registry,
+    validate_registry_manifest,
 )
-from diffpes.types import make_forward_model_spec, make_transformation_contract
+from diffpes.types import (
+    make_convention_ref,
+    make_forward_model_spec,
+    make_registration_handshake,
+    make_transformation_contract,
+)
 
 
 def _model_spec(name: str) -> Any:
@@ -394,3 +407,218 @@ else:
             text=True,
         )
         assert completed.returncode == 0, completed.stderr
+
+
+class TestRegisterHandshake:
+    """Verify :func:`~diffpes.certify.register_handshake`.
+
+    The case registers one owner without importing its scientific modules.
+
+    :see: :func:`~diffpes.certify.register_handshake`
+    """
+
+    def test_registers_one_exact_owner(self) -> None:
+        """Register one unique owner handshake in process-local state.
+
+        The next registry snapshot must contain the same immutable record.
+
+        Notes
+        -----
+        The test uses an empty requirement set and a unique owner suffix.
+        """
+        owner_id: str = f"plan-test-{len(list_handshakes())}"
+        handshake: Any = make_registration_handshake(owner_id)
+        register_handshake(handshake)
+        assert handshake in list_handshakes()
+
+
+class TestListHandshakes:
+    """Verify :func:`~diffpes.certify.list_handshakes`.
+
+    The case checks deterministic owner ordering after registration.
+
+    :see: :func:`~diffpes.certify.list_handshakes`
+    """
+
+    def test_returns_owner_sorted_records(self) -> None:
+        """Return all handshake declarations in sorted owner order.
+
+        Registry insertion order must not change the returned order.
+
+        Notes
+        -----
+        The test compares the owner sequence with its sorted copy.
+        """
+        owners: tuple[str, ...] = tuple(
+            item.owner_id for item in list_handshakes()
+        )
+        assert owners == tuple(sorted(owners))
+
+
+class TestValidateHandshake:
+    """Verify :func:`~diffpes.certify.validate_handshake`.
+
+    The case validates model, convention, and evidence references explicitly.
+
+    :see: :func:`~diffpes.certify.validate_handshake`
+    """
+
+    def test_reports_missing_then_complete_references(self) -> None:
+        """Report missing evidence and then complete the same handshake.
+
+        The same declaration must become complete when evidence becomes available.
+
+        Notes
+        -----
+        The test registers one model and supplies its external evidence later.
+        """
+        suffix: str = str(len(list_models()))
+        convention: Any = make_convention_ref(
+            f"org.diffpes.convention.registry_test.{suffix}",
+            "1.0.0",
+            "{}",
+        )
+        spec: Any = make_forward_model_spec(
+            model_id=f"org.diffpes.model.registry_test.handshake{suffix}",
+            model_version="1.0.0",
+            observable_id="org.diffpes.observable.test.result",
+            implementation_ref="tests.registry:handshake",
+            conventions=(convention,),
+        )
+        register_model(spec, lambda value: value)
+        handshake: Any = make_registration_handshake(
+            owner_id=f"plan-{suffix}",
+            model_refs=(f"{spec.model_id}@{spec.model_version}",),
+            convention_refs=(
+                f"{convention.convention_id}@{convention.version}",
+            ),
+            evidence_ids=("evidence-plan",),
+        )
+        missing: Any = validate_handshake(handshake)
+        complete: Any = validate_handshake(
+            handshake,
+            evidence_ids=("evidence-plan",),
+        )
+        assert missing.missing_ids == ("evidence-plan",)
+        assert bool(complete.complete)
+
+    def test_plan03_handshake_is_green_with_declared_evidence(self) -> None:
+        """Verify the built-in Plan 03 handshake with exact evidence IDs.
+
+        The registered transformation contracts and supplied evidence must suffice.
+
+        Notes
+        -----
+        The test reads evidence IDs from the packaged handshake declaration.
+        """
+        register_builtin_models()
+        manifest: dict[str, Any] = registry_manifest()
+        declaration: dict[str, Any] = manifest["handshakes"][0]
+        handshake: Any = next(
+            item
+            for item in list_handshakes()
+            if item.owner_id == "org.diffpes.plan.03"
+        )
+        report: Any = validate_handshake(
+            handshake,
+            evidence_ids=tuple(declaration["evidence_ids"]),
+        )
+        assert bool(report.complete), report.missing_ids
+
+
+class TestRegistryManifest:
+    """Verify :func:`~diffpes.certify.registry_manifest`.
+
+    The case reads the packaged manifest without process-local mutation.
+
+    :see: :func:`~diffpes.certify.registry_manifest`
+    """
+
+    def test_manifest_has_versioned_builtins(self) -> None:
+        """Read the schema and the radial model from package resources.
+
+        The manifest must contain explicit versions for stable identities.
+
+        Notes
+        -----
+        The test checks explicit stable identities, not registry insertion order.
+        """
+        manifest: dict[str, Any] = registry_manifest()
+        assert manifest["schema_version"] == "1.0.0"
+        assert manifest["models"][0]["model_id"].endswith("tb_radial")
+
+
+class TestRenderModelCard:
+    """Verify :func:`~diffpes.certify.render_model_card`.
+
+    The case renders Markdown only from the registered model specification.
+
+    :see: :func:`~diffpes.certify.render_model_card`
+    """
+
+    def test_card_contains_exact_model_identity(self) -> None:
+        """Render the exact model ID and version in the card header.
+
+        The generated text must identify the registered radial model.
+
+        Notes
+        -----
+        The test uses the packaged radial model specification.
+        """
+        register_builtin_models()
+        model: Any = get_model(
+            "org.diffpes.model.arpes.tb_radial",
+            "0.1.0",
+        ).spec
+        card: str = render_model_card(model)
+        assert card.startswith("# org.diffpes.model.arpes.tb_radial")
+        assert "Version: `0.1.0`." in card
+
+
+class TestPackagedModelCard:
+    """Verify :func:`~diffpes.certify.packaged_model_card`.
+
+    The case reads the generated radial model card from package resources.
+
+    :see: :func:`~diffpes.certify.packaged_model_card`
+    """
+
+    def test_packaged_card_matches_registry_render(self) -> None:
+        """Compare the packaged card with a fresh registry-based rendering.
+
+        The complete Markdown outputs must match without manual fields.
+
+        Notes
+        -----
+        The test registers the built-ins and compares the full Markdown text.
+        """
+        register_builtin_models()
+        model: Any = get_model(
+            "org.diffpes.model.arpes.tb_radial",
+            "0.1.0",
+        ).spec
+        packaged: str = packaged_model_card(
+            model.model_id, model.model_version
+        )
+        assert packaged == render_model_card(model)
+
+
+class TestValidateRegistryManifest:
+    """Verify :func:`~diffpes.certify.validate_registry_manifest`.
+
+    The case checks every packaged entry and generated model card for drift.
+
+    :see: :func:`~diffpes.certify.validate_registry_manifest`
+    """
+
+    def test_builtin_registry_has_no_packaged_drift(self) -> None:
+        """Find no missing built-in entry or changed generated model card.
+
+        The validator must return an empty tuple after built-in registration.
+
+        Notes
+        -----
+        The test registers all built-ins before it validates the package files.
+        """
+        register_builtin_models()
+        assert validate_registry_manifest() == ()

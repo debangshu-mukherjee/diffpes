@@ -18,6 +18,11 @@ margins and residuals remain differentiable leaves. JVPs and VJPs compute the
 information-flow evidence. The discrete pass/fail fields show views of those
 continuous quantities.
 
+The certified executor retains one `jax.linearize` result. All requested JVP
+probes and the transpose operation use this retained linear map. The structural
+dependency cache uses the exact model ID, PyTree structure, shape, and dtype.
+`checkify` returns structured errors for failed hard domain checks.
+
 This separation matters during optimization. A policy can report a point
 outside a verified photon-energy domain. The algebraic domain margin can still
 supply a useful gradient toward the domain. Likewise, a small VJP reports
@@ -67,6 +72,44 @@ does not define a level.
 individual claims. A waiver explains an unmet policy requirement; it never
 turns the corresponding claim into a pass.
 
+Each waiver records an author, reason, claim scope, issue time, and expiry time.
+The preparation boundary requires absolute UTC times. It rejects a malformed,
+premature, or expired waiver before compiled execution.
+
+## Artifact resolution and reproduction
+
+An artifact resolver returns normalized scientific content. It can also return
+the exact source bytes. diffpes checks the content and byte CRC32 values as
+separate bookkeeping identities.
+
+The reproduction runner requires one normalized-input artifact and one result
+artifact. It resolves both artifacts and runs the exact registered model. The
+report stores maximum absolute and relative errors against an explicit
+tolerance.
+
+```python
+from diffpes.certify import mapping_artifact_resolver, reproduce_forward
+
+resolver = mapping_artifact_resolver(
+    {"input": normalized_inputs, "result": stored_result}
+)
+report = reproduce_forward(certificate, resolver=resolver)
+```
+
+Only a successful resolver-backed report supports the `reproducible` policy
+level. A checksum match alone does not support that level.
+
+## Registry handshakes
+
+The packaged registry manifest lists each built-in model and transformation.
+diffpes generates model cards directly from the registered model specification.
+The registry validator detects a missing entry or changed model card.
+
+Owner handshakes name required model, transformation, convention, and evidence
+IDs. Plan 03 registers four semantic transformation contracts through this
+interface. The Plan 03 handshake becomes complete only when the caller supplies
+all six declared evidence IDs.
+
 ## Inspection
 
 The inspection API answers scientific questions without loading the result
@@ -99,6 +142,8 @@ convenience attributes next to a numerical result:
 ```python
 from diffpes.inout import (
     attach_certificate_h5,
+    certificate_identity,
+    finalize_certificate,
     load_certificate_h5,
     load_certificate_json,
     save_certificate_json,
@@ -106,6 +151,9 @@ from diffpes.inout import (
 
 save_certificate_json(certificate, "run.certificate.json")
 restored = load_certificate_json("run.certificate.json")
+
+finalized = finalize_certificate(certificate)
+identity = certificate_identity(finalized)
 
 attach_certificate_h5("spectrum.h5", "spectrum", certificate)
 restored_from_h5 = load_certificate_h5("spectrum.h5", "spectrum")
@@ -116,6 +164,11 @@ mismatches. This bookkeeping value provides no security, authenticity, or
 physical-validity claim. The loader rejects unknown schema major versions.
 It retains unknown minor extension data in the certificate extension object.
 A load and save cycle therefore preserves that data.
+
+The I/O boundary replaces the traced kernel placeholder with the canonical
+certificate identity. This identity covers all scientific and numerical
+fields. It excludes the audit execution ID and wall-clock timestamp. The outer
+storage CRC32 still covers the complete document.
 
 ## Reading claims responsibly
 

@@ -6,6 +6,7 @@ scientific identity in the supported certification regime.
 
 import jax
 import jax.numpy as jnp
+import pytest
 from beartype.typing import Any
 
 from diffpes.certify import (
@@ -138,3 +139,35 @@ class TestDerivativeEvidence:
         assert bool(result.fd_correct)
         assert jnp.allclose(result.jvp_probes, 4.0)
         assert jnp.allclose(result.vjp_probes, 4.0)
+
+    def test_derivative_evidence_linearizes_once(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Reuse one nonlinear linearization for all information probes.
+
+        Central differences can rerun the model but cannot linearize it again.
+
+        Notes
+        -----
+        The wrapper counts calls to the public JAX linearization primitive.
+        """
+        original: Any = jax.linearize
+        calls: list[None] = []
+
+        def counted(*args: Any, **kwargs: Any) -> Any:
+            calls.append(None)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(jax, "linearize", counted)
+        derivative_evidence(
+            lambda value: value**2,
+            jnp.array([2.0]),
+            jnp.ones((1, 1)),
+            jnp.ones((1, 1)),
+            input_paths=("$[0]",),
+            output_projection_ids=("square",),
+            scales=jnp.ones(1),
+            spectrum_rank=1,
+        )
+        assert len(calls) == 1

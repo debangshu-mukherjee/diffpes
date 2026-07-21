@@ -1,17 +1,24 @@
-"""Define the k-point path information data structure.
+"""Define k-space path and grid data structures.
 
 Extended Summary
 ----------------
-This module defines the :class:`KPathInfo` PyTree for Brillouin-zone metadata
-from VASP KPOINTS files. The metadata includes plotting labels, automatic
-grids, explicit weights, and line-mode segments.
+This module defines carriers for generated k-space paths and fixed-shape
+grids. It also keeps :class:`KPathInfo` for metadata from VASP KPOINTS files.
 
 Routine Listings
 ----------------
 :class:`KPathInfo`
     Store k-point path metadata in a JAX PyTree.
+:class:`KPath`
+    Store a generated path through fractional k-space.
+:class:`KGrid`
+    Store a fixed-shape raster in fractional k-space.
 :func:`make_kpath_info`
     Create a validated KPathInfo instance.
+:func:`make_kpath`
+    Create a validated path through fractional k-space.
+:func:`make_kgrid`
+    Create a validated fixed-shape k-space raster.
 """
 
 import equinox as eqx
@@ -20,6 +27,8 @@ from beartype import beartype
 from beartype.typing import Optional, Union
 from jax.core import Tracer
 from jaxtyping import Array, Float, Int, jaxtyped
+
+from .aliases import ScalarFloat
 
 _KPATH_MODES: tuple[str, ...] = ("Automatic", "Line-mode", "Explicit")
 
@@ -101,6 +110,79 @@ class KPathInfo(eqx.Module):
     labels: tuple[str, ...] = eqx.field(static=True)
     comment: str = eqx.field(static=True)
     coordinate_mode: str = eqx.field(static=True)
+
+
+class KPath(eqx.Module):
+    """Store a generated path through fractional k-space.
+
+    This PyTree carries the dense path from a k-space builder. The numerical
+    coordinates remain traced. Labels, their indices, and the segment size
+    remain static because they describe the compiled path shape.
+
+    :see: :class:`~.test_kpath.TestKPath`
+
+    Attributes
+    ----------
+    kpoints : Float[Array, "n_k 3"]
+        Fractional k-points.
+    kz : Optional[Float[Array, ""]]
+        Fixed Cartesian out-of-plane momentum in 1/Angstrom. ``None`` means
+        that the path has no separate fixed value.
+    labels : tuple[str, ...]
+        Labels for the path anchors. This field is **static**. A change causes
+        JAX to retrace the receiving function.
+    label_indices : tuple[int, ...]
+        Indices for the labels. This field is **static**. A change causes JAX
+        to retrace the receiving function.
+    n_per_segment : int
+        Number of points in each segment. This field is **static**. A change
+        causes JAX to retrace the receiving function.
+
+    See Also
+    --------
+    KPathInfo : Store k-point path metadata in a JAX PyTree.
+    make_kpath : Create a validated path through fractional k-space.
+    """
+
+    kpoints: Float[Array, "n_k 3"]
+    kz: Optional[Float[Array, ""]]
+    labels: tuple[str, ...] = eqx.field(static=True)
+    label_indices: tuple[int, ...] = eqx.field(static=True)
+    n_per_segment: int = eqx.field(static=True)
+
+
+class KGrid(eqx.Module):
+    """Store a fixed-shape raster in fractional k-space.
+
+    The flattened coordinates remain traced for geometry inversion. The
+    static mesh shape lets compiled consumers restore the raster without a
+    data-dependent shape operation.
+
+    :see: :class:`~.test_kpath.TestKGrid`
+
+    Attributes
+    ----------
+    kpoints : Float[Array, "n_k 3"]
+        Flattened fractional k-points.
+    kz : Optional[Float[Array, ""]]
+        Fixed Cartesian out-of-plane momentum in 1/Angstrom. ``None`` marks a
+        grid with varying or unspecified out-of-plane momentum.
+    photon_energy_axis_ev : Optional[Float[Array, " n_rows"]]
+        Photon energy for each raster row in eV. ``None`` marks a grid without
+        a photon-energy axis.
+    mesh_shape : tuple[int, int]
+        Raster shape as ``(n_rows, n_cols)``. This field is **static**. A
+        change causes JAX to retrace the receiving function.
+
+    See Also
+    --------
+    make_kgrid : Create a validated fixed-shape k-space raster.
+    """
+
+    kpoints: Float[Array, "n_k 3"]
+    kz: Optional[Float[Array, ""]]
+    photon_energy_axis_ev: Optional[Float[Array, " n_rows"]]
+    mesh_shape: tuple[int, int] = eqx.field(static=True)
 
 
 @jaxtyped(typechecker=beartype)
@@ -310,7 +392,232 @@ def make_kpath_info(  # noqa: DOC503, PLR0913
     return kpath
 
 
+@jaxtyped(typechecker=beartype)
+def make_kpath(  # noqa: DOC503
+    kpoints: Float[Array, "n_k 3"],
+    labels: tuple[str, ...] = (),
+    label_indices: tuple[int, ...] = (),
+    n_per_segment: int = 1,
+    kz: Optional[ScalarFloat] = None,
+) -> KPath:
+    """Create a validated path through fractional k-space.
+
+    The factory validates the static plotting metadata and the traced path
+    coordinates. It preserves an optional fixed Cartesian out-of-plane value.
+
+    :see: :class:`~.test_kpath.TestMakeKPath`
+
+    Implementation Logic
+    --------------------
+    1. **Validate the path structure**::
+
+           label_indices[-1] < kpoints.shape[0]
+
+       The static checks keep labels within the fixed path shape.
+
+    2. **Validate the traced values**::
+
+           checked_kpoints = eqx.error_if(kpoints_array, invalid, message)
+
+       The runtime checks remain active during compiled execution.
+
+    3. **Return the named path**::
+
+           return kpath
+
+       The result keeps only the plotting metadata static.
+
+    Parameters
+    ----------
+    kpoints : Float[Array, "n_k 3"]
+        Fractional k-points.
+    labels : tuple[str, ...], optional
+        Labels for the path anchors. This value is **static**. A change causes
+        retracing. Default is an empty tuple.
+    label_indices : tuple[int, ...], optional
+        Indices for the labels. This value is **static**. A change causes
+        retracing. Default is an empty tuple.
+    n_per_segment : int, optional
+        Number of points in each segment. This value is **static**. A change
+        causes retracing. Default is 1.
+    kz : Optional[ScalarFloat], optional
+        Fixed Cartesian out-of-plane momentum in 1/Angstrom. Default is
+        ``None``.
+
+    Returns
+    -------
+    kpath : KPath
+        Validated path with traced fractional coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the static metadata has invalid lengths, indices, or segment size.
+    EquinoxRuntimeError
+        If a traced k-point or fixed out-of-plane value is non-finite.
+
+    Notes
+    -----
+    The k-points and optional ``kz`` value carry gradients. The labels,
+    indices, and segment size do not carry gradients.
+    """
+    if n_per_segment < 1:
+        message: str = "n_per_segment must be positive"
+        raise ValueError(message)
+    if len(labels) != len(label_indices):
+        message = "labels and label_indices must have equal lengths"
+        raise ValueError(message)
+    if any(index < 0 or index >= kpoints.shape[0] for index in label_indices):
+        message = "label_indices must be within the k-point range"
+        raise ValueError(message)
+    if any(
+        next_index <= index
+        for index, next_index in zip(
+            label_indices, label_indices[1:], strict=False
+        )
+    ):
+        message = "label_indices must be strictly increasing"
+        raise ValueError(message)
+
+    kpoints_array: Float[Array, "n_k 3"] = jnp.asarray(
+        kpoints, dtype=jnp.float64
+    )
+    checked_kpoints: Float[Array, "n_k 3"] = eqx.error_if(
+        kpoints_array,
+        ~jnp.all(jnp.isfinite(kpoints_array)),
+        "kpoints must be finite",
+    )
+    kz_array: Optional[Float[Array, ""]] = None
+    if kz is not None:
+        kz_array = jnp.asarray(kz, dtype=jnp.float64)
+        kz_array = eqx.error_if(
+            kz_array, ~jnp.isfinite(kz_array), "kz must be finite"
+        )
+    kpath: KPath = KPath(
+        kpoints=checked_kpoints,
+        kz=kz_array,
+        labels=labels,
+        label_indices=label_indices,
+        n_per_segment=n_per_segment,
+    )
+    return kpath
+
+
+@jaxtyped(typechecker=beartype)
+def make_kgrid(  # noqa: DOC503
+    kpoints: Float[Array, "n_k 3"],
+    mesh_shape: tuple[int, int],
+    kz: Optional[ScalarFloat] = None,
+    photon_energy_axis_ev: Optional[Float[Array, " n_rows"]] = None,
+) -> KGrid:
+    """Create a validated fixed-shape k-space raster.
+
+    The factory validates the static raster shape and traced numerical data.
+    It preserves an optional photon-energy axis for a photon-energy map.
+
+    :see: :class:`~.test_kpath.TestMakeKGrid`
+
+    Implementation Logic
+    --------------------
+    1. **Validate the raster shape**::
+
+           mesh_shape[0] * mesh_shape[1] == kpoints.shape[0]
+
+       This check keeps the flattened point count consistent with the raster.
+
+    2. **Validate the traced values**::
+
+           checked_kpoints = eqx.error_if(kpoints_array, invalid, message)
+
+       The runtime checks remain active during compiled execution.
+
+    3. **Return the named grid**::
+
+           return kgrid
+
+       The result keeps only the raster shape static.
+
+    Parameters
+    ----------
+    kpoints : Float[Array, "n_k 3"]
+        Flattened fractional k-points.
+    mesh_shape : tuple[int, int]
+        Raster shape as ``(n_rows, n_cols)``. This value is **static**. A
+        change causes retracing.
+    kz : Optional[ScalarFloat], optional
+        Fixed Cartesian out-of-plane momentum in 1/Angstrom. Default is
+        ``None``.
+    photon_energy_axis_ev : Optional[Float[Array, " n_rows"]], optional
+        Photon energy for each raster row in eV. Default is ``None``.
+
+    Returns
+    -------
+    kgrid : KGrid
+        Validated grid with traced fractional coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the mesh dimensions are not positive or their product is wrong.
+        The factory also rejects a photon-energy axis with the wrong length.
+    EquinoxRuntimeError
+        If traced data is non-finite or a photon energy is not positive.
+
+    Notes
+    -----
+    The mesh shape controls array reshaping and remains static. All numerical
+    fields carry gradients when they are present.
+    """
+    if mesh_shape[0] < 1 or mesh_shape[1] < 1:
+        message: str = "mesh_shape dimensions must be positive"
+        raise ValueError(message)
+    if mesh_shape[0] * mesh_shape[1] != kpoints.shape[0]:
+        message = "mesh_shape product must equal the k-point count"
+        raise ValueError(message)
+    if (
+        photon_energy_axis_ev is not None
+        and photon_energy_axis_ev.shape[0] != mesh_shape[0]
+    ):
+        message = "photon_energy_axis_ev length must equal n_rows"
+        raise ValueError(message)
+
+    kpoints_array: Float[Array, "n_k 3"] = jnp.asarray(
+        kpoints, dtype=jnp.float64
+    )
+    checked_kpoints: Float[Array, "n_k 3"] = eqx.error_if(
+        kpoints_array,
+        ~jnp.all(jnp.isfinite(kpoints_array)),
+        "kpoints must be finite",
+    )
+    kz_array: Optional[Float[Array, ""]] = None
+    if kz is not None:
+        kz_array = jnp.asarray(kz, dtype=jnp.float64)
+        kz_array = eqx.error_if(
+            kz_array, ~jnp.isfinite(kz_array), "kz must be finite"
+        )
+    photon_energies: Optional[Float[Array, " n_rows"]] = None
+    if photon_energy_axis_ev is not None:
+        photon_energies = jnp.asarray(photon_energy_axis_ev, dtype=jnp.float64)
+        photon_energies = eqx.error_if(
+            photon_energies,
+            ~jnp.all(jnp.isfinite(photon_energies))
+            | ~jnp.all(photon_energies > 0.0),
+            "photon_energy_axis_ev must be finite and positive",
+        )
+    kgrid: KGrid = KGrid(
+        kpoints=checked_kpoints,
+        kz=kz_array,
+        photon_energy_axis_ev=photon_energies,
+        mesh_shape=mesh_shape,
+    )
+    return kgrid
+
+
 __all__: list[str] = [
+    "KGrid",
+    "KPath",
     "KPathInfo",
+    "make_kgrid",
+    "make_kpath",
     "make_kpath_info",
 ]

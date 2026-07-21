@@ -37,7 +37,10 @@ from diffpes.types import (
     make_evidence_ref,
 )
 
-from .dependencies import information_spectrum
+from .dependencies import (
+    _information_spectrum_from_linearization,
+    _ravel_real_pytree,
+)
 
 
 def _as_vector(value: Array) -> Array:
@@ -294,6 +297,115 @@ def _perturb(inputs: PyTree, direction: PyTree, step: Array) -> PyTree:
 
 
 @jaxtyped(typechecker=beartype)
+def _derivative_evidence_from_linearization(  # noqa: PLR0913
+    forward_fn: Callable[[PyTree], Float[Array, " n_output"]],
+    inputs: PyTree,
+    directions: PyTree,
+    cotangents: Float[Array, "n_cotangent n_output"],
+    pushforward: Callable[[PyTree], Array],
+    pullback: Callable[[Array], PyTree],
+    spectrum: InformationSpectrum,
+    *,
+    input_paths: tuple[str, ...],
+    output_projection_ids: tuple[str, ...],
+    scales: Float[Array, " n_probe"],
+    step: float = 6e-6,
+) -> DerivativeEvidence:
+    """Build derivative evidence from one retained JAX linearization.
+
+    The function reuses supplied JVP, transpose, and spectrum results. Batched
+    central differences remain an independent numerical reference.
+
+    Parameters
+    ----------
+    forward_fn : Callable[[PyTree], Float[Array, " n_output"]]
+        Pure differentiable forward model for central differences.
+    inputs : PyTree
+        Numerical inputs at the linearization point.
+    directions : PyTree
+        Tangent probes with one leading probe axis.
+    cotangents : Float[Array, "n_cotangent n_output"]
+        Output-space transpose probes.
+    pushforward : Callable[[PyTree], Array]
+        Retained JVP linear map.
+    pullback : Callable[[Array], PyTree]
+        Retained transpose linear map.
+    spectrum : InformationSpectrum
+        Information spectrum from the same retained linearization.
+    input_paths : tuple[str, ...]
+        Stable input-coordinate names (**static**).
+    output_projection_ids : tuple[str, ...]
+        Stable output-projection names (**static**).
+    scales : Float[Array, " n_probe"]
+        Positive physical scale for each tangent probe.
+    step : float
+        Relative central-difference step. Default 6e-6.
+
+    Returns
+    -------
+    evidence : DerivativeEvidence
+        JVP, transpose, finite-difference, and spectrum evidence.
+
+    Notes
+    -----
+    The function differentiates continuous evidence. Threshold decisions remain
+    discrete diagnostics.
+    """
+    jvp_values: Array = jax.vmap(pushforward)(directions)
+
+    def finite_difference(direction: PyTree, local_step: Array) -> Array:
+        plus: Array = forward_fn(_perturb(inputs, direction, local_step))
+        minus: Array = forward_fn(_perturb(inputs, direction, -local_step))
+        derivative: Array = (plus - minus) / (2.0 * local_step)
+        return derivative
+
+    steps: Array = step * jnp.maximum(jnp.abs(scales), 1e-3)
+    reference: Array = jax.vmap(finite_difference)(directions, steps)
+    residuals: Array = jvp_values - reference
+
+    def pull_one(cotangent: Array) -> Array:
+        leaf: Any
+        pulled: PyTree = pullback(cotangent)
+        values: list[Array] = []
+        for leaf in jax.tree.leaves(pulled):
+            array: Array = jnp.asarray(leaf)
+            values.append(jnp.linalg.norm(jnp.ravel(jnp.real(array))))
+            if jnp.iscomplexobj(array):
+                values.append(jnp.linalg.norm(jnp.ravel(jnp.imag(array))))
+        summaries: Array = jnp.asarray(values)
+        return summaries
+
+    vjp_values: Array = jax.vmap(pull_one)(cotangents)
+    finite: Array = (
+        jnp.all(jnp.isfinite(jvp_values))
+        & jnp.all(jnp.isfinite(vjp_values))
+        & jnp.all(jnp.isfinite(reference))
+    )
+    fd_correct: Array = jnp.allclose(
+        jvp_values,
+        reference,
+        rtol=1e-6,
+        atol=1e-9,
+    )
+    evidence: DerivativeEvidence = make_derivative_evidence(
+        input_paths=input_paths,
+        output_projection_ids=output_projection_ids,
+        method="jax.linearize+jvp+linear_transpose+central_fd",
+        scales=scales,
+        jvp_probes=jnp.reshape(jvp_values, (jvp_values.shape[0], -1)),
+        vjp_probes=jnp.reshape(vjp_values, (vjp_values.shape[0], -1)),
+        reference_derivatives=jnp.reshape(reference, (reference.shape[0], -1)),
+        derivative_residuals=jnp.reshape(residuals, (residuals.shape[0], -1)),
+        singular_values=spectrum.singular_values,
+        effective_rank=spectrum.effective_rank,
+        condition_estimate=spectrum.condition_estimate,
+        finite=finite,
+        fd_correct=fd_correct,
+    )
+    return evidence
+
+
+@jaxtyped(typechecker=beartype)
 def derivative_evidence(
     forward_fn: Callable[[PyTree], Float[Array, " n_output"]],
     inputs: PyTree,
@@ -352,76 +464,63 @@ def derivative_evidence(
 
     Notes
     -----
-    JVP, VJP, residual, and spectrum leaves remain differentiable. Boolean
-    The function derives the evidence fields after it retains the continuous
-    values.
+    JVP, VJP, residual, and spectrum leaves remain differentiable. The function
+    derives Boolean evidence fields after it retains the continuous values.
     """
     linearized: tuple[Array, Callable[[PyTree], Array]] = jax.linearize(
         forward_fn,
         inputs,
     )
+    output: Array = linearized[0]
     pushforward: Callable[[PyTree], Array] = linearized[1]
-    jvp_values: Array = jax.vmap(pushforward)(directions)
-
-    def _finite_difference(direction: PyTree, local_step: Array) -> Array:
-        plus: Array = forward_fn(_perturb(inputs, direction, local_step))
-        minus: Array = forward_fn(_perturb(inputs, direction, -local_step))
-        derivative: Array = (plus - minus) / (2.0 * local_step)
-        return derivative
-
-    steps: Array = step * jnp.maximum(jnp.abs(scales), 1e-3)
-    reference: Array = jax.vmap(_finite_difference)(directions, steps)
-    residuals: Array = jvp_values - reference
-    vjp_result: tuple[Array, Callable[[Array], tuple[PyTree]]] = jax.vjp(
-        forward_fn,
+    transposed: Callable[[Array], tuple[PyTree]] = jax.linear_transpose(
+        pushforward,
         inputs,
     )
-    pullback: Callable[[Array], tuple[PyTree]] = vjp_result[1]
 
-    def _pull_one(cotangent: Array) -> Array:
-        leaf: Any
-        pulled: PyTree = pullback(cotangent)[0]
-        values: list[Array] = []
-        for leaf in jax.tree.leaves(pulled):
-            array: Array = jnp.asarray(leaf)
-            values.append(jnp.linalg.norm(jnp.ravel(jnp.real(array))))
-            if jnp.iscomplexobj(array):
-                values.append(jnp.linalg.norm(jnp.ravel(jnp.imag(array))))
-        summaries: Array = jnp.asarray(values)
-        return summaries
+    def pullback(cotangent: Array) -> PyTree:
+        pulled: PyTree = transposed(cotangent)[0]
+        return pulled
 
-    vjp_values: Array = jax.vmap(_pull_one)(cotangents)
-    spectrum: InformationSpectrum = information_spectrum(
-        forward_fn,
+    flat_inputs: Array
+    unravel_inputs: Callable[[Array], PyTree]
+    flat_inputs, unravel_inputs = _ravel_real_pytree(inputs)
+
+    def flat_pushforward(tangent: Array) -> Array:
+        response: Array = pushforward(unravel_inputs(tangent))
+        flattened: Array = _ravel_real_pytree(response)[0]
+        return flattened
+
+    flat_transposed: Callable[[Array], tuple[Array]] = jax.linear_transpose(
+        flat_pushforward,
+        flat_inputs,
+    )
+
+    def flat_pullback(cotangent: Array) -> Array:
+        pulled: Array = flat_transposed(cotangent)[0]
+        return pulled
+
+    flat_output: Array = _ravel_real_pytree(output)[0]
+    spectrum: InformationSpectrum = _information_spectrum_from_linearization(
         inputs,
+        flat_output,
+        flat_pushforward,
+        flat_pullback,
         input_paths=input_paths,
         rank=spectrum_rank,
     )
-    finite: Array = (
-        jnp.all(jnp.isfinite(jvp_values))
-        & jnp.all(jnp.isfinite(vjp_values))
-        & jnp.all(jnp.isfinite(reference))
-    )
-    fd_correct: Array = jnp.allclose(
-        jvp_values,
-        reference,
-        rtol=1e-6,
-        atol=1e-9,
-    )
-    evidence: DerivativeEvidence = make_derivative_evidence(
+    evidence: DerivativeEvidence = _derivative_evidence_from_linearization(
+        forward_fn,
+        inputs,
+        directions,
+        cotangents,
+        pushforward,
+        pullback,
+        spectrum,
         input_paths=input_paths,
         output_projection_ids=output_projection_ids,
-        method="jax.linearize+jvp+vjp+central_fd",
         scales=scales,
-        jvp_probes=jnp.reshape(jvp_values, (jvp_values.shape[0], -1)),
-        vjp_probes=jnp.reshape(vjp_values, (vjp_values.shape[0], -1)),
-        reference_derivatives=jnp.reshape(reference, (reference.shape[0], -1)),
-        derivative_residuals=jnp.reshape(residuals, (residuals.shape[0], -1)),
-        singular_values=spectrum.singular_values,
-        effective_rank=spectrum.effective_rank,
-        condition_estimate=spectrum.condition_estimate,
-        finite=finite,
-        fd_correct=fd_correct,
+        step=step,
     )
     return evidence
 

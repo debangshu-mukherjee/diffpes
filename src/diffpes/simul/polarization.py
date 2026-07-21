@@ -1,10 +1,11 @@
-"""Compute photon polarization and dipole matrix elements.
+"""Compute photon polarization and detector-frame transformations.
 
 Extended Summary
 ----------------
-The module computes electric field polarization vectors from the photon
-geometry. It computes dipole transition matrix elements for each atomic
-orbital according to standard ARPES selection rules.
+The module computes complex polarization vectors from photon geometry. It
+also converts polarization to the spherical basis and rotates vectors through
+the detector frame. Legacy orbital weights remain until plan 06 replaces
+their only simulation consumers.
 
 Routine Listings
 ----------------
@@ -12,16 +13,32 @@ Routine Listings
     Compute electric field vector from polarization config.
 :func:`build_polarization_vectors`
     Construct s- and p-polarization basis vectors.
+:func:`detector_rotation`
+    Build the detector-frame rotation.
 :func:`dipole_matrix_elements`
     Compute dipole matrix elements for all 9 orbitals.
 :func:`photon_wavevector`
     Build the unit photon wavevector from incidence angles.
+:func:`polarization_from_angles`
+    Construct polarization from incidence angles.
+:func:`polarization_to_spherical`
+    Convert Cartesian polarization to spherical components.
+:func:`rotate_frame_vectors`
+    Rotate a real vector across a detector-angle grid.
+:func:`rotate_polarization_grid`
+    Rotate polarization across a detector-angle grid.
 
 Notes
 -----
 Orbital direction vectors follow VASP orbital ordering:
 [s, py, pz, px, dxy, dyz, dz2, dxz, dx2-y2].
 The s-orbital has zero directionality.
+
+The horizontal detector frame uses ``Rx(ty) @ Ry(tx)``. DiffPES maps the
+Chinook ``tilt.k_mesh`` angles as ``T=-tx, P=ty``. It maps the Chinook
+``gen_all_pol`` angles as ``theta=-tx, phi=-ty``. The vertical frame uses
+``Rx(tx) @ Ry(ty)``. Its mappings are ``T=-ty, P=tx`` and
+``theta=-ty, phi=-tx``.
 """
 
 import jax
@@ -30,6 +47,7 @@ from beartype import beartype
 from beartype.typing import Tuple
 from jaxtyping import Array, Complex, Float, jaxtyped
 
+from diffpes.maths import rodrigues_rotation
 from diffpes.types import (
     ORBITAL_DIRS_NORMALIZED,
     PolarizationConfig,
@@ -53,42 +71,21 @@ def build_polarization_vectors(
 
     Implementation Logic
     --------------------
-    1. **Construct photon wavevector k from spherical coordinates**::
+    1. **Construct the s-polarization vector**::
 
-           k = [sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)]
-           k = k / ||k||
+           e_s = [sin(phi), -cos(phi), 0]
 
-       Converts the incidence angles (theta from surface normal,
-       phi azimuthal) into a unit wavevector in Cartesian
-       coordinates.
+       This closed form is perpendicular to the incidence plane. It is the
+       normalized ``k cross z`` convention continued to normal incidence.
 
-    2. **Choose reference axis**::
+    2. **Construct the p-polarization vector**::
 
-           ref = z_hat  unless  |k . z_hat| >= 0.99
-           ref = y_hat  if k is nearly collinear with z_hat
+           e_p = [-cos(theta) cos(phi),
+                  -cos(theta) sin(phi),
+                   sin(theta)]
 
-       The reference axis defines the incidence plane.
-       When k is nearly parallel to z_hat, the cross product
-       A nearly parallel k makes k x z_hat poorly conditioned. Therefore, use
-       y_hat as the fallback.
-
-    3. **Compute s-polarization** ``e_s = normalize(k x ref)``::
-
-           e_s_raw = cross(k, ref)
-           e_s = e_s_raw / ||e_s_raw||
-
-       The s-polarization vector is perpendicular to both the
-       wavevector and the reference axis, hence perpendicular to
-       the incidence plane.
-
-    4. **Compute p-polarization** ``e_p = normalize(e_s x k)``::
-
-           e_p_raw = cross(e_s, k)
-           e_p = e_p_raw / ||e_p_raw||
-
-       The p-polarization vector lies in the incidence plane and
-       is perpendicular to the wavevector, completing the
-       right-handed orthonormal basis {k, e_s, e_p}.
+       This vector equals ``e_s cross k``. It is perpendicular to the photon
+       direction and completes the orthonormal transverse basis.
 
     Parameters
     ----------
@@ -106,35 +103,28 @@ def build_polarization_vectors(
         p-polarization unit vector (in incidence plane,
         perpendicular to photon wavevector).
 
-    Implementation Logic
-    --------------------
-    The reference-axis choice at the collinearity threshold is a deliberately
-    hard geometric selector. Its branch-choice gradient is zero away from the
-    threshold and undefined at it, so it cannot supply a continuous
-    parameter-Jacobian column. Plan 06 replaces this coordinate guard in the
-    differentiable matrix-element geometry.
+    Notes
+    -----
+    The direct trigonometric form has no artificial collinearity threshold.
+    At normal incidence, ``phi`` fixes the otherwise free transverse-frame
+    gauge. The basis is smooth in both input angles for that gauge choice.
     """
-    k_photon: Float[Array, " 3"] = jnp.array(
+    e_s: Float[Array, " 3"] = jnp.array(
         [
-            jnp.sin(theta) * jnp.cos(phi),
-            jnp.sin(theta) * jnp.sin(phi),
-            jnp.cos(theta),
+            jnp.sin(phi),
+            -jnp.cos(phi),
+            jnp.zeros_like(jnp.asarray(phi)),
         ],
         dtype=jnp.float64,
     )
-    k_photon: Float[Array, " 3"] = k_photon / jnp.linalg.norm(k_photon)
-    z_hat: Float[Array, " 3"] = jnp.array([0.0, 0.0, 1.0], dtype=jnp.float64)
-    y_hat: Float[Array, " 3"] = jnp.array([0.0, 1.0, 0.0], dtype=jnp.float64)
-    _collinear_threshold: float = 0.99
-    ref: Float[Array, " 3"] = jnp.where(
-        jnp.abs(jnp.dot(k_photon, z_hat)) < _collinear_threshold,
-        z_hat,
-        y_hat,
+    e_p: Float[Array, " 3"] = jnp.array(
+        [
+            -jnp.cos(theta) * jnp.cos(phi),
+            -jnp.cos(theta) * jnp.sin(phi),
+            jnp.sin(theta),
+        ],
+        dtype=jnp.float64,
     )
-    e_s_raw: Float[Array, " 3"] = jnp.cross(k_photon, ref)
-    e_s: Float[Array, " 3"] = e_s_raw / jnp.linalg.norm(e_s_raw)
-    e_p_raw: Float[Array, " 3"] = jnp.cross(e_s, k_photon)
-    e_p: Float[Array, " 3"] = e_p_raw / jnp.linalg.norm(e_p_raw)
     polarization_vectors: Tuple[Float[Array, " 3"], Float[Array, " 3"]] = (
         e_s,
         e_p,
@@ -189,6 +179,437 @@ def photon_wavevector(
     )
     k_hat: Float[Array, " 3"] = k / jnp.linalg.norm(k)
     return k_hat
+
+
+@jaxtyped(typechecker=beartype)
+def polarization_from_angles(
+    incidence_theta: ScalarFloat,
+    incidence_phi: ScalarFloat,
+    kind: str,
+    polarization_angle: ScalarFloat = 0.0,
+) -> Complex[Array, " 3"]:
+    """Construct polarization from incidence angles.
+
+    The function returns an explicit complex Cartesian vector for a standard
+    polarization state. The incidence angles use the laboratory frame.
+
+    :see: :class:`~.test_polarization.TestPolarizationFromAngles`
+
+    Implementation Logic
+    --------------------
+    1. **Construct the transverse basis**::
+
+           e_s, e_p = build_polarization_vectors(theta, phi)
+
+       The basis is orthonormal and perpendicular to the photon direction.
+
+    2. **Select the requested state**::
+
+           polarization = coefficients[0] * e_s + coefficients[1] * e_p
+
+       The static selector chooses s, p, circular, or linear coefficients.
+
+    3. **Return the complex vector**::
+
+           return polarization
+
+       The result retains phase information for later coherent contraction.
+
+    Parameters
+    ----------
+    incidence_theta : ScalarFloat
+        Photon angle from the surface normal in radians.
+    incidence_phi : ScalarFloat
+        Photon azimuth in radians.
+    kind : str
+        Polarization kind (**static**). Use ``"s"``, ``"p"``, ``"c+"``,
+        ``"c-"``, or ``"linear"``.
+    polarization_angle : ScalarFloat, optional
+        Linear-basis angle in radians. Default is 0.0.
+
+    Returns
+    -------
+    polarization : Complex[Array, " 3"]
+        Unit polarization vector in the laboratory frame.
+
+    Raises
+    ------
+    ValueError
+        If ``kind`` is not a supported polarization kind.
+
+    Notes
+    -----
+    The ``kind`` value is static and selects a Python branch before tracing.
+    JAX differentiates the result with respect to all angle arguments.
+
+    See Also
+    --------
+    build_polarization_vectors : Construct the transverse real basis.
+    polarization_to_spherical : Convert the result to spherical components.
+    """
+    if kind not in ("s", "p", "c+", "c-", "linear"):
+        msg: str = (
+            "polarization_from_angles: kind must be one of "
+            "('s', 'p', 'c+', 'c-', 'linear')"
+        )
+        raise ValueError(msg)
+
+    e_s: Float[Array, " 3"]
+    e_p: Float[Array, " 3"]
+    e_s, e_p = build_polarization_vectors(incidence_theta, incidence_phi)
+    e_s_complex: Complex[Array, " 3"] = e_s.astype(jnp.complex128)
+    e_p_complex: Complex[Array, " 3"] = e_p.astype(jnp.complex128)
+    if kind == "s":
+        polarization: Complex[Array, " 3"] = e_s_complex
+    elif kind == "p":
+        polarization = e_p_complex
+    elif kind == "c+":
+        polarization = (e_s_complex + 1j * e_p_complex) / jnp.sqrt(2.0)
+    elif kind == "c-":
+        polarization = (e_s_complex - 1j * e_p_complex) / jnp.sqrt(2.0)
+    else:
+        angle: Float[Array, " "] = jnp.asarray(
+            polarization_angle,
+            dtype=jnp.float64,
+        )
+        polarization = (
+            jnp.cos(angle) * e_s_complex + jnp.sin(angle) * e_p_complex
+        )
+    return polarization
+
+
+@jaxtyped(typechecker=beartype)
+def polarization_to_spherical(
+    polarization: Complex[Array, " 3"],
+) -> Complex[Array, " 3"]:
+    """Convert Cartesian polarization to spherical components.
+
+    The result uses component order ``(q=-1, q=0, q=+1)`` and the
+    Condon-Shortley phase convention.
+
+    :see: :class:`~.test_polarization.TestPolarizationToSpherical`
+
+    Implementation Logic
+    --------------------
+    1. **Read Cartesian components**::
+
+           epsilon_x, epsilon_y, epsilon_z = polarization
+
+       The input remains complex so the operation preserves optical phase.
+
+    2. **Apply the spherical-basis transform**::
+
+           epsilon_minus = (epsilon_x - 1j * epsilon_y) / sqrt(2)
+
+       The transform follows the registered Condon-Shortley convention.
+
+    3. **Stack the ordered result**::
+
+           spherical = stack((epsilon_minus, epsilon_z, epsilon_plus))
+
+       This order matches the transitions ``q = (-1, 0, +1)``.
+
+    Parameters
+    ----------
+    polarization : Complex[Array, " 3"]
+        Cartesian polarization vector.
+
+    Returns
+    -------
+    spherical : Complex[Array, " 3"]
+        Spherical components in ``(q=-1, q=0, q=+1)`` order.
+
+    Notes
+    -----
+    The transform is complex-linear. It preserves the squared vector norm and
+    supports JVP, VJP, and complex-step checks without a conjugation.
+    """
+    epsilon_x: Complex[Array, " "] = polarization[0]
+    epsilon_y: Complex[Array, " "] = polarization[1]
+    epsilon_z: Complex[Array, " "] = polarization[2]
+    root_two: Float[Array, " "] = jnp.sqrt(jnp.asarray(2.0, dtype=jnp.float64))
+    epsilon_minus: Complex[Array, " "] = (
+        epsilon_x - 1j * epsilon_y
+    ) / root_two
+    epsilon_plus: Complex[Array, " "] = (
+        -(epsilon_x + 1j * epsilon_y) / root_two
+    )
+    spherical: Complex[Array, " 3"] = jnp.stack(
+        (epsilon_minus, epsilon_z, epsilon_plus)
+    )
+    return spherical
+
+
+@jaxtyped(typechecker=beartype)
+def detector_rotation(
+    tx: ScalarFloat,
+    ty: ScalarFloat,
+    slit: str,
+) -> Float[Array, "3 3"]:
+    """Build the detector-frame rotation.
+
+    The function composes the two analyzer-angle rotations in the order set
+    by the static slit orientation.
+
+    :see: :class:`~.test_polarization.TestDetectorRotation`
+
+    Implementation Logic
+    --------------------
+    1. **Build the Cartesian axis rotations**::
+
+           rotation_x = rodrigues_rotation(x_axis, ty)
+
+       Rodrigues matrices retain derivatives with respect to both angles.
+
+    2. **Compose the slit convention**::
+
+           horizontal = rotation_x_ty @ rotation_y_tx
+           vertical = rotation_x_tx @ rotation_y_ty
+
+       Horizontal and vertical slits use the registered composition orders.
+
+    Parameters
+    ----------
+    tx : ScalarFloat
+        First detector angle in radians.
+    ty : ScalarFloat
+        Second detector angle in radians.
+    slit : str
+        Slit orientation (**static**). Use ``"H"`` or ``"V"``.
+
+    Returns
+    -------
+    rotation : Float[Array, "3 3"]
+        Proper rotation from the reference detector frame.
+
+    Raises
+    ------
+    ValueError
+        If ``slit`` is not ``"H"`` or ``"V"``.
+
+    Notes
+    -----
+    ``"H"`` uses ``R_x(ty) R_y(tx)``. ``"V"`` uses
+    ``R_x(tx) R_y(ty)``. The same matrix rotates the emitted direction,
+    polarization, and spin axis.
+
+    Chinook uses opposite raw signs for its horizontal Ty momentum and
+    polarization coordinates. The declared source-coordinate mappings give
+    one active DiffPES frame.
+    """
+    if slit not in ("H", "V"):
+        msg: str = "detector_rotation: slit must be 'H' or 'V'"
+        raise ValueError(msg)
+    x_axis: Float[Array, " 3"] = jnp.asarray(
+        [1.0, 0.0, 0.0],
+        dtype=jnp.float64,
+    )
+    y_axis: Float[Array, " 3"] = jnp.asarray(
+        [0.0, 1.0, 0.0],
+        dtype=jnp.float64,
+    )
+    if slit == "H":
+        rotation_y_tx: Float[Array, "3 3"] = rodrigues_rotation(y_axis, tx)
+        rotation_x_ty: Float[Array, "3 3"] = rodrigues_rotation(x_axis, ty)
+        rotation: Float[Array, "3 3"] = rotation_x_ty @ rotation_y_tx
+    else:
+        rotation_x_tx: Float[Array, "3 3"] = rodrigues_rotation(x_axis, tx)
+        rotation_y_ty: Float[Array, "3 3"] = rodrigues_rotation(y_axis, ty)
+        rotation = rotation_x_tx @ rotation_y_ty
+    return rotation
+
+
+@jaxtyped(typechecker=beartype)
+def rotate_frame_vectors(
+    vector: Float[Array, " 3"],
+    tx: Float[Array, " n_tx"],
+    ty: Float[Array, " n_ty"],
+    slit: str,
+) -> Float[Array, "n_tx n_ty 3"]:
+    """Rotate a real vector across a detector-angle grid.
+
+    The function applies each detector-frame rotation to one real laboratory
+    vector. It preserves both detector axes in the output.
+
+    :see: :class:`~.test_polarization.TestRotateFrameVectors`
+
+    Implementation Logic
+    --------------------
+    1. **Map over both angle axes**::
+
+           rotations = vmap(vmap(detector_rotation))(tx, ty)
+
+       Nested mapping builds one rotation for every detector coordinate.
+
+    2. **Apply each rotation**::
+
+           rotated = rotations @ vector
+
+       Matrix multiplication preserves the vector norm.
+
+    Parameters
+    ----------
+    vector : Float[Array, " 3"]
+        Real vector in the reference laboratory frame.
+    tx : Float[Array, " n_tx"]
+        First detector-angle axis in radians.
+    ty : Float[Array, " n_ty"]
+        Second detector-angle axis in radians.
+    slit : str
+        Slit orientation (**static**). Use ``"H"`` or ``"V"``.
+
+    Returns
+    -------
+    rotated : Float[Array, "n_tx n_ty 3"]
+        Rotated vector at each detector coordinate.
+
+    Notes
+    -----
+    The output has fixed shape for fixed angle-axis lengths. JAX can compile
+    and differentiate the two mapped angle axes without Python data loops.
+    """
+
+    def rotate_one_tx(
+        tx_value: Float[Array, " "],
+    ) -> Float[Array, "n_ty 3"]:
+        """Rotate one vector across the second angle axis.
+
+        Parameters
+        ----------
+        tx_value : Float[Array, " "]
+            Fixed first detector angle in radians.
+
+        Returns
+        -------
+        rotated_row : Float[Array, "n_ty 3"]
+            Rotated vectors for the second angle axis.
+        """
+
+        def rotate_one_ty(
+            ty_value: Float[Array, " "],
+        ) -> Float[Array, " 3"]:
+            """Rotate one vector at one detector coordinate.
+
+            Parameters
+            ----------
+            ty_value : Float[Array, " "]
+                Second detector angle in radians.
+
+            Returns
+            -------
+            rotated_vector : Float[Array, " 3"]
+                Rotated vector at the detector coordinate.
+            """
+            rotation: Float[Array, "3 3"] = detector_rotation(
+                tx_value,
+                ty_value,
+                slit,
+            )
+            rotated_vector: Float[Array, " 3"] = rotation @ vector
+            return rotated_vector
+
+        rotated_row: Float[Array, "n_ty 3"] = jax.vmap(rotate_one_ty)(ty)
+        return rotated_row
+
+    rotated: Float[Array, "n_tx n_ty 3"] = jax.vmap(rotate_one_tx)(tx)
+    return rotated
+
+
+@jaxtyped(typechecker=beartype)
+def rotate_polarization_grid(
+    polarization: Complex[Array, " 3"],
+    tx: Float[Array, " n_tx"],
+    ty: Float[Array, " n_ty"],
+    slit: str,
+) -> Complex[Array, "n_tx n_ty 3"]:
+    """Rotate polarization across a detector-angle grid.
+
+    The function applies the shared detector frame to a complex polarization
+    vector without reducing its phase or amplitude.
+
+    :see: :class:`~.test_polarization.TestRotatePolarizationGrid`
+
+    Implementation Logic
+    --------------------
+    1. **Map over both angle axes**::
+
+           rotated = vmap(vmap(rotate_one))(tx, ty)
+
+       Nested mapping applies the same frame convention at every coordinate.
+
+    2. **Return the complex vectors**::
+
+           return rotated
+
+       The result retains coherent complex components for later models.
+
+    Parameters
+    ----------
+    polarization : Complex[Array, " 3"]
+        Complex polarization in the reference laboratory frame.
+    tx : Float[Array, " n_tx"]
+        First detector-angle axis in radians.
+    ty : Float[Array, " n_ty"]
+        Second detector-angle axis in radians.
+    slit : str
+        Slit orientation (**static**). Use ``"H"`` or ``"V"``.
+
+    Returns
+    -------
+    rotated : Complex[Array, "n_tx n_ty 3"]
+        Rotated polarization at each detector coordinate.
+
+    Notes
+    -----
+    Real rotation matrices act on the complex vector components. Therefore,
+    the map is complex-linear in ``polarization`` and differentiable in both
+    detector-angle axes.
+    """
+
+    def rotate_one_tx(
+        tx_value: Float[Array, " "],
+    ) -> Complex[Array, "n_ty 3"]:
+        """Rotate polarization across the second angle axis.
+
+        Parameters
+        ----------
+        tx_value : Float[Array, " "]
+            Fixed first detector angle in radians.
+
+        Returns
+        -------
+        rotated_row : Complex[Array, "n_ty 3"]
+            Rotated polarization vectors for the second angle axis.
+        """
+
+        def rotate_one_ty(
+            ty_value: Float[Array, " "],
+        ) -> Complex[Array, " 3"]:
+            """Rotate polarization at one detector coordinate.
+
+            Parameters
+            ----------
+            ty_value : Float[Array, " "]
+                Second detector angle in radians.
+
+            Returns
+            -------
+            rotated_vector : Complex[Array, " 3"]
+                Rotated polarization at the detector coordinate.
+            """
+            rotation: Float[Array, "3 3"] = detector_rotation(
+                tx_value,
+                ty_value,
+                slit,
+            )
+            rotated_vector: Complex[Array, " 3"] = rotation @ polarization
+            return rotated_vector
+
+        rotated_row: Complex[Array, "n_ty 3"] = jax.vmap(rotate_one_ty)(ty)
+        return rotated_row
+
+    rotated: Complex[Array, "n_tx n_ty 3"] = jax.vmap(rotate_one_tx)(tx)
+    return rotated
 
 
 @jaxtyped(typechecker=beartype)
@@ -445,6 +866,11 @@ def dipole_matrix_elements(
 __all__: list[str] = [
     "build_efield",
     "build_polarization_vectors",
+    "detector_rotation",
     "dipole_matrix_elements",
     "photon_wavevector",
+    "polarization_from_angles",
+    "polarization_to_spherical",
+    "rotate_frame_vectors",
+    "rotate_polarization_grid",
 ]

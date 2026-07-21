@@ -1241,6 +1241,29 @@ class TestMakeEvidenceRef:
             match="tolerance must be finite and nonnegative",
         )
 
+    def test_empty_evidence_is_rejected(self) -> None:
+        """Reject evidence without a numerical measurement.
+
+        Evidence verification requires a defined residual norm.
+
+        Notes
+        -----
+        All four numerical vectors have the same invalid zero length.
+        """
+        empty: Any = jnp.asarray([], dtype=jnp.float64)
+        with pytest.raises(ValueError, match="must not be empty"):
+            make_evidence_ref(
+                "evidence",
+                "method",
+                (),
+                "analytic",
+                True,
+                empty,
+                empty,
+                empty,
+                empty,
+            )
+
 
 class TestMakeEvidenceReport:
     """Verify :func:`~diffpes.types.make_evidence_report`.
@@ -1624,3 +1647,208 @@ class TestMakeVerificationReport:
         """
         symbol: object = getattr(diffpes.types, "make_verification_report")
         assert callable(symbol)
+
+
+class TestArtifactResolver:
+    """Verify :obj:`~diffpes.types.ArtifactResolver`.
+
+    The case checks the canonical types package path for the resolver alias.
+
+    :see: :obj:`~diffpes.types.ArtifactResolver`
+    """
+
+    def test_public_alias_is_available(self) -> None:
+        """Expose the artifact resolver alias from the types package.
+
+        The public package must provide one canonical alias object.
+
+        Notes
+        -----
+        The test resolves the alias by its exact public name.
+        """
+        symbol: object = getattr(diffpes.types, "ArtifactResolver")
+        assert symbol is not None
+
+
+class TestRegistrationHandshake:
+    """Verify :class:`~diffpes.types.RegistrationHandshake`.
+
+    The case checks the canonical type identity for registration requirements.
+
+    :see: :class:`~diffpes.types.RegistrationHandshake`
+    """
+
+    def test_public_type_is_an_equinox_module(self) -> None:
+        """Expose the handshake type as an Equinox module class.
+
+        The carrier must use the project PyTree base class.
+
+        Notes
+        -----
+        The test checks class inheritance through the canonical package path.
+        """
+        symbol: Any = getattr(diffpes.types, "RegistrationHandshake")
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestHandshakeReport:
+    """Verify :class:`~diffpes.types.HandshakeReport`.
+
+    The case checks the JAX-native report carrier for handshake validation.
+
+    :see: :class:`~diffpes.types.HandshakeReport`
+    """
+
+    def test_public_type_is_an_equinox_module(self) -> None:
+        """Expose the handshake report as an Equinox module class.
+
+        The carrier must use the project PyTree base class.
+
+        Notes
+        -----
+        The test checks class inheritance through the canonical package path.
+        """
+        symbol: Any = getattr(diffpes.types, "HandshakeReport")
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestWaiverRecord:
+    """Verify :class:`~diffpes.types.WaiverRecord`.
+
+    The case checks the static carrier for a bounded policy waiver.
+
+    :see: :class:`~diffpes.types.WaiverRecord`
+    """
+
+    def test_public_type_is_an_equinox_module(self) -> None:
+        """Expose the waiver record as an Equinox module class.
+
+        The carrier must use the project PyTree base class.
+
+        Notes
+        -----
+        The test checks class inheritance through the canonical package path.
+        """
+        symbol: Any = getattr(diffpes.types, "WaiverRecord")
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestWaiverReport:
+    """Verify :class:`~diffpes.types.WaiverReport`.
+
+    The case checks the JAX-native carrier for temporal waiver validation.
+
+    :see: :class:`~diffpes.types.WaiverReport`
+    """
+
+    def test_public_type_is_an_equinox_module(self) -> None:
+        """Expose the waiver report as an Equinox module class.
+
+        The carrier must use the project PyTree base class.
+
+        Notes
+        -----
+        The test checks class inheritance through the canonical package path.
+        """
+        symbol: Any = getattr(diffpes.types, "WaiverReport")
+        assert issubclass(symbol, eqx.Module)
+
+
+class TestMakeRegistrationHandshake:
+    """Verify :func:`~diffpes.types.make_registration_handshake`.
+
+    The case checks construction of declarative owner requirements.
+
+    :see: :func:`~diffpes.types.make_registration_handshake`
+    """
+
+    def test_factory_builds_exact_owner(self) -> None:
+        """Build a handshake with one exact required model identity.
+
+        The factory must retain each static identity without modification.
+
+        Notes
+        -----
+        The test compares the static owner and model reference fields.
+        """
+        factory: Any = getattr(diffpes.types, "make_registration_handshake")
+        result: Any = factory("plan-03", model_refs=("model@1.0.0",))
+        assert result.owner_id == "plan-03"
+        assert result.model_refs == ("model@1.0.0",)
+
+
+class TestMakeHandshakeReport:
+    """Verify :func:`~diffpes.types.make_handshake_report`.
+
+    The case checks the JAX Boolean outcome and static missing references.
+
+    :see: :func:`~diffpes.types.make_handshake_report`
+    """
+
+    def test_factory_retains_missing_references(self) -> None:
+        """Build an incomplete report with one missing evidence identity.
+
+        The report must retain the missing identity and false Boolean leaf.
+
+        Notes
+        -----
+        The test checks both the Boolean leaf and static identity tuple.
+        """
+        factory: Any = getattr(diffpes.types, "make_handshake_report")
+        result: Any = factory("plan-03", False, ("evidence-03",))
+        assert not bool(result.complete)
+        assert result.missing_ids == ("evidence-03",)
+
+
+class TestMakeWaiverRecord:
+    """Verify :func:`~diffpes.types.make_waiver_record`.
+
+    The case checks construction of a bounded policy-waiver declaration.
+
+    :see: :func:`~diffpes.types.make_waiver_record`
+    """
+
+    def test_factory_retains_absolute_utc_limits(self) -> None:
+        """Build a waiver with explicit issue and expiry times.
+
+        The factory must retain both absolute UTC strings exactly.
+
+        Notes
+        -----
+        The test compares the two static UTC fields exactly.
+        """
+        factory: Any = getattr(diffpes.types, "make_waiver_record")
+        result: Any = factory(
+            "waiver-1",
+            "org.diffpes.policy.research.v1",
+            ("claim-1",),
+            "reviewer",
+            "The external result is pending.",
+            "2026-07-20T00:00:00Z",
+            "2026-07-22T00:00:00Z",
+        )
+        assert result.issued_at_utc == "2026-07-20T00:00:00Z"
+        assert result.expires_at_utc == "2026-07-22T00:00:00Z"
+
+
+class TestMakeWaiverReport:
+    """Verify :func:`~diffpes.types.make_waiver_report`.
+
+    The case checks the JAX Boolean outcomes for temporal validation.
+
+    :see: :func:`~diffpes.types.make_waiver_report`
+    """
+
+    def test_factory_retains_valid_and_active_outcomes(self) -> None:
+        """Build a valid and active report without errors.
+
+        The report must contain two true scalar JAX leaves.
+
+        Notes
+        -----
+        The test converts both scalar JAX leaves to Boolean values.
+        """
+        factory: Any = getattr(diffpes.types, "make_waiver_report")
+        result: Any = factory("waiver-1", True, True)
+        assert bool(result.valid)
+        assert bool(result.active)

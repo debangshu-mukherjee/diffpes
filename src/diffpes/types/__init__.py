@@ -22,10 +22,12 @@ The package contains these submodules:
     Define numerical, physical, orbital, and VASP-format constants for diffpes.
 - :mod:`dos`
     Define density-of-states data structures.
+- :mod:`experiment`
+    Define the geometry of an ARPES experiment.
 - :mod:`geometry`
     Define crystal-geometry data structures for VASP crystal structures.
 - :mod:`kpath`
-    Define the k-point path information data structure.
+    Define k-space path and grid data structures.
 - :mod:`params`
     Define simulation-parameter data structures.
 - :mod:`tables`
@@ -53,6 +55,8 @@ The package contains these submodules:
 
 Routine Listings
 ----------------
+:obj:`ArtifactResolver`
+    Resolve an artifact to normalized content and optional source bytes.
 :class:`ArtifactRef`
     Store static identity and role for one source or derived artifact.
 :class:`CertificationClaim`
@@ -121,6 +125,8 @@ Routine Listings
     Permanent identifier of the radial ARPES forward model.
 :obj:`TB_RADIAL_MODEL_VERSION`
     Semantic version of the radial ARPES forward model.
+:obj:`TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2`
+    Store the inverse free-electron dispersion constant.
 :class:`CompositionReport`
     Store a conservative transformation-composition result.
 :class:`ConventionRef`
@@ -139,10 +145,14 @@ Routine Listings
     Store the offline consistency outcome for one evidence record.
 :class:`ExecutionManifest`
     Store software and execution identity prepared at the I/O boundary.
+:class:`ExperimentGeometry`
+    Store the geometry and resolution of an ARPES experiment.
 :class:`ForwardCertificate`
     Store the complete assurance record for one forward execution.
 :class:`ForwardModelSpec`
     Store the identity of a differentiable forward model.
+:class:`HandshakeReport`
+    Store the validation outcome for one registration handshake.
 :class:`InformationSpectrum`
     Store a matrix-free information spectrum in input coordinates.
 :class:`InformationState`
@@ -157,6 +167,8 @@ Routine Listings
     Store a frozen binding between a model spec and its executor.
 :class:`RegisteredTransformation`
     Store a frozen transformation and its consistency checksum.
+:class:`RegistrationHandshake`
+    Store declarative registration requirements for one plan owner.
 :class:`RegistryReport`
     Store the structural validation result for one registry snapshot.
 :class:`RegistrySnapshot`
@@ -171,6 +183,10 @@ Routine Listings
     Store one transformation and its semantic information effects.
 :class:`VerificationReport`
     Store an offline certificate-verification outcome.
+:class:`WaiverRecord`
+    Store a bounded policy-waiver declaration without changing claim status.
+:class:`WaiverReport`
+    Store the temporal validation outcome for one waiver.
 :func:`make_artifact_ref`
     Create a validated artifact reference.
 :func:`make_certification_claim`
@@ -207,6 +223,8 @@ Routine Listings
     Create a validated local information spectrum.
 :func:`make_information_state`
     Create a validated semantic-information state for one graph node.
+:func:`make_handshake_report`
+    Create a report for one registration handshake.
 :func:`make_policy_report`
     Create a validated policy truth table.
 :func:`make_provenance_graph`
@@ -221,6 +239,8 @@ Routine Listings
     Create a validated structural registry report.
 :func:`make_registry_snapshot`
     Create an immutable registry snapshot.
+:func:`make_registration_handshake`
+    Create declarative registration requirements for one plan owner.
 :func:`make_reproduction_report`
     Create a report comparing a result with its re-execution.
 :func:`make_sensitivity_map`
@@ -231,6 +251,10 @@ Routine Listings
     Create a validated information-aware transformation record.
 :func:`make_verification_report`
     Create an offline certificate-verification report.
+:func:`make_waiver_record`
+    Create a bounded policy-waiver declaration.
+:func:`make_waiver_report`
+    Create a temporal waiver-validation report.
 :class:`ArpesSpectrum`
     Store ARPES simulation output in a JAX PyTree.
 :obj:`ATTR_AUX`
@@ -275,6 +299,8 @@ Routine Listings
     Column index of spin-up eigenvalues in EIGENVAL.
 :obj:`ENERGY_AXIS_NDIM`
     Expected dimensionality of energy-axis arrays.
+:obj:`EKIN_FLOOR_EV`
+    Set the physical kinetic-energy floor in eV.
 :obj:`EPS`
     Epsilon floor guarding divisions and norms.
 :obj:`FLOAT_TOKEN_RE`
@@ -287,6 +313,8 @@ Routine Listings
     Reduced Planck constant times c in eV Angstrom.
 :obj:`HBAR_EV_S`
     Reduced Planck constant in eV s.
+:obj:`HBAR_SQ_OVER_2ME_EV_ANG2`
+    Store the free-electron dispersion constant in eV Angstrom squared.
 :obj:`INTENSITY_NDIM`
     Expected dimensionality of intensity arrays.
 :obj:`ISPIN2_BLOCKS`
@@ -299,10 +327,16 @@ Routine Listings
     KPathInfo auxiliary-data length including a comment.
 :obj:`KPATH_AUX_WITH_COORD_MODE_LEN`
     KPathInfo auxiliary-data length including a coordinate mode.
+:class:`KGrid`
+    Store a fixed-shape raster in fractional k-space.
+:class:`KPath`
+    Store a generated path through fractional k-space.
 :class:`KPathInfo`
     Store k-point path metadata in a JAX PyTree.
 :obj:`KPOINT_LINE_VALUES`
     Tokens on an EIGENVAL k-point line.
+:obj:`K_PREFACTOR_INV_ANG_SQRT_EV`
+    Store the momentum prefactor in inverse Angstrom per square-root eV.
 :obj:`L_MAX`
     Maximum angular momentum supported by the precomputed table.
 :obj:`LATTICE_ROWS`
@@ -329,6 +363,12 @@ Routine Listings
     Create a validated ``FullDensityOfStates`` instance.
 :func:`make_graphene_model`
     Create a graphene pz tight-binding model.
+:func:`make_experiment_geometry`
+    Create a validated geometry for an ARPES experiment.
+:func:`make_kgrid`
+    Create a validated fixed-shape k-space raster.
+:func:`make_kpath`
+    Create a validated path through fractional k-space.
 :func:`make_kpath_info`
     Create a validated KPathInfo instance.
 :func:`make_orbital_basis`
@@ -467,6 +507,7 @@ from .bands import (
 )
 from .certification import (
     ArtifactRef,
+    ArtifactResolver,
     CertificationClaim,
     CertificationContext,
     CertifiedResult,
@@ -481,16 +522,20 @@ from .certification import (
     ExecutionManifest,
     ForwardCertificate,
     ForwardModelSpec,
+    HandshakeReport,
     InformationSpectrum,
     PolicyReport,
     RegisteredModel,
     RegisteredTransformation,
+    RegistrationHandshake,
     RegistryReport,
     RegistrySnapshot,
     ReproductionReport,
     SensitivityMap,
     TransformationRecord,
     VerificationReport,
+    WaiverRecord,
+    WaiverReport,
     make_artifact_ref,
     make_certification_claim,
     make_certification_context,
@@ -505,16 +550,20 @@ from .certification import (
     make_execution_manifest,
     make_forward_certificate,
     make_forward_model_spec,
+    make_handshake_report,
     make_information_spectrum,
     make_policy_report,
     make_registered_model,
     make_registered_transformation,
+    make_registration_handshake,
     make_registry_report,
     make_registry_snapshot,
     make_reproduction_report,
     make_sensitivity_map,
     make_transformation_record,
     make_verification_report,
+    make_waiver_record,
+    make_waiver_report,
 )
 from .certification_constants import (
     CANONICAL_ARRAY_CHUNK_BYTES,
@@ -558,15 +607,18 @@ from .constants import (
     D_ORBITAL_SLICE,
     EIG_DOWN_INDEX,
     EIG_UP_INDEX,
+    EKIN_FLOOR_EV,
     ENERGY_AXIS_NDIM,
     EPS,
     FLOAT_TOKEN_RE,
     GAUNT_IMAG_TOL,
     HBAR_C_EV_A,
     HBAR_EV_S,
+    HBAR_SQ_OVER_2ME_EV_ANG2,
     INTENSITY_NDIM,
     ISPIN2_BLOCKS,
     ISPIN_SPIN_POLARIZED,
+    K_PREFACTOR_INV_ANG_SQRT_EV,
     KB_EV_PER_K,
     KPATH_AUX_WITH_COMMENT_LEN,
     KPATH_AUX_WITH_COORD_MODE_LEN,
@@ -594,6 +646,7 @@ from .constants import (
     SMALL_ARGUMENT,
     SOC_BLOCKS,
     SPIN_COLS,
+    TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2,
     WEIGHT_COMPONENT_COUNT,
     WEIGHT_COMPONENT_INDEX,
     XYZ_COMPONENTS,
@@ -616,13 +669,18 @@ from .dos import (
     make_density_of_states,
     make_full_density_of_states,
 )
+from .experiment import ExperimentGeometry, make_experiment_geometry
 from .geometry import (
     CrystalGeometry,
     make_crystal_geometry,
 )
 from .inspection import CertificateDiff, make_certificate_diff
 from .kpath import (
+    KGrid,
+    KPath,
     KPathInfo,
+    make_kgrid,
+    make_kpath,
     make_kpath_info,
 )
 from .params import (
@@ -673,6 +731,7 @@ from .volumetric import (
 
 __all__: list[str] = [
     "ArpesSpectrum",
+    "ArtifactResolver",
     "ArtifactRef",
     "ATTR_AUX",
     "ATTR_NONE",
@@ -731,10 +790,12 @@ __all__: list[str] = [
     "EIG_DOWN_INDEX",
     "EIG_UP_INDEX",
     "ENERGY_AXIS_NDIM",
+    "EKIN_FLOOR_EV",
     "EPS",
     "EvidenceRef",
     "EvidenceReport",
     "ExecutionManifest",
+    "ExperimentGeometry",
     "FLOAT_TOKEN_RE",
     "FullDensityOfStates",
     "ForwardCertificate",
@@ -742,6 +803,8 @@ __all__: list[str] = [
     "GAUNT_IMAG_TOL",
     "HBAR_C_EV_A",
     "HBAR_EV_S",
+    "HBAR_SQ_OVER_2ME_EV_ANG2",
+    "HandshakeReport",
     "INTENSITY_NDIM",
     "InformationState",
     "InformationSpectrum",
@@ -750,8 +813,11 @@ __all__: list[str] = [
     "KB_EV_PER_K",
     "KPATH_AUX_WITH_COMMENT_LEN",
     "KPATH_AUX_WITH_COORD_MODE_LEN",
+    "KGrid",
+    "KPath",
     "KPathInfo",
     "KPOINT_LINE_VALUES",
+    "K_PREFACTOR_INV_ANG_SQRT_EV",
     "L_MAX",
     "LATTICE_ROWS",
     "M_D",
@@ -777,12 +843,16 @@ __all__: list[str] = [
     "make_evidence_ref",
     "make_evidence_report",
     "make_execution_manifest",
+    "make_experiment_geometry",
     "make_forward_certificate",
     "make_forward_model_spec",
     "make_full_density_of_states",
     "make_graphene_model",
+    "make_handshake_report",
     "make_information_spectrum",
     "make_information_state",
+    "make_kgrid",
+    "make_kpath",
     "make_kpath_info",
     "make_orbital_basis",
     "make_orbital_projection",
@@ -794,6 +864,7 @@ __all__: list[str] = [
     "make_registered_transformation",
     "make_registry_report",
     "make_registry_snapshot",
+    "make_registration_handshake",
     "make_reproduction_report",
     "make_self_energy_config",
     "make_simulation_params",
@@ -806,6 +877,8 @@ __all__: list[str] = [
     "make_transformation_record",
     "make_transformation_contract",
     "make_verification_report",
+    "make_waiver_record",
+    "make_waiver_report",
     "make_volumetric_data",
     "make_workflow_context",
     "ME_EV",
@@ -832,6 +905,7 @@ __all__: list[str] = [
     "ProvenanceReport",
     "RegisteredModel",
     "RegisteredTransformation",
+    "RegistrationHandshake",
     "RegistryReport",
     "RegistrySnapshot",
     "ReproductionReport",
@@ -856,10 +930,13 @@ __all__: list[str] = [
     "TB_RADIAL_INPUT_COUNT",
     "TB_RADIAL_MODEL_ID",
     "TB_RADIAL_MODEL_VERSION",
+    "TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2",
     "TransformationContract",
     "TransformationRecord",
     "VolumetricData",
     "VerificationReport",
+    "WaiverRecord",
+    "WaiverReport",
     "WEIGHT_COMPONENT_COUNT",
     "WEIGHT_COMPONENT_INDEX",
     "WorkflowContext",

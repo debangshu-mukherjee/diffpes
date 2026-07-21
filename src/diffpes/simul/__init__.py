@@ -17,10 +17,12 @@ The following list describes the submodules:
     Run expanded-input workflows for ARPES simulation.
 - :mod:`forward`
     Run an end-to-end differentiable ARPES forward model.
+- :mod:`kinematics`
+    Compute free-electron photoemission kinematics.
 - :mod:`oam`
     Compute orbital angular momentum.
 - :mod:`polarization`
-    Compute photon polarization and dipole matrix elements.
+    Compute photon polarization and detector-frame transformations.
 - :mod:`resolution`
     Apply momentum resolution broadening to ARPES simulations.
 - :mod:`self_energy`
@@ -38,26 +40,48 @@ Routine Listings
     Compute electric field vector from polarization config.
 :func:`build_polarization_vectors`
     Construct s- and p-polarization basis vectors.
+:func:`detector_angles_to_kpar`
+    Convert detector angles to parallel momentum.
+:func:`detector_rotation`
+    Build the detector-frame rotation.
 :func:`compute_oam`
     Compute orbital angular momentum z-component.
 :func:`dipole_matrix_elements`
     Compute dipole matrix elements for all 9 orbitals.
 :func:`evaluate_self_energy`
     Evaluate the imaginary self-energy :math:`\Gamma(E)`.
+:func:`emission_angles`
+    Convert Cartesian momentum to emission angles.
 :func:`fermi_dirac`
     Compute Fermi-Dirac distribution value.
+:func:`final_state_k_inv_ang`
+    Convert kinetic energy to final-state momentum magnitude.
 :func:`gaussian`
     Compute normalized Gaussian broadening profile.
 :func:`heuristic_weights`
     Compute heuristic orbital weights based on photon energy.
+:func:`kinetic_energy_ev`
+    Compute the floored photoelectron kinetic energy.
+:func:`kpar_to_detector_angles`
+    Convert parallel momentum to detector angles.
+:func:`kz_from_inner_potential`
+    Compute complex out-of-plane momentum from the inner potential.
 :func:`load_vasp_context`
     Load a simulation-ready context from VASP output files.
 :func:`photon_wavevector`
     Build the unit photon wavevector from incidence angles.
+:func:`polarization_from_angles`
+    Construct polarization from incidence angles.
+:func:`polarization_to_spherical`
+    Convert Cartesian polarization to spherical components.
 :func:`prepare_projection`
     Prepare orbital projections for simulation.
 :func:`run_vasp_workflow`
     Run an end-to-end VASP-to-ARPES workflow in one call.
+:func:`rotate_frame_vectors`
+    Rotate a real vector across a detector-angle grid.
+:func:`rotate_polarization_grid`
+    Rotate polarization across a detector-angle grid.
 :func:`simulate_advanced`
     Simulate ARPES with Gaussian broadening and polarization rules.
 :func:`simulate_advanced_expanded`
@@ -111,12 +135,25 @@ from .expanded import (
     simulate_soc_expanded,
 )
 from .forward import simulate_tb_radial
+from .kinematics import (
+    detector_angles_to_kpar,
+    emission_angles,
+    final_state_k_inv_ang,
+    kinetic_energy_ev,
+    kpar_to_detector_angles,
+    kz_from_inner_potential,
+)
 from .oam import compute_oam
 from .polarization import (
     build_efield,
     build_polarization_vectors,
+    detector_rotation,
     dipole_matrix_elements,
     photon_wavevector,
+    polarization_from_angles,
+    polarization_to_spherical,
+    rotate_frame_vectors,
+    rotate_polarization_grid,
 )
 from .resolution import apply_momentum_broadening
 from .self_energy import evaluate_self_energy
@@ -140,15 +177,26 @@ __all__: list[str] = [
     "build_efield",
     "build_polarization_vectors",
     "compute_oam",
+    "detector_angles_to_kpar",
+    "detector_rotation",
     "dipole_matrix_elements",
+    "emission_angles",
     "evaluate_self_energy",
     "fermi_dirac",
+    "final_state_k_inv_ang",
     "gaussian",
     "heuristic_weights",
+    "kinetic_energy_ev",
+    "kpar_to_detector_angles",
+    "kz_from_inner_potential",
     "load_vasp_context",
     "photon_wavevector",
+    "polarization_from_angles",
+    "polarization_to_spherical",
     "prepare_projection",
     "run_vasp_workflow",
+    "rotate_frame_vectors",
+    "rotate_polarization_grid",
     "simulate_advanced",
     "simulate_advanced_expanded",
     "simulate_basic",

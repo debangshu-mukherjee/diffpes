@@ -20,6 +20,8 @@ The following list describes the submodules:
     Assemble full dipole matrix elements.
 - :mod:`gaunt`
     Build the Gaunt coefficient table for dipole transitions.
+- :mod:`rotations`
+    Construct differentiable three-dimensional rotations.
 - :mod:`safe`
     Provide named gradient-safe elementary operations.
 - :mod:`spherical_harmonics`
@@ -43,6 +45,8 @@ Routine Listings
     Evaluate a single real spherical harmonic.
 :func:`real_spherical_harmonics_all`
     Evaluate all real spherical harmonics up to l_max.
+:func:`rodrigues_rotation`
+    Construct a rotation matrix with Rodrigues' formula.
 :func:`safe_arccos`
     Evaluate arccos with saturated values and zero boundary gradients.
 :func:`safe_arctan2`
@@ -71,6 +75,7 @@ from .dipole import (
     dipole_matrix_element_single,
 )
 from .gaunt import GAUNT_TABLE, build_gaunt_table, gaunt_lookup
+from .rotations import rodrigues_rotation
 from .safe import (
     safe_arccos,
     safe_arctan2,
@@ -94,6 +99,7 @@ __all__: list[str] = [
     "gaunt_lookup",
     "real_spherical_harmonic",
     "real_spherical_harmonics_all",
+    "rodrigues_rotation",
     "safe_arccos",
     "safe_arctan2",
     "safe_divide",

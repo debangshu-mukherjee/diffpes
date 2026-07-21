@@ -1,0 +1,1133 @@
+"""Validate free-electron photoemission kinematics.
+
+Extended Summary
+----------------
+The tests cover energy floors, momentum values, complex out-of-plane roots,
+emission angles, detector maps, JAX transforms, and certified gradients.
+"""
+
+import json
+from pathlib import Path
+
+import chex
+import jax
+import jax.numpy as jnp
+import pytest
+from beartype.typing import Any, Callable
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from jaxtyping import Array, Bool, Complex, Float
+
+from diffpes.simul.kinematics import (
+    detector_angles_to_kpar,
+    emission_angles,
+    final_state_k_inv_ang,
+    kinetic_energy_ev,
+    kpar_to_detector_angles,
+    kz_from_inner_potential,
+)
+from diffpes.types import (
+    EKIN_FLOOR_EV,
+    K_PREFACTOR_INV_ANG_SQRT_EV,
+    TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2,
+)
+from tests._gradients import assert_grad_matches_fd, gradient_gate
+
+
+class TestKineticEnergyEv(chex.TestCase):
+    """Validate :func:`~diffpes.simul.kinetic_energy_ev`.
+
+    The tests cover energy conservation, the physical floor, JIT, and the
+    selected gradient on each side of the floor.
+
+    :see: :func:`~diffpes.simul.kinetic_energy_ev`
+    """
+
+    def test_energy_conservation_and_floor_under_jit(self) -> None:
+        """Match energy conservation and apply the physical floor under JIT.
+
+        The first three values remain above the floor. The last value cannot
+        produce a photoelectron and therefore maps to ``EKIN_FLOOR_EV``.
+
+        Notes
+        -----
+        Use 21.2 eV photons and a 4.3 eV work function. Compare four binding
+        energies with the closed-form values.
+        """
+        binding_energies: Float[Array, " 4"] = jnp.array(
+            [-0.4, 0.0, 0.7, 40.0]
+        )
+        expected: Float[Array, " 4"] = jnp.array(
+            [16.5, 16.9, 16.2, EKIN_FLOOR_EV]
+        )
+        actual: Float[Array, " 4"] = jax.jit(kinetic_energy_ev)(
+            21.2,
+            4.3,
+            binding_energies,
+        )
+        chex.assert_shape(actual, (4,))
+        self.assertEqual(actual.dtype, jnp.dtype("float64"))
+        chex.assert_trees_all_close(
+            actual,
+            expected,
+            rtol=0.0,
+            atol=1e-14,
+        )
+
+    def test_floor_selects_zero_gradient(self) -> None:
+        """Verify exact gradients above and below the kinetic-energy floor.
+
+        Photon energy has unit sensitivity above the floor. The floor selects
+        zero sensitivity outside the physical validity domain.
+
+        Notes
+        -----
+        Differentiate one allowed point, one boundary point, and one rejected
+        point. Check all gradients and their finiteness.
+        """
+        allowed_gradient: Float[Array, ""] = jax.grad(
+            lambda photon: kinetic_energy_ev(
+                photon,
+                4.3,
+                jnp.array(0.7),
+            )
+        )(jnp.array(21.2))
+        floor_gradient: Float[Array, ""] = jax.grad(
+            lambda photon: kinetic_energy_ev(
+                photon,
+                4.3,
+                jnp.array(20.0),
+            )
+        )(jnp.array(10.0))
+        boundary_gradient: Float[Array, ""] = jax.grad(
+            lambda photon: kinetic_energy_ev(
+                photon,
+                0.0,
+                jnp.array(0.0),
+            )
+        )(jnp.array(EKIN_FLOOR_EV))
+        chex.assert_trees_all_close(
+            allowed_gradient,
+            jnp.array(1.0),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_trees_all_close(
+            floor_gradient,
+            jnp.array(0.0),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_trees_all_close(
+            boundary_gradient,
+            jnp.array(0.0),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_tree_all_finite(
+            (allowed_gradient, boundary_gradient, floor_gradient)
+        )
+
+
+class TestFinalStateKInvAng(chex.TestCase):
+    """Validate :func:`~diffpes.simul.final_state_k_inv_ang`.
+
+    The tests compare the free-electron formula with closed-form values. They
+    also verify the floor guard and the momentum gradient.
+
+    :see: :func:`~diffpes.simul.final_state_k_inv_ang`
+    """
+
+    def test_values_and_shape_match_free_electron_formula(self) -> None:
+        """Match the free-electron momentum formula and preserve shape.
+
+        The expected values use the Plan 03 CODATA-derived prefactor. The
+        function must return one float64 momentum for each energy.
+
+        Notes
+        -----
+        Evaluate energies of 1, 16, and 100 eV under JIT. Compare at
+        ``rtol=1e-14``.
+        """
+        energies: Float[Array, " 3"] = jnp.array([1.0, 16.0, 100.0])
+        expected: Float[Array, " 3"] = K_PREFACTOR_INV_ANG_SQRT_EV * jnp.sqrt(
+            energies
+        )
+        actual: Float[Array, " 3"] = jax.jit(final_state_k_inv_ang)(energies)
+        chex.assert_shape(actual, (3,))
+        self.assertEqual(actual.dtype, jnp.dtype("float64"))
+        chex.assert_trees_all_close(
+            actual,
+            expected,
+            rtol=1e-14,
+            atol=1e-14,
+        )
+
+    def test_gradient_matches_formula_and_floor_guard(self) -> None:
+        """Match the analytic derivative and verify the floor subgradient.
+
+        The derivative above the floor equals ``C/(2*sqrt(E))``. A negative
+        direct input uses the floor and has zero sensitivity.
+
+        Notes
+        -----
+        Apply the shared finite-difference harness at 24 eV. Differentiate a
+        negative input and the exact floor separately.
+        """
+        energy: Float[Array, ""] = jnp.array(24.0)
+        assert_grad_matches_fd(final_state_k_inv_ang, energy)
+        actual_gradient: Float[Array, ""] = jax.grad(final_state_k_inv_ang)(
+            energy
+        )
+        expected_gradient: Float[Array, ""] = K_PREFACTOR_INV_ANG_SQRT_EV / (
+            2.0 * jnp.sqrt(energy)
+        )
+        floor_gradient: Float[Array, ""] = jax.grad(final_state_k_inv_ang)(
+            jnp.array(-1.0)
+        )
+        boundary_gradient: Float[Array, ""] = jax.grad(final_state_k_inv_ang)(
+            jnp.array(EKIN_FLOOR_EV)
+        )
+        chex.assert_trees_all_close(
+            actual_gradient,
+            expected_gradient,
+            rtol=1e-14,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            floor_gradient,
+            jnp.array(0.0),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_trees_all_close(
+            boundary_gradient,
+            jnp.array(0.0),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_tree_all_finite(
+            (actual_gradient, boundary_gradient, floor_gradient)
+        )
+
+
+class TestKzFromInnerPotential(chex.TestCase):
+    """Validate :func:`~diffpes.simul.kz_from_inner_potential`.
+
+    The tests cover Damascelli values, evanescent channels, analytic and
+    finite-difference gradients, vmap consistency, and a large JIT raster.
+
+    :see: :func:`~diffpes.simul.kz_from_inner_potential`
+    """
+
+    def test_matches_damascelli_grid(self) -> None:
+        """Match the Damascelli closed form on a photon-energy grid.
+
+        The detector map supplies the parallel momentum. The expected
+        out-of-plane momentum uses the independent angle formula.
+
+        Notes
+        -----
+        Use horizontal-slit angles ``(theta, 0)``. Compare the composed result
+        with ``C*sqrt(Ekin*cos(theta)^2+V0)`` at ``rtol=1e-10``.
+        """
+        cases: tuple[tuple[float, float, float, float], ...] = (
+            (21.2, 4.0, 8.0, 0.0),
+            (50.0, 4.5, 12.0, 0.17),
+            (100.0, 4.0, 15.0, -0.31),
+            (150.0, 4.5, 8.0, 0.42),
+        )
+        photon_energy: float
+        work_function: float
+        inner_potential: float
+        theta_value: float
+        for (
+            photon_energy,
+            work_function,
+            inner_potential,
+            theta_value,
+        ) in cases:
+            with self.subTest(photon_energy=photon_energy, theta=theta_value):
+                theta: Float[Array, ""] = jnp.asarray(theta_value)
+                surface_energy: Float[Array, ""] = jnp.asarray(
+                    photon_energy - work_function
+                )
+                k_parallel_vector: Float[Array, "2"] = detector_angles_to_kpar(
+                    theta,
+                    jnp.array(0.0),
+                    surface_energy,
+                    "H",
+                )
+                k_parallel: Float[Array, ""] = jnp.linalg.norm(
+                    k_parallel_vector
+                )
+                kz_value: Complex[Array, ""]
+                propagating: Bool[Array, ""]
+                kz_value, propagating = kz_from_inner_potential(
+                    photon_energy,
+                    work_function,
+                    inner_potential,
+                    k_parallel,
+                )
+                expected: Float[Array, ""] = (
+                    K_PREFACTOR_INV_ANG_SQRT_EV
+                    * jnp.sqrt(
+                        surface_energy * jnp.cos(theta) ** 2 + inner_potential
+                    )
+                )
+                chex.assert_trees_all_close(
+                    jnp.real(kz_value),
+                    expected,
+                    rtol=1e-10,
+                    atol=1e-12,
+                )
+                chex.assert_trees_all_close(
+                    jnp.imag(kz_value),
+                    jnp.array(0.0),
+                    rtol=0.0,
+                    atol=0.0,
+                )
+                self.assertTrue(bool(propagating))
+
+    def test_matches_pinned_chinook_reference(self) -> None:
+        """Match the pinned Chinook kinematics table and its constant mapping.
+
+        The injected Chinook constants must reproduce all 168 source values.
+        The production constants must reproduce the separately recorded
+        accuracy-improved values and retain the measured constant delta.
+
+        Notes
+        -----
+        Read the committed offline artifact for Plan 03 gate 03.G3. Vmap the
+        production function across its rows and compare both formulations at
+        the artifact tolerance.
+        """
+        reference_path: Path = (
+            Path(__file__).resolve().parents[3]
+            / "diffpes-plans"
+            / "verification"
+            / "kspace"
+            / "kz_kpt_reference.json"
+        )
+        document: dict[str, Any] = json.loads(reference_path.read_text())
+        records: list[dict[str, float]] = document["records"]
+        self.assertEqual(document["gate"], "03.G3")
+        self.assertEqual(
+            document["metadata"]["chinook_commit"],
+            "24913de8cc5b8c162f7c1b4acc64bd1b54dd548b",
+        )
+        self.assertEqual(len(records), 168)
+
+        photon_energies: Float[Array, " 168"] = jnp.asarray(
+            [record["photon_energy_ev"] for record in records]
+        )
+        work_functions: Float[Array, " 168"] = jnp.asarray(
+            [record["work_function_ev"] for record in records]
+        )
+        inner_potentials: Float[Array, " 168"] = jnp.asarray(
+            [record["inner_potential_ev"] for record in records]
+        )
+        k_parallel: Float[Array, " 168"] = jnp.asarray(
+            [record["k_parallel_inv_ang"] for record in records]
+        )
+        chinook_values: Float[Array, " 168"] = jnp.asarray(
+            [record["kz_chinook_inv_ang"] for record in records]
+        )
+        recorded_production: Float[Array, " 168"] = jnp.asarray(
+            [record["kz_production_constants_inv_ang"] for record in records]
+        )
+        chinook_prefactor: Float[Array, ""] = jnp.asarray(
+            document["chinook_constants"]["momentum_prefactor_inv_ang_sqrt_ev"]
+        )
+        injected_values: Float[Array, " 168"] = jnp.sqrt(
+            chinook_prefactor**2
+            * (photon_energies - work_functions + inner_potentials)
+            - k_parallel**2
+        )
+
+        def production_value(
+            photon_energy: Float[Array, ""],
+            work_function: Float[Array, ""],
+            inner_potential: Float[Array, ""],
+            parallel_momentum: Float[Array, ""],
+        ) -> Float[Array, ""]:
+            """Return one real production out-of-plane momentum."""
+            value: Complex[Array, ""] = kz_from_inner_potential(
+                photon_energy,
+                work_function,
+                inner_potential,
+                parallel_momentum,
+            )[0]
+            return jnp.real(value)
+
+        production_values: Float[Array, " 168"] = jax.vmap(production_value)(
+            photon_energies,
+            work_functions,
+            inner_potentials,
+            k_parallel,
+        )
+        tolerance: float = document["rtol"]
+        chex.assert_trees_all_close(
+            injected_values,
+            chinook_values,
+            rtol=tolerance,
+            atol=1e-12,
+        )
+        chex.assert_trees_all_close(
+            production_values,
+            recorded_production,
+            rtol=1e-13,
+            atol=1e-13,
+        )
+        maximum_delta: float = document["maximum_production_relative_delta"]
+        self.assertGreater(maximum_delta, 0.0)
+        self.assertLess(maximum_delta, 2e-5)
+
+    def test_preserves_evanescent_channels(self) -> None:
+        """Verify principal complex roots and the propagation mask.
+
+        Small parallel momentum gives a positive real root. Large parallel
+        momentum gives a positive imaginary root and a false mask value.
+
+        Notes
+        -----
+        Evaluate parallel momenta 0 and 3 in 1/Angstrom. Compare both values
+        with the direct complex square root.
+        """
+        k_parallel: Float[Array, " 2"] = jnp.array([0.0, 3.0])
+        kz_values: Complex[Array, " 2"]
+        propagating: Bool[Array, " 2"]
+        kz_values, propagating = jax.jit(kz_from_inner_potential)(
+            21.2,
+            4.5,
+            8.0,
+            k_parallel,
+        )
+        surface_energy: float = 21.2 - 4.5
+        radicands: Float[Array, " 2"] = (
+            TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2 * (surface_energy + 8.0)
+            - k_parallel**2
+        )
+        expected: Complex[Array, " 2"] = jnp.sqrt(
+            radicands.astype(jnp.complex128)
+        )
+        chex.assert_trees_all_close(
+            kz_values,
+            expected,
+            rtol=1e-14,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_equal(
+            propagating,
+            jnp.array([True, False]),
+        )
+        self.assertGreater(float(jnp.imag(kz_values[1])), 0.0)
+
+    def test_gradients_match_fd_at_twelve_registered_points(self) -> None:
+        """Match three parameter gradients at twelve propagating points.
+
+        The points span ultraviolet through soft-X-ray photon energies. Each
+        parameter leaf retains a nonzero gradient norm.
+
+        Notes
+        -----
+        Vmap the scalar kinematics over twelve tuples. The shared harness
+        checks both autodiff modes and central finite differences.
+        """
+        photon_energies: Float[Array, " 12"] = jnp.array(
+            [
+                21.2,
+                25.0,
+                35.0,
+                50.0,
+                65.0,
+                80.0,
+                100.0,
+                120.0,
+                150.0,
+                200.0,
+                300.0,
+                500.0,
+            ]
+        )
+        work_functions: Float[Array, " 12"] = jnp.linspace(4.0, 4.5, 12)
+        inner_potentials: Float[Array, " 12"] = jnp.linspace(8.0, 15.0, 12)
+        k_parallel: Float[Array, " 12"] = jnp.linspace(0.1, 1.2, 12)
+
+        def loss(
+            parameters: tuple[
+                Float[Array, " 12"],
+                Float[Array, " 12"],
+                Float[Array, " 12"],
+            ],
+        ) -> Float[Array, ""]:
+            photon_values: Float[Array, " 12"]
+            work_values: Float[Array, " 12"]
+            inner_values: Float[Array, " 12"]
+            photon_values, work_values, inner_values = parameters
+
+            def one_kz(
+                photon: Float[Array, ""],
+                work: Float[Array, ""],
+                inner: Float[Array, ""],
+                parallel: Float[Array, ""],
+            ) -> Float[Array, ""]:
+                value: Complex[Array, ""] = kz_from_inner_potential(
+                    photon,
+                    work,
+                    inner,
+                    parallel,
+                )[0]
+                real_value: Float[Array, ""] = jnp.real(value)
+                return real_value
+
+            values: Float[Array, " 12"] = jax.vmap(one_kz)(
+                photon_values,
+                work_values,
+                inner_values,
+                k_parallel,
+            )
+            total: Float[Array, ""] = jnp.sum(values)
+            return total
+
+        gradient_gate(
+            loss,
+            (photon_energies, work_functions, inner_potentials),
+            regime="smooth",
+        )
+
+    def test_inner_potential_gradient_matches_closed_form(self) -> None:
+        """Match the inner-potential derivative with its analytic value.
+
+        For a real channel, the derivative equals
+        ``TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2 / (2*kz)``.
+
+        Notes
+        -----
+        Differentiate at 50 eV photon energy and 0.7 1/Angstrom. Compare at
+        ``rtol=1e-10`` and require nonzero sensitivity.
+        """
+        inner_potential: Float[Array, ""] = jnp.array(12.0)
+        k_parallel: Float[Array, ""] = jnp.array(0.7)
+
+        def real_kz(candidate: Float[Array, ""]) -> Float[Array, ""]:
+            value: Complex[Array, ""] = kz_from_inner_potential(
+                50.0,
+                4.5,
+                candidate,
+                k_parallel,
+            )[0]
+            real_value: Float[Array, ""] = jnp.real(value)
+            return real_value
+
+        kz_value: Float[Array, ""] = real_kz(inner_potential)
+        actual: Float[Array, ""] = jax.grad(real_kz)(inner_potential)
+        expected: Float[Array, ""] = TWO_ME_OVER_HBAR_SQ_INV_EV_ANG2 / (
+            2.0 * kz_value
+        )
+        chex.assert_trees_all_close(
+            actual,
+            expected,
+            rtol=1e-10,
+            atol=1e-12,
+        )
+        self.assertGreater(float(jnp.abs(actual)), 1e-12)
+
+    @given(
+        photon_energy=st.floats(
+            min_value=20.0,
+            max_value=200.0,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        lower_potential=st.floats(
+            min_value=0.0,
+            max_value=15.0,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        potential_step=st.floats(
+            min_value=1e-3,
+            max_value=10.0,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+    )
+    @settings(max_examples=20, deadline=None)
+    def test_real_kz_increases_with_inner_potential(
+        self,
+        photon_energy: float,
+        lower_potential: float,
+        potential_step: float,
+    ) -> None:
+        """Verify monotonic out-of-plane momentum in the inner potential.
+
+        The free-electron radicand increases linearly with the inner potential.
+        Thus, each positive real root must increase.
+
+        Notes
+        -----
+        Hypothesis generates twenty photon energies and ordered potentials.
+        Compare real roots at fixed work function and parallel momentum.
+        """
+        lower_kz: Complex[Array, ""] = kz_from_inner_potential(
+            photon_energy,
+            4.5,
+            lower_potential,
+            jnp.array(0.4),
+        )[0]
+        upper_kz: Complex[Array, ""] = kz_from_inner_potential(
+            photon_energy,
+            4.5,
+            lower_potential + potential_step,
+            jnp.array(0.4),
+        )[0]
+        self.assertGreater(float(jnp.real(upper_kz - lower_kz)), 0.0)
+
+    def test_vmap_gradient_matches_elementwise_gradients(self) -> None:
+        """Match vmapped and elementwise photon-energy gradients.
+
+        Vmap must not change the gradient of the out-of-plane momentum. The
+        comparison uses four photon energies and relative tolerance 1e-14.
+
+        Notes
+        -----
+        Differentiate one scalar real root. Apply JIT and vmap to the gradient
+        and compare with an eager stack.
+        """
+        photon_energies: Float[Array, " 4"] = jnp.array(
+            [21.2, 50.0, 100.0, 150.0]
+        )
+
+        def real_kz(photon: Float[Array, ""]) -> Float[Array, ""]:
+            value: Complex[Array, ""] = kz_from_inner_potential(
+                photon,
+                4.3,
+                12.0,
+                jnp.array(0.6),
+            )[0]
+            real_value: Float[Array, ""] = jnp.real(value)
+            return real_value
+
+        vmapped: Float[Array, " 4"] = jax.jit(jax.vmap(jax.grad(real_kz)))(
+            photon_energies
+        )
+        elementwise: Float[Array, " 4"] = jnp.stack(
+            tuple(jax.grad(real_kz)(photon) for photon in photon_energies)
+        )
+        chex.assert_trees_all_close(
+            vmapped,
+            elementwise,
+            rtol=1e-14,
+            atol=1e-14,
+        )
+
+    @pytest.mark.big_mem
+    @pytest.mark.rss_limit_mb(700)
+    def test_large_photon_energy_vmap_has_static_shape(self) -> None:
+        """Verify a large JIT-vmap raster has the required static shape.
+
+        The raster contains 64 photon energies and 256 squared parallel
+        momenta. The operation must not construct a quadratic point matrix.
+
+        Notes
+        -----
+        JIT one vmap over photon energy. Check the two output shapes and all
+        finite complex values.
+        """
+        photon_energies: Float[Array, " 64"] = jnp.linspace(20.0, 150.0, 64)
+        k_parallel: Float[Array, " 65536"] = jnp.linspace(
+            0.0,
+            1.5,
+            256 * 256,
+        )
+
+        def one_row(
+            photon: Float[Array, ""],
+        ) -> tuple[Complex[Array, " 65536"], Bool[Array, " 65536"]]:
+            row: tuple[Complex[Array, " 65536"], Bool[Array, " 65536"]] = (
+                kz_from_inner_potential(
+                    photon,
+                    4.5,
+                    12.0,
+                    k_parallel,
+                )
+            )
+            return row
+
+        kz_values: Complex[Array, "64 65536"]
+        propagating: Bool[Array, "64 65536"]
+        kz_values, propagating = jax.jit(jax.vmap(one_row))(photon_energies)
+        chex.assert_shape(kz_values, (64, 256 * 256))
+        chex.assert_shape(propagating, (64, 256 * 256))
+        chex.assert_tree_all_finite(kz_values)
+
+
+class TestEmissionAngles(chex.TestCase):
+    """Validate :func:`~diffpes.simul.emission_angles`.
+
+    The tests cover Cartesian directions, the normal-emission gauge, batched
+    JIT execution, and finite-difference gradients away from the pole.
+
+    :see: :func:`~diffpes.simul.emission_angles`
+    """
+
+    def test_cardinal_directions_and_normal_emission(self) -> None:
+        """Match cardinal angles and the normal-emission gauge convention.
+
+        Positive x has polar angle pi/2 and zero azimuth. Positive y has
+        azimuth pi/2. Positive z selects two zero angles.
+
+        Notes
+        -----
+        Pass all three directions as one batch through JIT. Compare each angle
+        at absolute tolerance ``1e-14``.
+        """
+        vectors: Float[Array, "3 3"] = jnp.eye(3)
+        theta: Float[Array, " 3"]
+        phi: Float[Array, " 3"]
+        theta, phi = jax.jit(emission_angles)(vectors)
+        chex.assert_trees_all_close(
+            theta,
+            jnp.array([jnp.pi / 2.0, jnp.pi / 2.0, 0.0]),
+            rtol=0.0,
+            atol=1e-14,
+        )
+        chex.assert_trees_all_close(
+            phi,
+            jnp.array([0.0, jnp.pi / 2.0, 0.0]),
+            rtol=0.0,
+            atol=1e-14,
+        )
+
+    def test_generic_gradients_match_finite_differences(self) -> None:
+        """Match angle gradients with central finite differences.
+
+        The generic vector stays outside the punctured normal-emission
+        neighborhood. A weighted angle sum depends on all vector components.
+
+        Notes
+        -----
+        Use ``[0.7, -0.4, 1.2]`` in 1/Angstrom. Apply the shared gradient
+        harness in both autodiff modes.
+        """
+        momentum: Float[Array, "3"] = jnp.array([0.7, -0.4, 1.2])
+
+        def loss(candidate: Float[Array, "3"]) -> Float[Array, ""]:
+            theta: Float[Array, ""]
+            phi: Float[Array, ""]
+            theta, phi = emission_angles(candidate)
+            value: Float[Array, ""] = theta + 0.37 * phi
+            return value
+
+        gradient_gate(loss, momentum, regime="smooth")
+
+    def test_normal_emission_selects_zero_angle_gradients(self) -> None:
+        """Verify finite zero angle gradients at normal emission.
+
+        Azimuth has no physical value at the pole. The safe coordinate
+        primitives assign no derivative to either angle there.
+
+        Notes
+        -----
+        Compute the Jacobian of both angles at the positive z direction.
+        Compare it with a zero matrix exactly.
+        """
+        momentum: Float[Array, "3"] = jnp.array([0.0, 0.0, 2.0])
+
+        def both_angles(
+            candidate: Float[Array, "3"],
+        ) -> Float[Array, "2"]:
+            theta: Float[Array, ""]
+            phi: Float[Array, ""]
+            theta, phi = emission_angles(candidate)
+            angles: Float[Array, "2"] = jnp.stack((theta, phi))
+            return angles
+
+        jacobian: Float[Array, "2 3"] = jax.jacfwd(both_angles)(momentum)
+        chex.assert_trees_all_close(
+            jacobian,
+            jnp.zeros((2, 3)),
+            rtol=0.0,
+            atol=0.0,
+        )
+        chex.assert_tree_all_finite(jacobian)
+
+
+class TestDetectorAnglesToKpar(chex.TestCase):
+    """Validate :func:`~diffpes.simul.detector_angles_to_kpar`.
+
+    The tests cover both slit conventions, the Rodrigues frame, JIT, and
+    gradients in both angles and kinetic energy.
+
+    :see: :func:`~diffpes.simul.detector_angles_to_kpar`
+    """
+
+    def test_matches_closed_form_rotation(self) -> None:
+        """Match the closed-form detector rotation for both slits.
+
+        The expected components follow the Plan 03 matrix products. The test
+        also verifies static-slit JIT compilation.
+
+        Notes
+        -----
+        Use angles 0.23 and -0.17 radians with 35 eV kinetic energy. Compare
+        at ``rtol=1e-14``.
+        """
+        slit: str
+        for slit in ("H", "V"):
+            with self.subTest(slit=slit):
+                tx: Float[Array, ""] = jnp.array(0.23)
+                ty: Float[Array, ""] = jnp.array(-0.17)
+                energy: Float[Array, ""] = jnp.array(35.0)
+                momentum: Float[Array, ""] = final_state_k_inv_ang(energy)
+                if slit == "H":
+                    expected: Float[Array, "2"] = momentum * jnp.array(
+                        [jnp.sin(tx), -jnp.cos(tx) * jnp.sin(ty)]
+                    )
+                else:
+                    expected = momentum * jnp.array(
+                        [jnp.sin(ty), -jnp.sin(tx) * jnp.cos(ty)]
+                    )
+                actual: Float[Array, "2"] = jax.jit(
+                    detector_angles_to_kpar,
+                    static_argnames=("slit",),
+                )(tx, ty, energy, slit)
+                chex.assert_trees_all_close(
+                    actual,
+                    expected,
+                    rtol=1e-14,
+                    atol=1e-14,
+                )
+
+    def test_gradients_match_finite_differences(self) -> None:
+        """Match angle and energy gradients with finite differences.
+
+        A generic weighted momentum sum depends on all three traced inputs.
+        Both slit branches must retain this sensitivity.
+
+        Notes
+        -----
+        Use nonzero angles and 42 eV kinetic energy. Apply the shared harness
+        in forward and reverse autodiff modes.
+        """
+        tx: Float[Array, ""] = jnp.array(0.21)
+        ty: Float[Array, ""] = jnp.array(-0.13)
+        energy: Float[Array, ""] = jnp.array(42.0)
+        weights: Float[Array, "2"] = jnp.array([0.7, -1.3])
+
+        slit: str
+        for slit in ("H", "V"):
+            with self.subTest(slit=slit):
+
+                def loss(
+                    parameters: tuple[
+                        Float[Array, ""],
+                        Float[Array, ""],
+                        Float[Array, ""],
+                    ],
+                ) -> Float[Array, ""]:
+                    candidate_tx: Float[Array, ""]
+                    candidate_ty: Float[Array, ""]
+                    candidate_energy: Float[Array, ""]
+                    candidate_tx, candidate_ty, candidate_energy = parameters
+                    k_parallel: Float[Array, "2"] = detector_angles_to_kpar(
+                        candidate_tx,
+                        candidate_ty,
+                        candidate_energy,
+                        slit,
+                    )
+                    value: Float[Array, ""] = jnp.sum(weights * k_parallel)
+                    return value
+
+                gradient_gate(loss, (tx, ty, energy), regime="smooth")
+
+    def test_normal_emission_jacobian_matches_frame(self) -> None:
+        """Match the Cartesian detector Jacobian at normal emission.
+
+        The direction vector remains smooth when both detector angles vanish.
+        Each slit gives a different signed permutation of the tangent axes.
+
+        Notes
+        -----
+        Differentiate the two parallel components with respect to both angles.
+        Compare each Jacobian with its closed form exactly.
+        """
+        energy: Float[Array, ""] = jnp.array(30.0)
+        momentum: Float[Array, ""] = final_state_k_inv_ang(energy)
+        angles: Float[Array, "2"] = jnp.zeros(2)
+        slit: str
+        for slit in ("H", "V"):
+            with self.subTest(slit=slit):
+
+                def angle_map(
+                    candidate: Float[Array, "2"],
+                ) -> Float[Array, "2"]:
+                    result: Float[Array, "2"] = detector_angles_to_kpar(
+                        candidate[0],
+                        candidate[1],
+                        energy,
+                        slit,
+                    )
+                    return result
+
+                jacobian: Float[Array, "2 2"] = jax.jacfwd(angle_map)(angles)
+                if slit == "H":
+                    expected: Float[Array, "2 2"] = momentum * jnp.array(
+                        [[1.0, 0.0], [0.0, -1.0]]
+                    )
+                else:
+                    expected = momentum * jnp.array([[0.0, 1.0], [-1.0, 0.0]])
+                chex.assert_trees_all_close(
+                    jacobian,
+                    expected,
+                    rtol=0.0,
+                    atol=0.0,
+                )
+
+    def test_rejects_unknown_slit(self) -> None:
+        """Verify that the detector map rejects an unknown slit.
+
+        The slit controls a static Python branch. Only horizontal and vertical
+        orientations define a detector convention.
+
+        Notes
+        -----
+        Pass the value ``"bad"`` with scalar arrays. Require ``ValueError``
+        with the slit validation message.
+        """
+        with pytest.raises(ValueError, match="slit must be"):
+            detector_angles_to_kpar(
+                jnp.array(0.1),
+                jnp.array(0.2),
+                jnp.array(30.0),
+                "bad",
+            )
+
+
+class TestKparToDetectorAngles(chex.TestCase):
+    """Validate :func:`~diffpes.simul.kpar_to_detector_angles`.
+
+    Property tests cover both exact detector-map compositions. Additional
+    checks cover JIT, vmap, and static slit validation.
+
+    :see: :func:`~diffpes.simul.kpar_to_detector_angles`
+    """
+
+    @given(
+        tx_value=st.floats(
+            min_value=-0.8,
+            max_value=0.8,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        ty_value=st.floats(
+            min_value=-0.8,
+            max_value=0.8,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        energy_value=st.floats(
+            min_value=5.0,
+            max_value=150.0,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+    )
+    @settings(max_examples=20, deadline=None)
+    def test_angle_round_trip(
+        self,
+        tx_value: float,
+        ty_value: float,
+        energy_value: float,
+    ) -> None:
+        """Round-trip random detector angles for both slit conventions.
+
+        The generated angles stay on the positive-normal branch. Their
+        parallel momenta therefore have magnitude below ``0.95*k_f``.
+
+        Notes
+        -----
+        Compose the forward and inverse maps for each slit. Compare both
+        angles at absolute tolerance ``1e-12``.
+        """
+        tx: Float[Array, ""] = jnp.asarray(tx_value)
+        ty: Float[Array, ""] = jnp.asarray(ty_value)
+        energy: Float[Array, ""] = jnp.asarray(energy_value)
+        slit: str
+        for slit in ("H", "V"):
+            k_parallel: Float[Array, "2"] = detector_angles_to_kpar(
+                tx,
+                ty,
+                energy,
+                slit,
+            )
+            recovered_tx: Float[Array, ""]
+            recovered_ty: Float[Array, ""]
+            recovered_tx, recovered_ty = kpar_to_detector_angles(
+                k_parallel,
+                energy,
+                slit,
+            )
+            chex.assert_trees_all_close(
+                (recovered_tx, recovered_ty),
+                (tx, ty),
+                rtol=0.0,
+                atol=1e-12,
+            )
+
+    @given(
+        normalized_kx=st.floats(
+            min_value=-0.6,
+            max_value=0.6,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+        normalized_ky=st.floats(
+            min_value=-0.6,
+            max_value=0.6,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+    )
+    @settings(max_examples=20, deadline=None)
+    def test_parallel_momentum_round_trip(
+        self,
+        normalized_kx: float,
+        normalized_ky: float,
+    ) -> None:
+        """Round-trip random parallel momenta for both slit conventions.
+
+        The generated normalized magnitude stays below 0.85. This bound lies
+        inside the open physical domain required by the inverse.
+
+        Notes
+        -----
+        Scale the normalized components by ``k_f`` at 40 eV. Compose inverse
+        and forward maps at absolute tolerance ``1e-12``.
+        """
+        energy: Float[Array, ""] = jnp.array(40.0)
+        momentum: Float[Array, ""] = final_state_k_inv_ang(energy)
+        k_parallel: Float[Array, "2"] = momentum * jnp.asarray(
+            [normalized_kx, normalized_ky]
+        )
+        slit: str
+        for slit in ("H", "V"):
+            tx: Float[Array, ""]
+            ty: Float[Array, ""]
+            tx, ty = kpar_to_detector_angles(k_parallel, energy, slit)
+            recovered: Float[Array, "2"] = detector_angles_to_kpar(
+                tx,
+                ty,
+                energy,
+                slit,
+            )
+            chex.assert_trees_all_close(
+                recovered,
+                k_parallel,
+                rtol=0.0,
+                atol=1e-12,
+            )
+
+    def test_jit_and_vmap_preserve_round_trip(self) -> None:
+        """Verify batched round trips under static-slit JIT compilation.
+
+        Five detector-angle pairs exercise the broadcast and vmap paths. The
+        recovered angles must equal their inputs.
+
+        Notes
+        -----
+        Vmap both public maps over scalar angle pairs. JIT each vmap and
+        compare at ``rtol=1e-13``.
+        """
+        tx: Float[Array, " 5"] = jnp.linspace(-0.3, 0.4, 5)
+        ty: Float[Array, " 5"] = jnp.linspace(0.2, -0.25, 5)
+        energies: Float[Array, " 5"] = jnp.linspace(20.0, 60.0, 5)
+        slit: str
+        for slit in ("H", "V"):
+            with self.subTest(slit=slit):
+                forward: Callable[..., Array] = jax.jit(
+                    jax.vmap(
+                        lambda one_tx, one_ty, energy: detector_angles_to_kpar(
+                            one_tx,
+                            one_ty,
+                            energy,
+                            slit,
+                        )
+                    )
+                )
+                inverse: Callable[..., tuple[Array, Array]] = jax.jit(
+                    jax.vmap(
+                        lambda k_parallel, energy: kpar_to_detector_angles(
+                            k_parallel,
+                            energy,
+                            slit,
+                        )
+                    )
+                )
+                k_parallel: Float[Array, "5 2"] = forward(tx, ty, energies)
+                recovered_tx: Float[Array, " 5"]
+                recovered_ty: Float[Array, " 5"]
+                recovered_tx, recovered_ty = inverse(k_parallel, energies)
+                chex.assert_trees_all_close(
+                    (recovered_tx, recovered_ty),
+                    (tx, ty),
+                    rtol=1e-13,
+                    atol=1e-13,
+                )
+
+    def test_inverse_gradients_match_finite_differences(self) -> None:
+        """Match inverse-map gradients with central finite differences.
+
+        A generic weighted angle sum depends on parallel momentum and kinetic
+        energy. Both slit branches must retain these sensitivities.
+
+        Notes
+        -----
+        Use an interior parallel momentum at 38 eV. Apply the shared harness
+        in forward and reverse autodiff modes.
+        """
+        k_parallel: Float[Array, "2"] = jnp.array([0.3, -0.4])
+        energy: Float[Array, ""] = jnp.array(38.0)
+        slit: str
+        for slit in ("H", "V"):
+            with self.subTest(slit=slit):
+
+                def loss(
+                    parameters: tuple[
+                        Float[Array, "2"],
+                        Float[Array, ""],
+                    ],
+                ) -> Float[Array, ""]:
+                    candidate_k: Float[Array, "2"]
+                    candidate_energy: Float[Array, ""]
+                    candidate_k, candidate_energy = parameters
+                    tx: Float[Array, ""]
+                    ty: Float[Array, ""]
+                    tx, ty = kpar_to_detector_angles(
+                        candidate_k,
+                        candidate_energy,
+                        slit,
+                    )
+                    value: Float[Array, ""] = tx + 0.37 * ty
+                    return value
+
+                gradient_gate(loss, (k_parallel, energy), regime="smooth")
+
+    def test_rejects_unknown_slit(self) -> None:
+        """Verify that the inverse map rejects an unknown slit.
+
+        The inverse shares the static slit contract with the forward detector
+        map. An unsupported string must fail before numerical work.
+
+        Notes
+        -----
+        Pass the value ``"bad"`` with one parallel vector. Require
+        ``ValueError`` with the slit validation message.
+        """
+        with pytest.raises(ValueError, match="slit must be"):
+            kpar_to_detector_angles(
+                jnp.array([0.1, 0.2]),
+                jnp.array(30.0),
+                "bad",
+            )

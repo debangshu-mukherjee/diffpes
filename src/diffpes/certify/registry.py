@@ -20,6 +20,8 @@ Routine Listings
     Resolve an exact registered model.
 :func:`register_transformation`
     Register an exact transformation contract once.
+:func:`register_handshake`
+    Register declarative requirements from one owning plan.
 :func:`get_transformation`
     Resolve an exact registered transformation contract.
 :func:`list_models`
@@ -28,18 +30,32 @@ Routine Listings
     Return an immutable deterministic snapshot including executors.
 :func:`list_transformations`
     Return transformation contracts in deterministic identity order.
+:func:`list_handshakes`
+    Return owner handshakes in deterministic identity order.
 :func:`registry_snapshot`
     Return one internally consistent immutable registry snapshot.
 :func:`freeze_registry`
     Prevent later registration and return the final immutable snapshot.
 :func:`validate_registry`
     Recompute registry structure and consistency checksums.
+:func:`validate_handshake`
+    Validate one owner handshake against available records.
+:func:`validate_registry_manifest`
+    Compare the packaged registry manifest with live entries.
+:func:`render_model_card`
+    Render a model card directly from a model specification.
+:func:`packaged_model_card`
+    Read the packaged generated card for one model identity.
+:func:`registry_manifest`
+    Read the packaged registry manifest.
 """
 
 from __future__ import annotations
 
+import json
 import threading
 from functools import cache
+from importlib import resources
 
 from beartype import beartype
 from beartype.typing import Any, Callable
@@ -49,13 +65,17 @@ from diffpes.types import (
     CERTIFICATION_IDENTIFIER_PATTERN,
     CERTIFICATION_SEMVER_PATTERN,
     ForwardModelSpec,
+    HandshakeReport,
     RegisteredModel,
     RegisteredTransformation,
+    RegistrationHandshake,
     RegistryReport,
     RegistrySnapshot,
     TransformationContract,
+    make_handshake_report,
     make_registered_model,
     make_registered_transformation,
+    make_registration_handshake,
     make_registry_report,
     make_registry_snapshot,
 )
@@ -70,6 +90,7 @@ class _RegistryState:
     def __init__(self) -> None:
         self.models: tuple[RegisteredModel, ...] = ()
         self.transformations: tuple[RegisteredTransformation, ...] = ()
+        self.handshakes: tuple[RegistrationHandshake, ...] = ()
         self.frozen = False
         self.lock = threading.RLock()
 
@@ -96,6 +117,12 @@ def _transformation_key(
         contract.transformation_id,
         contract.transformation_version,
     )
+    return key
+
+
+def _handshake_key(entry: RegistrationHandshake) -> str:
+    """Return the stable owner key for a registration handshake."""
+    key: str = entry.owner_id
     return key
 
 
@@ -450,6 +477,339 @@ def list_transformations() -> tuple[TransformationContract, ...]:
     return transformations
 
 
+@jaxtyped(typechecker=beartype)
+def register_handshake(handshake: RegistrationHandshake) -> None:
+    """Register declarative requirements from one owning plan.
+
+    The registry stores requirements before or after the owner registers them.
+
+    :see: :class:`~.test_registry.TestRegisterHandshake`
+
+    Implementation Logic
+    --------------------
+    1. **Store the sorted declaration**::
+
+           state.handshakes = tuple(
+               sorted((*state.handshakes, handshake), key=_handshake_key)
+           )
+
+       Stable owner ordering removes import-order effects.
+
+    Parameters
+    ----------
+    handshake : RegistrationHandshake
+        Exact model, transformation, convention, and evidence references.
+
+    Raises
+    ------
+    ValueError
+        If the owner has a handshake or the registry has a frozen state.
+    """
+    state: _RegistryState = _registry_state()
+    with state.lock:
+        _ensure_open()
+        if any(
+            item.owner_id == handshake.owner_id for item in state.handshakes
+        ):
+            msg: str = f"duplicate handshake owner: {handshake.owner_id}"
+            raise ValueError(msg)
+        state.handshakes = tuple(
+            sorted((*state.handshakes, handshake), key=_handshake_key)
+        )
+
+
+@jaxtyped(typechecker=beartype)
+def list_handshakes() -> tuple[RegistrationHandshake, ...]:
+    """Return owner handshakes in deterministic identity order.
+
+    The process-local registry returns one immutable tuple.
+
+    :see: :class:`~.test_registry.TestListHandshakes`
+
+    Returns
+    -------
+    handshakes : tuple[RegistrationHandshake, ...]
+        Immutable sorted handshake declarations.
+
+    Notes
+    -----
+    The function reads the tuple while the registry lock is active.
+    """
+    state: _RegistryState = _registry_state()
+    with state.lock:
+        handshakes: tuple[RegistrationHandshake, ...] = state.handshakes
+    return handshakes
+
+
+@jaxtyped(typechecker=beartype)
+def validate_handshake(
+    handshake: RegistrationHandshake,
+    *,
+    evidence_ids: tuple[str, ...] = (),
+) -> HandshakeReport:
+    """Validate one owner handshake against available records.
+
+    The report names each exact reference that has no available binding.
+
+    :see: :class:`~.test_registry.TestValidateHandshake`
+
+    Implementation Logic
+    --------------------
+    1. **Collect missing references**::
+
+           missing = tuple(
+               reference
+               for required, available in available_groups
+               for reference in required
+               if reference not in available
+           )
+
+       The comparison uses exact versioned identities from each registry.
+
+    Parameters
+    ----------
+    handshake : RegistrationHandshake
+        Declarative requirements supplied by the owning plan.
+    evidence_ids : tuple[str, ...]
+        Available evidence record IDs. Default is an empty tuple.
+
+    Returns
+    -------
+    report : HandshakeReport
+        Completion state and sorted missing exact references.
+    """
+    model_refs: set[str] = {
+        f"{item.model_id}@{item.model_version}" for item in list_models()
+    }
+    transformation_refs: set[str] = {
+        f"{item.transformation_id}@{item.transformation_version}"
+        for item in list_transformations()
+    }
+    convention_refs: set[str] = {
+        f"{item.convention_id}@{item.version}"
+        for model in list_models()
+        for item in model.conventions
+    }
+    available_groups: tuple[tuple[tuple[str, ...], set[str]], ...] = (
+        (handshake.model_refs, model_refs),
+        (handshake.transformation_refs, transformation_refs),
+        (handshake.convention_refs, convention_refs),
+        (handshake.evidence_ids, set(evidence_ids)),
+    )
+    missing: tuple[str, ...] = tuple(
+        sorted(
+            reference
+            for required, available in available_groups
+            for reference in required
+            if reference not in available
+        )
+    )
+    report: HandshakeReport = make_handshake_report(
+        owner_id=handshake.owner_id,
+        complete=not missing,
+        missing_ids=missing,
+    )
+    return report
+
+
+@jaxtyped(typechecker=beartype)
+def registry_manifest() -> dict[str, Any]:
+    """Read the packaged registry manifest.
+
+    The manifest records generated model and transformation identities.
+
+    :see: :class:`~.test_registry.TestRegistryManifest`
+
+    Implementation Logic
+    --------------------
+    1. **Parse the package resource**::
+
+           decoded = json.loads(text)
+
+       The function rejects a root that is not a JSON object.
+
+    Returns
+    -------
+    manifest : dict[str, Any]
+        Parsed manifest with generated model and transformation identities.
+
+    Raises
+    ------
+    ValueError
+        If the manifest root is not a JSON object.
+    """
+    text: str = (
+        resources.files("diffpes.certify")
+        .joinpath("_registry", "manifest.json")
+        .read_text(encoding="utf-8")
+    )
+    decoded: Any = json.loads(text)
+    if not isinstance(decoded, dict):
+        msg: str = "registry manifest root must be an object"
+        raise ValueError(msg)
+    return decoded
+
+
+@jaxtyped(typechecker=beartype)
+def render_model_card(spec: ForwardModelSpec) -> str:
+    r"""Render a model card directly from a model specification.
+
+    The generated Markdown contains no separately maintained scientific data.
+
+    :see: :class:`~.test_registry.TestRenderModelCard`
+
+    Implementation Logic
+    --------------------
+    1. **Render registry fields**::
+
+           card = f"# {spec.model_id}\\n\\nVersion: `{spec.model_version}`."
+
+       The complete output also lists assumptions, conventions, and domains.
+
+    Parameters
+    ----------
+    spec : ForwardModelSpec
+        Registered scientific model specification.
+
+    Returns
+    -------
+    card : str
+        Deterministic Markdown generated only from registry truth.
+    """
+    assumptions: str = "\n".join(
+        f"- The model uses `{item}`." for item in spec.assumptions
+    )
+    conventions: str = "\n".join(
+        f"- The model uses `{item.convention_id}@{item.version}`."
+        for item in spec.conventions
+    )
+    domains: str = "\n".join(
+        f"- `{item.predicate_id}` uses `{item.expression_id}` with "
+        f"`{item.severity}` severity."
+        for item in spec.domain
+    )
+    card: str = (
+        f"# {spec.model_id}\n\n"
+        f"Version: `{spec.model_version}`.\n\n"
+        f"Observable: `{spec.observable_id}`.\n\n"
+        f"Implementation: `{spec.implementation_ref}`.\n\n"
+        "## Assumptions\n\n"
+        f"{assumptions}\n\n"
+        "## Conventions\n\n"
+        f"{conventions}\n\n"
+        "## Domain\n\n"
+        f"{domains}\n"
+    )
+    return card
+
+
+@jaxtyped(typechecker=beartype)
+def packaged_model_card(model_id: str, model_version: str) -> str:
+    """Read the packaged generated card for one model identity.
+
+    The filename combines the permanent model ID with its semantic version.
+
+    :see: :class:`~.test_registry.TestPackagedModelCard`
+
+    Implementation Logic
+    --------------------
+    1. **Read the generated resource**::
+
+           filename = f"{model_id}@{model_version}.md"
+
+       The package resource contains the canonical generated Markdown view.
+
+    Parameters
+    ----------
+    model_id : str
+        Exact permanent model ID.
+    model_version : str
+        Exact semantic model version.
+
+    Returns
+    -------
+    card : str
+        Packaged Markdown model card.
+    """
+    filename: str = f"{model_id}@{model_version}.md"
+    card: str = (
+        resources.files("diffpes.certify")
+        .joinpath("_registry", "model-cards", filename)
+        .read_text(encoding="utf-8")
+    )
+    return card
+
+
+@jaxtyped(typechecker=beartype)
+def validate_registry_manifest() -> tuple[str, ...]:
+    """Compare the packaged registry manifest with live entries.
+
+    The comparison detects missing entries and generated model-card drift.
+
+    :see: :class:`~.test_registry.TestValidateRegistryManifest`
+
+    Implementation Logic
+    --------------------
+    1. **Compare packaged entries**::
+
+           manifest = registry_manifest()
+
+       The function compares each manifest identity with the live registry.
+
+    Returns
+    -------
+    errors : tuple[str, ...]
+        Sorted missing-entry and generated-card drift messages.
+    """
+    manifest: dict[str, Any] = registry_manifest()
+    errors: list[str] = []
+    models: dict[tuple[str, str], ForwardModelSpec] = {
+        (item.model_id, item.model_version): item for item in list_models()
+    }
+    transformations: set[tuple[str, str]] = {
+        (item.transformation_id, item.transformation_version)
+        for item in list_transformations()
+    }
+    handshakes: dict[str, RegistrationHandshake] = {
+        item.owner_id: item for item in list_handshakes()
+    }
+    entry: Any
+    for entry in manifest.get("models", ()):
+        key: tuple[str, str] = (entry["model_id"], entry["model_version"])
+        if key not in models:
+            errors.append(f"missing packaged model: {key[0]}@{key[1]}")
+            continue
+        generated: str = render_model_card(models[key])
+        packaged: str = packaged_model_card(*key)
+        if generated != packaged:
+            errors.append(f"model card drift: {key[0]}@{key[1]}")
+    for entry in manifest.get("transformations", ()):
+        key = (
+            entry["transformation_id"],
+            entry["transformation_version"],
+        )
+        if key not in transformations:
+            errors.append(
+                f"missing packaged transformation: {key[0]}@{key[1]}"
+            )
+    for entry in manifest.get("handshakes", ()):
+        owner_id: str = entry["owner_id"]
+        expected: RegistrationHandshake = make_registration_handshake(
+            owner_id=owner_id,
+            model_refs=tuple(entry["model_refs"]),
+            transformation_refs=tuple(entry["transformation_refs"]),
+            convention_refs=tuple(entry["convention_refs"]),
+            evidence_ids=tuple(entry["evidence_ids"]),
+        )
+        actual: RegistrationHandshake | None = handshakes.get(owner_id)
+        if actual is None:
+            errors.append(f"missing packaged handshake: {owner_id}")
+        elif actual != expected:
+            errors.append(f"packaged handshake drift: {owner_id}")
+    result: tuple[str, ...] = tuple(sorted(errors))
+    return result
+
+
 def _registry_checksum(
     models: tuple[RegisteredModel, ...],
     transformations: tuple[RegisteredTransformation, ...],
@@ -649,11 +1009,18 @@ __all__: list[str] = [
     "freeze_registry",
     "get_model",
     "get_transformation",
+    "list_handshakes",
     "list_models",
     "list_registered_models",
     "list_transformations",
+    "packaged_model_card",
+    "register_handshake",
     "register_model",
     "register_transformation",
+    "registry_manifest",
     "registry_snapshot",
+    "render_model_card",
+    "validate_handshake",
     "validate_registry",
+    "validate_registry_manifest",
 ]

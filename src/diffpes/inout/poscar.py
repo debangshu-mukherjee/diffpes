@@ -3,8 +3,8 @@
 Extended Summary
 ----------------
 The module reads VASP POSCAR and CONTCAR crystal structure files. It returns
-a :class:`~diffpes.types.CrystalGeometry` PyTree containing lattice
-vectors, atomic coordinates, element symbols, and atom counts.
+a :class:`~diffpes.types.CrystalGeometry` PyTree containing lattice vectors,
+fractional positions, and per-atom species.
 
 Routine Listings
 ----------------
@@ -40,7 +40,8 @@ def read_poscar(
     vectors, element symbols, atom counts, and atomic coordinates. The
     coordinates can use direct or Cartesian form. The function returns a
     :class:`~diffpes.types.CrystalGeometry` PyTree with fractional coordinates.
-    It applies the universal scaling factor to the lattice.
+    It applies the universal scaling factor to the lattice. A negative scalar
+    specifies the target cell volume, as defined by the VASP format.
 
     The POSCAR file format used by VASP has the following structure:
 
@@ -68,7 +69,8 @@ def read_poscar(
 
            lattice = lattice * scaling_factor
 
-       This applies the POSCAR scale before any coordinate conversion.
+       A positive value is the direct scale. For a negative value, derive the
+       positive scale that gives a cell volume of ``abs(raw_scale)``.
 
     2. **Convert Cartesian coordinates when required**::
 
@@ -80,7 +82,7 @@ def read_poscar(
 
            return geometry
 
-       The result includes the reciprocal lattice and atom metadata.
+       The result includes the reciprocal lattice and per-atom species.
 
     Parameters
     ----------
@@ -91,7 +93,12 @@ def read_poscar(
     -------
     geometry : CrystalGeometry
         Crystal geometry with lattice, reciprocal lattice, fractional
-        coordinates, element symbols, and atom counts.
+        positions, and per-atom species.
+
+    Raises
+    ------
+    ValueError
+        If a negative scale accompanies a zero-volume raw lattice.
 
     Notes
     -----
@@ -100,7 +107,7 @@ def read_poscar(
     ``frac = lattice^{-T} @ cart^T`` with numerical stability. The parser
     detects and ignores optional selective-dynamics flags. VASP-4 files can
     omit the element-symbol line. In this case, the function returns an empty
-    ``symbols`` tuple. Supply the symbols from an external source such as
+    ``species`` tuple. Supply the species from an external source such as
     POTCAR.
     """
     fid: TextIO
@@ -109,11 +116,18 @@ def read_poscar(
     path: Path = Path(filename)
     with path.open("r") as fid:
         _comment: str = fid.readline().strip()
-        scale: float = float(fid.readline().strip())
+        raw_scale: float = float(fid.readline().strip())
         lattice: Float[NDArray, "3 3"] = np.zeros((3, 3), dtype=np.float64)
         for i in range(3):
             vals: list[float] = [float(x) for x in fid.readline().split()]
             lattice[i, :] = vals
+        scale: float = raw_scale
+        if raw_scale < 0.0:
+            raw_volume: float = abs(float(np.linalg.det(lattice)))
+            if raw_volume == 0.0:
+                msg: str = "negative POSCAR scale requires nonzero cell volume"
+                raise ValueError(msg)
+            scale = (abs(raw_scale) / raw_volume) ** (1.0 / 3.0)
         lattice = lattice * scale
         line: str = fid.readline().strip()
         symbols: tuple[str, ...] = ()
@@ -135,11 +149,17 @@ def read_poscar(
         if cartesian:
             coords = coords * scale
             coords = np.linalg.solve(lattice.T, coords.T).T
+    species: tuple[str, ...] = ()
+    if symbols:
+        species = tuple(
+            symbol
+            for symbol, count in zip(symbols, atom_counts, strict=True)
+            for _ in range(count)
+        )
     geometry: CrystalGeometry = make_crystal_geometry(
         lattice=jnp.asarray(lattice),
-        coords=jnp.asarray(coords),
-        symbols=symbols,
-        atom_counts=atom_counts,
+        positions=jnp.asarray(coords),
+        species=species,
     )
     return geometry
 

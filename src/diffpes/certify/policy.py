@@ -27,6 +27,7 @@ from diffpes.types import (
     CERTIFICATION_POLICY_LEVEL_COUNT,
     CertificationClaim,
     PolicyReport,
+    WaiverRecord,
     make_policy_report,
 )
 
@@ -62,6 +63,8 @@ def _required_indices(
 def evaluate_policy(
     claims: Iterable[CertificationClaim],
     policy_id: str = "org.diffpes.policy.research.v1",
+    *,
+    waivers: tuple[WaiverRecord, ...] = (),
 ) -> PolicyReport:
     """Derive cumulative certification outcomes from numerical claims.
 
@@ -76,6 +79,8 @@ def evaluate_policy(
         Numerical claims evaluated for one forward execution.
     policy_id : str
         Built-in cumulative policy identity (**static** -- a change retraces).
+    waivers : tuple[WaiverRecord, ...]
+        Valid active waiver records. Default is an empty tuple.
 
     Returns
     -------
@@ -91,11 +96,21 @@ def evaluate_policy(
     -----
     Required claim selections are static. Boolean outcomes are JAX leaves, so
     the policy computation remains compatible with ``jit`` and ``vmap``.
+    A waiver never changes a claim outcome. Publication and parity policies do
+    not achieve their final level when a waiver exists.
     """
     level_index: Any
     indices: Any
     if policy_id not in CERTIFICATION_POLICY_IDS:
         msg: str = f"unknown certification policy: {policy_id}"
+        raise ValueError(msg)
+    mismatched_waivers: tuple[str, ...] = tuple(
+        waiver.waiver_id for waiver in waivers if waiver.policy_id != policy_id
+    )
+    if mismatched_waivers:
+        msg = "waiver policy does not match selected policy: " + ", ".join(
+            mismatched_waivers
+        )
         raise ValueError(msg)
     claim_tuple: tuple[CertificationClaim, ...] = tuple(claims)
     selection: tuple[tuple[tuple[int, ...], ...], tuple[str, ...]] = (
@@ -134,6 +149,12 @@ def evaluate_policy(
     claim_passed: Array = all_passed[required_indices]
     claim_checked: Array = all_checked[required_indices]
     claim_in_domain: Array = all_in_domain[required_indices]
+    achieved: Array = jnp.stack(achieved_values)
+    if waivers and policy_id in {
+        "org.diffpes.policy.publication.v1",
+        "org.diffpes.policy.parity.v1",
+    }:
+        achieved = achieved.at[-1].set(False)
     report: PolicyReport = make_policy_report(
         policy_id=policy_id,
         level_ids=CERTIFICATION_LEVEL_IDS,
@@ -141,7 +162,7 @@ def evaluate_policy(
         claim_passed=claim_passed,
         claim_checked=claim_checked,
         claim_in_domain=claim_in_domain,
-        achieved=jnp.stack(achieved_values),
+        achieved=achieved,
     )
     return report
 

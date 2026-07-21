@@ -24,6 +24,11 @@ filesystem boundary.
 Certification here means bounded scientific evidence, not a security
 credential. Storage consistency markers detect accidental mismatches only.
 
+The geometry layer converts crystal coordinates, detector angles, and photon
+energy into fixed-shape momentum rasters. Its JAX derivatives expose
+calibration sensitivity to the work function, inner potential, sample
+azimuth, and detector frame.
+
 ## Expanded-input workflows
 
 The package provides expanded-input wrappers for plain arrays and scalars.

@@ -1,0 +1,64 @@
+{
+  "models": [
+    {
+      "model_id": "org.diffpes.model.arpes.tb_radial",
+      "model_version": "0.1.0"
+    }
+  ],
+  "handshakes": [
+    {
+      "convention_refs": [],
+      "evidence_ids": [
+        "org.diffpes.evidence.03.graphene.closed_form",
+        "org.diffpes.evidence.03.damascelli.kinematics",
+        "org.diffpes.evidence.03.chinook.kz",
+        "org.diffpes.evidence.03.chinook.tilt",
+        "org.diffpes.evidence.03.chinook.mesh",
+        "org.diffpes.evidence.03.polarization.spherical_basis"
+      ],
+      "model_refs": [],
+      "owner_id": "org.diffpes.plan.03",
+      "transformation_refs": [
+        "org.diffpes.transform.kspace.fractional_cartesian@1.0.0",
+        "org.diffpes.transform.kinematics.detector_angle_kpar@1.0.0",
+        "org.diffpes.transform.kinematics.inner_potential@1.0.0",
+        "org.diffpes.transform.polarization.detector_frame@1.0.0"
+      ]
+    }
+  ],
+  "schema_version": "1.0.0",
+  "transformations": [
+    {
+      "transformation_id": "org.diffpes.transform.amplitude.intensity",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.band.incoherent_sum",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.kinematics.detector_angle_kpar",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.kinematics.inner_potential",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.kspace.fractional_cartesian",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.normalization.zscore",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.polarization.detector_frame",
+      "transformation_version": "1.0.0"
+    },
+    {
+      "transformation_id": "org.diffpes.transform.resolution.energy_voigt",
+      "transformation_version": "1.0.0"
+    }
+  ]
+}

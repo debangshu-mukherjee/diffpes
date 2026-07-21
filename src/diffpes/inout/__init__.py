@@ -35,6 +35,8 @@ Routine Listings
     Sum orbital projections over a set of atoms.
 :func:`attach_certificate_h5`
     Attach a certificate atomically to an HDF5 result file.
+:func:`certificate_identity`
+    Compute the scientific identity of a canonical certificate.
 :func:`apply_kpath_ticks`
     Apply symmetry-point ticks/labels from KPathInfo to an axis.
 :func:`check_consistency`
@@ -43,6 +45,8 @@ Routine Listings
     Return supported preset names for projected band scatter plots.
 :func:`load_from_h5`
     Load PyTrees from an HDF5 file.
+:func:`finalize_certificate`
+    Replace the kernel placeholder with the canonical identity.
 :func:`load_certificate_h5`
     Load a certificate embedded in an HDF5 result file.
 :func:`load_certificate_json`
@@ -84,6 +88,8 @@ functions convert the parsed data to JAX arrays.
 
 from .certificate import (
     attach_certificate_h5,
+    certificate_identity,
+    finalize_certificate,
     load_certificate_h5,
     load_certificate_json,
     save_certificate_json,
@@ -114,7 +120,9 @@ __all__: list[str] = [
     "aggregate_atoms",
     "apply_kpath_ticks",
     "attach_certificate_h5",
+    "certificate_identity",
     "check_consistency",
+    "finalize_certificate",
     "list_band_scatter_presets",
     "load_certificate_h5",
     "load_certificate_json",

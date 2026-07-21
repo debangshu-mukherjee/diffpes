@@ -2,7 +2,7 @@
 
 Extended Summary
 ----------------
-Exercises the introspected recursive codec over all nineteen carrier classes,
+Exercises the introspected recursive codec over all twenty-two carrier classes,
 including nested modules, static tuple metadata, complex arrays, and absent
 optional leaves.
 """
@@ -25,7 +25,10 @@ from diffpes.types import (
     make_crystal_geometry,
     make_density_of_states,
     make_diagonalized_bands,
+    make_experiment_geometry,
     make_full_density_of_states,
+    make_kgrid,
+    make_kpath,
     make_kpath_info,
     make_orbital_basis,
     make_orbital_projection,
@@ -77,8 +80,21 @@ def _all_carriers() -> dict[str, eqx.Module]:
             energy, jnp.ones(2), jnp.arange(2.0), natoms=0
         ),
         "geometry": make_crystal_geometry(
-            jnp.eye(3), jnp.zeros((1, 3)), ("X",), [1]
+            jnp.eye(3),
+            jnp.zeros((1, 3)),
+            ("X",),
         ),
+        "experiment": make_experiment_geometry(
+            21.2,
+            jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.complex128),
+        ),
+        "generated_kpath": make_kpath(
+            kpoints,
+            labels=("G", "X"),
+            label_indices=(0, 1),
+            n_per_segment=2,
+        ),
+        "kgrid": make_kgrid(kpoints, mesh_shape=(1, 2)),
         "kpath": make_kpath_info(2, [0, 1], segments=1, labels=("G", "X")),
         "simulation": make_simulation_params(fidelity=16),
         "polarization": make_polarization_config(),
@@ -115,7 +131,7 @@ def test_all_carriers_round_trip_bitwise() -> None:
 
     Extended Summary
     ----------------
-    Saves all nineteen deterministic carriers into one HDF5 file and reloads
+    Saves all twenty-two deterministic carriers into one HDF5 file and reloads
     them together. Each reconstructed module must retain its exact class,
     numerical leaves, nested modules, optional ``None`` leaves, and static
     metadata.

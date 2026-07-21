@@ -27,6 +27,10 @@ The package contains these submodules:
     Trace differentiable information flow through forward models.
 - :mod:`evidence`
     Build differentiable evidence for certified forward models.
+- :mod:`resolvers`
+    Resolve certificate artifacts and verify external evidence.
+- :mod:`reproduction`
+    Reproduce a certified forward result from resolved artifacts.
 - :mod:`policy`
     Evaluate cumulative scientific-certification policies.
 - :mod:`execution`
@@ -35,6 +39,8 @@ The package contains these submodules:
     Render forward-model certificates in a human-readable form.
 - :mod:`models`
     Register built-in certified DiffPES forward models.
+- :mod:`waivers`
+    Validate bounded policy-waiver records at the I/O boundary.
 
 Routine Listings
 ----------------
@@ -50,6 +56,8 @@ Routine Listings
     Return canonical bytes for a supported carrier or PyTree.
 :func:`certify_forward`
     Execute a prepared model and produce a certified JAX PyTree.
+:func:`certify_forward_checked`
+    Execute certification and return structured hard-domain errors.
 :func:`checksum_bytes`
     Return a non-security consistency checksum for ``data``.
 :func:`checksum_chunks`
@@ -60,6 +68,10 @@ Routine Listings
     Stream a canonical carrier into a consistency checksum.
 :func:`compose_transformations`
     Compose contracts and raise for unsatisfied requirements.
+:func:`clear_dependency_cache`
+    Clear the eager cache for structural dependency analyses.
+:func:`dependency_cache_info`
+    Return cache size, hit count, and miss count.
 :func:`dependency_map`
     Trace leaf-level structural and local numerical dependencies.
 :func:`derivative_evidence`
@@ -82,6 +94,8 @@ Routine Listings
     Explain one claim and the numerical evidence supporting it.
 :func:`freeze_registry`
     Prevent later registration and return the final immutable snapshot.
+:func:`filesystem_artifact_resolver`
+    Resolve a byte-valued artifact from its local locator.
 :func:`get_check`
     Resolve a registered JAX certification check.
 :func:`get_model`
@@ -100,6 +114,8 @@ Routine Listings
     Evaluate a forward model and retain its JVP linearization.
 :func:`list_checks`
     List registered checks in deterministic identity order.
+:func:`list_handshakes`
+    Return owner handshakes in deterministic identity order.
 :func:`list_models`
     Return model specifications in deterministic identity order.
 :func:`list_registered_models`
@@ -108,8 +124,14 @@ Routine Listings
     Return transformation contracts in deterministic identity order.
 :func:`parse_checksum`
     Parse and validate one checksum string.
+:func:`packaged_model_card`
+    Read the packaged generated card for one model identity.
 :func:`prepare_certification`
     Resolve static scientific records before compiled execution.
+:func:`mapping_artifact_resolver`
+    Build a deterministic resolver from normalized in-memory values.
+:func:`register_handshake`
+    Register declarative requirements from one owning plan.
 :func:`register_builtin_models`
     Register built-in models and information-loss transformations.
 :func:`register_check`
@@ -120,6 +142,16 @@ Routine Listings
     Register an exact transformation contract once.
 :func:`registry_snapshot`
     Return one internally consistent immutable registry snapshot.
+:func:`registry_manifest`
+    Read the packaged registry manifest.
+:func:`render_model_card`
+    Render a model card directly from a model specification.
+:func:`reproduce_forward`
+    Re-execute a registered model and compare its recorded result.
+:func:`require_active_waivers`
+    Reject malformed, expired, or premature waiver records.
+:func:`resolve_artifact`
+    Resolve and validate one referenced artifact.
 :func:`result_checksum`
     Identify a result under a declared numerical configuration.
 :func:`semantic_checksum`
@@ -134,10 +166,20 @@ Routine Listings
     Validate and conservatively compose transformation semantics.
 :func:`validate_contract`
     Return structural errors for a raw or deserialized contract.
+:func:`validate_handshake`
+    Validate one owner handshake against available records.
 :func:`validate_provenance`
     Re-evaluate graph structure and derived state independently.
 :func:`validate_registry`
     Recompute registry structure and consistency checksums.
+:func:`validate_registry_manifest`
+    Compare the packaged registry manifest with live entries.
+:func:`validate_waiver`
+    Validate one waiver against an explicit absolute UTC time.
+:func:`validate_waivers`
+    Validate multiple waivers against one explicit absolute UTC time.
+:func:`verify_evidence`
+    Verify referenced artifacts and recorded numerical residuals.
 :func:`verify_certificate`
     Re-evaluate numerical claim and policy consistency without a rerun.
 """
@@ -164,6 +206,8 @@ from .contracts import (
     validate_contract,
 )
 from .dependencies import (
+    clear_dependency_cache,
+    dependency_cache_info,
     dependency_map,
     information_spectrum,
     linearized_forward,
@@ -177,6 +221,7 @@ from .evidence import (
 )
 from .execution import (
     certify_forward,
+    certify_forward_checked,
     prepare_certification,
     verify_certificate,
 )
@@ -198,14 +243,29 @@ from .registry import (
     freeze_registry,
     get_model,
     get_transformation,
+    list_handshakes,
     list_models,
     list_registered_models,
     list_transformations,
+    packaged_model_card,
+    register_handshake,
     register_model,
     register_transformation,
+    registry_manifest,
     registry_snapshot,
+    render_model_card,
+    validate_handshake,
     validate_registry,
+    validate_registry_manifest,
 )
+from .reproduction import reproduce_forward
+from .resolvers import (
+    filesystem_artifact_resolver,
+    mapping_artifact_resolver,
+    resolve_artifact,
+    verify_evidence,
+)
+from .waivers import require_active_waivers, validate_waiver, validate_waivers
 
 __all__: list[str] = [
     "achieved_levels",
@@ -214,11 +274,14 @@ __all__: list[str] = [
     "canonical_json",
     "canonical_pytree",
     "certify_forward",
+    "certify_forward_checked",
     "checksum_bytes",
     "checksum_chunks",
     "checksum_file",
     "checksum_pytree",
     "compose_transformations",
+    "clear_dependency_cache",
+    "dependency_cache_info",
     "dependency_map",
     "derivative_evidence",
     "diff_certificates",
@@ -229,6 +292,7 @@ __all__: list[str] = [
     "evaluate_policy",
     "execute_tb_radial",
     "explain_claim",
+    "filesystem_artifact_resolver",
     "freeze_registry",
     "get_check",
     "get_model",
@@ -238,17 +302,26 @@ __all__: list[str] = [
     "iter_canonical_pytree_chunks",
     "lineage",
     "linearized_forward",
+    "list_handshakes",
     "list_models",
     "list_checks",
     "list_registered_models",
     "list_transformations",
     "parse_checksum",
+    "packaged_model_card",
     "prepare_certification",
+    "mapping_artifact_resolver",
+    "register_handshake",
     "register_model",
     "register_builtin_models",
     "register_check",
     "register_transformation",
+    "registry_manifest",
     "registry_snapshot",
+    "render_model_card",
+    "reproduce_forward",
+    "require_active_waivers",
+    "resolve_artifact",
     "result_checksum",
     "semantic_checksum",
     "sensitivity_map",
@@ -256,7 +329,12 @@ __all__: list[str] = [
     "tb_radial_model_spec",
     "validate_composition",
     "validate_contract",
+    "validate_handshake",
     "validate_provenance",
     "validate_registry",
+    "validate_registry_manifest",
+    "validate_waiver",
+    "validate_waivers",
+    "verify_evidence",
     "verify_certificate",
 ]

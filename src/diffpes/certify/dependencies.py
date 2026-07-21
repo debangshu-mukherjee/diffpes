@@ -10,6 +10,10 @@ actual forward program.
 
 Routine Listings
 ----------------
+:func:`clear_dependency_cache`
+    Clear the eager cache for structural dependency analyses.
+:func:`dependency_cache_info`
+    Return cache size, hit count, and miss count.
 :func:`dependency_map`
     Trace leaf-level structural and local numerical dependencies.
 :func:`information_spectrum`
@@ -20,10 +24,14 @@ Routine Listings
     Measure scaled JVP sensitivities for a batch of tangent directions.
 """
 
+import threading
+from functools import cache
+
 import jax
 import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Any, Callable, Optional
+from jax import core
 from jaxtyping import Array, Float, PyTree, jaxtyped
 
 from diffpes.types import (
@@ -35,6 +43,37 @@ from diffpes.types import (
     make_sensitivity_map,
 )
 from diffpes.utils import pack_complex, unpack_complex
+
+
+class _DependencyCacheState:
+    """Store eager structural analyses for static model configurations."""
+
+    def __init__(self) -> None:
+        self.entries: dict[tuple[Any, ...], tuple[PyTree, Array]] = {}
+        self.hits: int = 0
+        self.misses: int = 0
+        self.lock = threading.RLock()
+
+
+@cache
+def _dependency_cache_state() -> _DependencyCacheState:
+    """Return the process-local cache for structural dependency analyses."""
+    state: _DependencyCacheState = _DependencyCacheState()
+    return state
+
+
+def _abstract_signature(tree: PyTree) -> tuple[Any, ...]:
+    """Return a hashable signature for one static input configuration."""
+    leaves: list[Any] = jax.tree.leaves(tree)
+    leaf_signatures: tuple[tuple[tuple[int, ...], str], ...] = tuple(
+        (tuple(jnp.shape(leaf)), str(jnp.asarray(leaf).dtype))
+        for leaf in leaves
+    )
+    signature: tuple[Any, ...] = (
+        str(jax.tree.structure(tree)),
+        leaf_signatures,
+    )
+    return signature
 
 
 def _path_names(tree: PyTree) -> tuple[str, ...]:
@@ -89,6 +128,108 @@ def _structural_dependencies(
     structural: Array = jnp.stack(rows, axis=0)
     result: tuple[PyTree, Array] = (output, structural)
     return result
+
+
+def _dependency_structure(
+    model_id: str,
+    forward_fn: Callable[[PyTree], PyTree],
+    inputs: PyTree,
+) -> tuple[PyTree, Array]:
+    """Resolve one cached structural analysis outside compiled execution.
+
+    The cache key includes the model ID, callable, tree, shapes, and dtypes.
+
+    Parameters
+    ----------
+    model_id : str
+        Permanent model identity and cache namespace.
+    forward_fn : Callable[[PyTree], PyTree]
+        Pure JAX forward function.
+    inputs : PyTree
+        Numerical inputs for one static shape and dtype configuration.
+
+    Returns
+    -------
+    result : tuple[PyTree, Array]
+        Abstract output and output-by-input structural dependency matrix.
+
+    Notes
+    -----
+    The cache holds concrete abstract records only. Traced calls do not update
+    process state.
+    """
+    contains_tracer: bool = any(
+        isinstance(leaf, core.Tracer) for leaf in jax.tree.leaves(inputs)
+    )
+    if contains_tracer:
+        result: tuple[PyTree, Array] = _structural_dependencies(
+            forward_fn, inputs
+        )
+        return result
+    key: tuple[Any, ...] = (
+        model_id,
+        id(forward_fn),
+        *_abstract_signature(inputs),
+    )
+    state: _DependencyCacheState = _dependency_cache_state()
+    with state.lock:
+        cached: tuple[PyTree, Array] | None = state.entries.get(key)
+        if cached is not None:
+            state.hits += 1
+            return cached
+    result = _structural_dependencies(forward_fn, inputs)
+    with state.lock:
+        state.entries[key] = result
+        state.misses += 1
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def clear_dependency_cache() -> None:
+    """Clear the eager cache for structural dependency analyses.
+
+    The function resets process-local orchestration state between evaluations.
+
+    :see: :class:`~.test_dependencies.TestClearDependencyCache`
+
+    Notes
+    -----
+    The function changes orchestration state only. It does not run in a JAX
+    numerical kernel.
+    """
+    state: _DependencyCacheState = _dependency_cache_state()
+    with state.lock:
+        state.entries.clear()
+        state.hits = 0
+        state.misses = 0
+
+
+@jaxtyped(typechecker=beartype)
+def dependency_cache_info() -> tuple[int, int, int]:
+    """Return cache size, hit count, and miss count.
+
+    The tuple gives deterministic counters for structural cache tests.
+
+    :see: :class:`~.test_dependencies.TestDependencyCacheInfo`
+
+    Returns
+    -------
+    info : tuple[int, int, int]
+        Entry count, hit count, and miss count.
+
+    Notes
+    -----
+    The counters measure eager structural analysis. They do not measure a JAX
+    compilation cache.
+    """
+    state: _DependencyCacheState = _dependency_cache_state()
+    with state.lock:
+        info: tuple[int, int, int] = (
+            len(state.entries),
+            state.hits,
+            state.misses,
+        )
+    return info
 
 
 def _leaf_direction(inputs: PyTree, leaf_index: int) -> PyTree:
@@ -196,10 +337,8 @@ def dependency_map(
     The traced matrix is differentiable only through its continuous JVP
     source. Thresholded Boolean entries do not carry useful gradients.
     """
-    index: Any
-    structural_evaluation: tuple[PyTree, Array] = _structural_dependencies(
-        forward_fn,
-        inputs,
+    structural_evaluation: tuple[PyTree, Array] = _dependency_structure(
+        model_id, forward_fn, inputs
     )
     abstract_output: PyTree = structural_evaluation[0]
     structural: Array = structural_evaluation[1]
@@ -208,6 +347,57 @@ def dependency_map(
         inputs,
     )
     pushforward: Callable[[PyTree], PyTree] = linearized[1]
+    result: DependencyMap = _dependency_map_from_linearization(
+        model_id,
+        inputs,
+        abstract_output,
+        structural,
+        pushforward,
+        threshold=threshold,
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def _dependency_map_from_linearization(
+    model_id: str,
+    inputs: PyTree,
+    output: PyTree,
+    structural: Array,
+    pushforward: Callable[[PyTree], PyTree],
+    *,
+    threshold: float = 1e-12,
+) -> DependencyMap:
+    """Build a dependency map from one retained JAX linearization.
+
+    The function reuses the supplied pushforward for every numerical probe.
+
+    Parameters
+    ----------
+    model_id : str
+        Permanent scientific model identity (**static**).
+    inputs : PyTree
+        Numerical inputs at the linearization point.
+    output : PyTree
+        Forward output at the linearization point.
+    structural : Array
+        Output-by-input structural dependency matrix.
+    pushforward : Callable[[PyTree], PyTree]
+        Retained JVP linear map.
+    threshold : float
+        Positive local-response threshold. Default 1e-12.
+
+    Returns
+    -------
+    result : DependencyMap
+        Structural and local numerical dependency matrices.
+
+    Notes
+    -----
+    A false traced entry gives local evidence only. It does not establish
+    global independence.
+    """
+    index: Any
     n_inputs: int = len(jax.tree.leaves(inputs))
     numerical_rows: list[Array] = []
     for index in range(n_inputs):
@@ -225,7 +415,7 @@ def dependency_map(
     result: DependencyMap = make_dependency_map(
         model_id=model_id,
         input_paths=_path_names(inputs),
-        output_paths=_path_names(abstract_output),
+        output_paths=_path_names(output),
         structural=structural,
         traced=traced,
     )
@@ -299,6 +489,53 @@ def sensitivity_map(
         inputs,
     )
     pushforward: Callable[[PyTree], PyTree] = linearized[1]
+    result: SensitivityMap = _sensitivity_map_from_linearization(
+        input_paths,
+        output_projection_ids,
+        directions,
+        scales,
+        pushforward,
+        threshold=threshold,
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def _sensitivity_map_from_linearization(
+    input_paths: tuple[str, ...],
+    output_projection_ids: tuple[str, ...],
+    directions: PyTree,
+    scales: Float[Array, " n_input"],
+    pushforward: Callable[[PyTree], PyTree],
+    *,
+    threshold: float = 1e-12,
+) -> SensitivityMap:
+    """Measure scaled sensitivities from one retained JAX linearization.
+
+    Parameters
+    ----------
+    input_paths : tuple[str, ...]
+        Stable input-coordinate names (**static**).
+    output_projection_ids : tuple[str, ...]
+        Stable output-projection names (**static**).
+    directions : PyTree
+        Batched tangent directions with a leading probe axis.
+    scales : Float[Array, " n_input"]
+        Positive physical scale for each input direction.
+    pushforward : Callable[[PyTree], PyTree]
+        Retained JVP linear map.
+    threshold : float
+        Absolute activity threshold. Default 1e-12.
+
+    Returns
+    -------
+    result : SensitivityMap
+        Scaled output-by-input sensitivities and activity indicators.
+
+    Notes
+    -----
+    The function does not evaluate or linearize the nonlinear model again.
+    """
     responses: Array = jax.vmap(pushforward)(directions)
     response_array: Array = jnp.reshape(responses, (responses.shape[0], -1))
     scaled: Array = (response_array * scales[:, None]).T
@@ -456,11 +693,6 @@ def information_spectrum(  # noqa: PLR0915
     result : InformationSpectrum
         Leading singular values, right vectors, rank, and condition estimate.
 
-    Raises
-    ------
-    ValueError
-        If output weights have the wrong shape or the effective rank is empty.
-
     Notes
     -----
     The subspace iteration and eigendecomposition remain JAX differentiable.
@@ -486,28 +718,93 @@ def information_spectrum(  # noqa: PLR0915
     )
     flat_output: Array = linearized[0]
     pushforward: Callable[[Array], Array] = linearized[1]
-    vjp_result: tuple[Array, Callable[[Array], tuple[Array]]] = jax.vjp(
-        flat_forward,
+    transposed: Callable[[Array], tuple[Array]] = jax.linear_transpose(
+        pushforward,
         flat_inputs,
     )
-    pullback: Callable[[Array], tuple[Array]] = vjp_result[1]
+
+    def pullback(cotangent: Array) -> Array:
+        pulled: Array = transposed(cotangent)[0]
+        return pulled
+
+    result: InformationSpectrum = _information_spectrum_from_linearization(
+        inputs,
+        flat_output,
+        pushforward,
+        pullback,
+        input_paths=input_paths,
+        output_weights=output_weights,
+        rank=rank,
+        iterations=iterations,
+        threshold=threshold,
+    )
+    return result
+
+
+@jaxtyped(typechecker=beartype)
+def _information_spectrum_from_linearization(  # noqa: PLR0913
+    inputs: PyTree,
+    flat_output: Float[Array, " n_output"],
+    pushforward: Callable[[Array], Array],
+    pullback: Callable[[Array], Array],
+    *,
+    input_paths: Optional[tuple[str, ...]] = None,
+    output_weights: Optional[Float[Array, " n_output"]] = None,
+    rank: int = 8,
+    iterations: int = 8,
+    threshold: float = 1e-10,
+) -> InformationSpectrum:
+    """Estimate an information spectrum from one retained linearization.
+
+    The function applies supplied JVP and transpose maps. It does not evaluate
+    or linearize the nonlinear model again.
+
+    Parameters
+    ----------
+    inputs : PyTree
+        Numerical inputs at the linearization point.
+    flat_output : Float[Array, " n_output"]
+        Forward output in independent real coordinates.
+    pushforward : Callable[[Array], Array]
+        Linear map from real input coordinates to real output coordinates.
+    pullback : Callable[[Array], Array]
+        Transpose map from real output coordinates to real input coordinates.
+    input_paths : Optional[tuple[str, ...]]
+        Names for flattened real input coordinates. Default None.
+    output_weights : Optional[Float[Array, " n_output"]]
+        Nonnegative output metric weights. Default None.
+    rank : int
+        Requested leading spectrum rank (**static**). Default 8.
+    iterations : int
+        Number of subspace iterations (**static**). Default 8.
+    threshold : float
+        Singular-value activity threshold. Default 1e-10.
+
+    Returns
+    -------
+    result : InformationSpectrum
+        Leading singular values, right vectors, rank, and condition estimate.
+
+    Raises
+    ------
+    ValueError
+        If metric weights have the wrong shape or the inputs are empty.
+    """
+    flat_inputs: Array = _ravel_real_pytree(inputs)[0]
     weights: Array = (
         jnp.ones_like(flat_output)
         if output_weights is None
         else jnp.asarray(output_weights, dtype=flat_output.real.dtype)
     )
     if weights.shape != flat_output.shape:
-        msg: str = "output_weights must match the flattened forward output"
-        raise ValueError(msg)
+        raise ValueError("output_weights must match the flattened output")
     effective_rank_limit: int = min(rank, flat_inputs.size, flat_output.size)
     if effective_rank_limit < 1:
-        msg: str = "rank must be positive for non-empty inputs and outputs"
-        raise ValueError(msg)
+        raise ValueError("rank requires non-empty inputs and outputs")
 
     def normal(vector: Array) -> Array:
         response: Array = pushforward(vector)
-        cotangent: Array = weights * response
-        pulled: Array = pullback(cotangent)[0]
+        pulled: Array = pullback(weights * response)
         result: Array = jnp.real(pulled)
         return result
 
@@ -521,32 +818,27 @@ def information_spectrum(  # noqa: PLR0915
 
     def iteration(_: Array, basis: Array) -> Array:
         updated: Array = apply_columns(basis)
-        decomposition: tuple[Array, Array] = jnp.linalg.qr(
-            updated,
-            mode="reduced",
-        )
-        orthogonal: Array = decomposition[0]
+        orthogonal: Array = jnp.linalg.qr(updated, mode="reduced")[0]
         return orthogonal
 
     subspace = jax.lax.fori_loop(0, iterations, iteration, subspace)
     projected: Array = subspace.T @ apply_columns(subspace)
-    eigenpairs: tuple[Array, Array] = jnp.linalg.eigh(projected)
-    eigenvalues: Array = eigenpairs[0]
-    eigenvectors_small: Array = eigenpairs[1]
+    eigenvalues: Array
+    eigenvectors_small: Array
+    eigenvalues, eigenvectors_small = jnp.linalg.eigh(projected)
     order: Array = jnp.argsort(eigenvalues)[::-1]
     eigenvalues = jnp.maximum(eigenvalues[order], 0.0)
     right_vectors: Array = (subspace @ eigenvectors_small[:, order]).T
     singular_values: Array = jnp.sqrt(eigenvalues)
     active: Array = singular_values > threshold
     effective_rank: Array = jnp.sum(active, dtype=jnp.int32)
-    largest: Array = singular_values[0]
     smallest_active: Array = jnp.min(
         jnp.where(active, singular_values, jnp.inf)
     )
     condition: Array = jnp.where(
         effective_rank > 0,
-        largest / smallest_active,
-        jnp.inf,
+        singular_values[0] / smallest_active,
+        0.0,
     )
     paths: tuple[str, ...] = (
         _element_paths(inputs) if input_paths is None else input_paths
@@ -565,6 +857,8 @@ def information_spectrum(  # noqa: PLR0915
 
 
 __all__: list[str] = [
+    "clear_dependency_cache",
+    "dependency_cache_info",
     "dependency_map",
     "information_spectrum",
     "linearized_forward",

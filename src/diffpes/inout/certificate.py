@@ -13,6 +13,10 @@ Routine Listings
 ----------------
 :func:`attach_certificate_h5`
     Attach a certificate atomically to an HDF5 result file.
+:func:`certificate_identity`
+    Compute the scientific identity of a canonical certificate.
+:func:`finalize_certificate`
+    Replace the kernel placeholder with the canonical identity.
 :func:`load_certificate_h5`
     Load a certificate embedded in an HDF5 result file.
 :func:`load_certificate_json`
@@ -68,6 +72,7 @@ from diffpes.types import (
     PolicyReport,
     SensitivityMap,
     TransformationRecord,
+    WaiverRecord,
     make_artifact_ref,
     make_certification_claim,
     make_convention_ref,
@@ -83,6 +88,7 @@ from diffpes.types import (
     make_policy_report,
     make_sensitivity_map,
     make_transformation_record,
+    make_waiver_record,
 )
 
 
@@ -104,6 +110,7 @@ def _module_factories() -> dict[type[Any], Callable[..., Any]]:
         PolicyReport: make_policy_report,
         SensitivityMap: make_sensitivity_map,
         TransformationRecord: make_transformation_record,
+        WaiverRecord: make_waiver_record,
     }
     return factories
 
@@ -183,6 +190,31 @@ def _storage_checksum(document: Mapping[str, Any]) -> str:
     value: int = zlib.crc32(_json_bytes(payload, newline=False))
     checksum: str = f"crc32:certificate-json-v1:{value & 0xFFFFFFFF:08x}"
     return checksum
+
+
+def _identity_payload(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Return canonical scientific fields without audit-only identities."""
+    payload: dict[str, Any] = {
+        "format": document["format"],
+        "schema_version": document["schema_version"],
+        "certificate": json.loads(json.dumps(document["certificate"])),
+        "extensions": document["extensions"],
+    }
+    fields_node: dict[str, Any] = payload["certificate"]["fields"]
+    fields_node.pop("certificate_checksum", None)
+    manifest_fields: dict[str, Any] = fields_node["manifest"]["fields"]
+    manifest_fields.pop("execution_id", None)
+    manifest_fields.pop("started_at_utc", None)
+    return payload
+
+
+def _document_identity(document: Mapping[str, Any]) -> str:
+    """Return the non-security identity of a certificate document."""
+    value: int = zlib.crc32(
+        _json_bytes(_identity_payload(document), newline=False)
+    )
+    identity: str = f"crc32:canonical-1:certificate:{value & 0xFFFFFFFF:08x}"
+    return identity
 
 
 def _encode_array(value: object) -> dict[str, Any]:
@@ -313,8 +345,34 @@ def _parse_extensions(certificate: ForwardCertificate) -> dict[str, Any]:
     return normalized
 
 
-def _certificate_document(certificate: ForwardCertificate) -> dict[str, Any]:
-    """Build the complete portable document for one certificate."""
+@jaxtyped(typechecker=beartype)
+def certificate_identity(certificate: ForwardCertificate) -> str:
+    """Compute the scientific identity of a canonical certificate.
+
+    The identity covers scientific and numerical fields. It excludes the
+    self-reference, audit execution ID, and wall-clock timestamp. The CRC32
+    value detects accidental mismatches and does not authenticate the record.
+
+    :see: :class:`~.test_certificate.TestCertificateIdentity`
+
+    Implementation Logic
+    --------------------
+    1. **Compute the canonical identity**::
+
+           identity = _document_identity(document)
+
+       The canonical payload omits only the self-reference and audit fields.
+
+    Parameters
+    ----------
+    certificate : ForwardCertificate
+        Concrete certificate at the persistence boundary.
+
+    Returns
+    -------
+    identity : str
+        Stable non-security identity for the scientific execution record.
+    """
     schema_version: str = certificate.manifest.schema_version
     _parse_schema_version(schema_version)
     document: dict[str, Any] = {
@@ -322,6 +380,72 @@ def _certificate_document(certificate: ForwardCertificate) -> dict[str, Any]:
         "schema_version": schema_version,
         "certificate": _encode_value(certificate, root=True),
         "extensions": _parse_extensions(certificate),
+    }
+    identity: str = _document_identity(document)
+    return identity
+
+
+@jaxtyped(typechecker=beartype)
+def finalize_certificate(
+    certificate: ForwardCertificate,
+) -> ForwardCertificate:
+    """Replace the kernel placeholder with the canonical identity.
+
+    Canonical encoding stays outside JAX tracing because it has no scientific
+    derivative. The returned certificate retains every scientific leaf.
+
+    :see: :class:`~.test_certificate.TestFinalizeCertificate`
+
+    Implementation Logic
+    --------------------
+    1. **Replace the placeholder**::
+
+           identity = certificate_identity(certificate)
+
+       The factory copies every other certificate field without modification.
+
+    Parameters
+    ----------
+    certificate : ForwardCertificate
+        Concrete certificate produced by the JAX-native execution kernel.
+
+    Returns
+    -------
+    result : ForwardCertificate
+        Equivalent certificate with its final canonical identity.
+    """
+    identity: str = certificate_identity(certificate)
+    result: ForwardCertificate = make_forward_certificate(
+        manifest=certificate.manifest,
+        model=certificate.model,
+        artifacts=certificate.artifacts,
+        transformations=certificate.transformations,
+        evidence=certificate.evidence,
+        claims=certificate.claims,
+        domains=certificate.domains,
+        derivatives=certificate.derivatives,
+        dependencies=certificate.dependencies,
+        sensitivities=certificate.sensitivities,
+        information=certificate.information,
+        policy_report=certificate.policy_report,
+        policy_id=certificate.policy_id,
+        certificate_checksum=identity,
+        extensions_json=certificate.extensions_json,
+        waivers=certificate.waivers,
+    )
+    return result
+
+
+def _certificate_document(certificate: ForwardCertificate) -> dict[str, Any]:
+    """Build the complete portable document for one certificate."""
+    finalized: ForwardCertificate = finalize_certificate(certificate)
+    schema_version: str = finalized.manifest.schema_version
+    _parse_schema_version(schema_version)
+    document: dict[str, Any] = {
+        "format": CERTIFICATE_FORMAT,
+        "schema_version": schema_version,
+        "certificate": _encode_value(finalized, root=True),
+        "extensions": _parse_extensions(finalized),
     }
     document["consistency_checksum"] = _storage_checksum(document)
     return document
@@ -620,6 +744,22 @@ def _certificate_from_document(document: dict[str, Any]) -> ForwardCertificate:
         document["schema_version"]
     )
     minor: int = parsed_schema[1]
+    certificate_node: Any = document["certificate"]
+    exc: KeyError | TypeError
+    try:
+        stored_identity: Any = certificate_node["fields"][
+            "certificate_checksum"
+        ]
+    except (KeyError, TypeError) as exc:
+        msg: str = "certificate has no canonical identity"
+        raise ValueError(msg) from exc
+    expected_identity: str = _document_identity(document)
+    if (
+        minor <= CERTIFICATE_SCHEMA_MINOR
+        and stored_identity != expected_identity
+    ):
+        msg = "certificate canonical identity mismatch"
+        raise ValueError(msg)
     extensions: dict[str, Any] = dict(document["extensions"])
     extra: dict[str, Any] = {
         key: value
@@ -958,6 +1098,8 @@ def load_certificate_h5(
 
 __all__: list[str] = [
     "attach_certificate_h5",
+    "certificate_identity",
+    "finalize_certificate",
     "load_certificate_h5",
     "load_certificate_json",
     "save_certificate_json",

@@ -13,6 +13,11 @@ Validation and regression tests for :mod:`diffpes.tightb`.
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: tests.test_diffpes.test_tightb.test_kspace
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: tests.test_diffpes.test_tightb.test_projections
    :members:
    :undoc-members:

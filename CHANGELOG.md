@@ -9,6 +9,9 @@ and the project uses calendar versioning.
 
 ### Changed
 
+- `CrystalGeometry` now follows the roadmap field contract. It uses
+  `lattice`, `reciprocal`, `positions`, and static per-atom `species`.
+  `read_poscar` expands VASP species counts at the parser boundary.
 - The package merges `orbital_constants` and `vasp_constants` into
   `diffpes.types.constants`. The package removes both old modules without
   compatibility shims. Cross-subpackage constants are now public and omit
@@ -46,6 +49,19 @@ and the project uses calendar versioning.
 
 ### Added
 
+- Plan 03 adds `ExperimentGeometry`, generated `KPath`, and fixed-shape
+  `KGrid` carriers. Their factories keep numerical geometry inside JAX.
+- The tight-binding layer now builds labeled paths, first-zone masks, fixed
+  ARPES rasters, and photon-energy rasters. It uses one explicit conversion
+  between fractional and Cartesian momentum. First-zone masks use a static
+  shell with a conservative completeness proof. They raise an error when the
+  selected shell or reciprocal basis cannot certify the requested geometry.
+- The simulation layer now provides free-electron final-state kinematics and
+  complex inner-potential momentum. It also provides invertible detector-angle
+  maps for both slit conventions.
+- The polarization layer now constructs explicit complex states, converts
+  them to spherical components, and rotates detector grids. A shared
+  Rodrigues primitive rotates polarization and real frame vectors.
 - JAX-native certified forward execution is now a defining capability.
   It provides typed certificate PyTrees and deterministic registries for models
   and transformations. It also provides provenance graphs, information-loss
