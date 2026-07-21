@@ -9,6 +9,19 @@ and the project uses calendar versioning.
 
 ### Changed
 
+- Merged `diffpes.types.orbital_constants` and `diffpes.types.vasp_constants`
+  into `diffpes.types.constants` and deleted the two modules (zero-legacy, no
+  shims). All constants consumed across subpackages are now public, renamed by
+  dropping their leading underscore (e.g. `_EPS` → `EPS`, `_N_ORBITALS` →
+  `N_ORBITALS`, `_PHASE_LOSS_MESSAGE` → `PHASE_LOSS_MESSAGE`), and re-exported
+  through `diffpes.types`; only module-internal intermediates remain private.
+  `diffpes.types.constants` now imports JAX (orbital direction tables are
+  device arrays) and is no longer dependency-light.
+- Adopted the generalized import rule (see CONTRIBUTING): cross-subpackage
+  imports must use the source subpackage's public surface
+  (`from diffpes.<sub> import name`), never a file inside it; fixed the last
+  offenders (`simul/workflow.py` deep imports into `diffpes.inout`).
+
 - Scoped the Plan 01 pre-commit Ruff hooks to their source, test, and project
   metadata floor, and enabled manual CI dispatch for gate verification.
 - Replaced every registered `NamedTuple` carrier with a types-owned

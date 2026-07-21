@@ -155,7 +155,10 @@ cross-sections and adds polarization-dependent selection rules: the
 intensity of each orbital channel is weighted by
 $|\hat{\varepsilon} \cdot \vec{d}\,|^2$, where $\hat{\varepsilon}$ is
 the light's electric-field direction. We choose p-polarized light
-incident at 45 degrees, a common experimental geometry.
+(`"LHP"`, linear horizontal — in the plane of incidence) incident at
+45 degrees, a common experimental geometry. The other polarization
+tokens are `"LVP"` (s-pol), `"RCP"`/`"LCP"` (circular), `"LAP"`
+(linear arbitrary), and `"unpolarized"`.
 
 ```{code-cell} ipython3
 spectrum_adv = diffpes.simul.simulate_expanded(
@@ -167,7 +170,7 @@ spectrum_adv = diffpes.simul.simulate_expanded(
     fidelity=2000,
     temperature=30.0,
     photon_energy=21.2,
-    polarization="p",
+    polarization="LHP",
     incident_theta=45.0,
 )
 print(f"intensity shape: {spectrum_adv.intensity.shape}")

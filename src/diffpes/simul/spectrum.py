@@ -40,6 +40,7 @@ from beartype import beartype
 from jaxtyping import Array, Complex, Float, jaxtyped
 
 from diffpes.types import (
+    NON_S_ORBITAL_SLICE,
     ArpesSpectrum,
     BandStructure,
     OrbitalProjection,
@@ -49,7 +50,6 @@ from diffpes.types import (
     SpinOrbitalProjection,
     make_arpes_spectrum,
 )
-from diffpes.types.orbital_constants import _NON_S_ORBITAL_SLICE
 
 from .broadening import fermi_dirac, gaussian, voigt
 from .crosssections import heuristic_weights, yeh_lindau_weights
@@ -137,7 +137,7 @@ def simulate_novice(
     )
     proj: Float[Array, "K B A 9"] = orb_proj.projections
     weights: Float[Array, "K B"] = jnp.sum(
-        jnp.sum(proj[..., _NON_S_ORBITAL_SLICE], axis=-1),
+        jnp.sum(proj[..., NON_S_ORBITAL_SLICE], axis=-1),
         axis=-1,
     )
 
@@ -285,7 +285,7 @@ def simulate_basic(
     orb_w: Float[Array, " 9"] = heuristic_weights(params.photon_energy)
     proj: Float[Array, "K B A 9"] = orb_proj.projections
     weighted_proj: Float[Array, "K B A 8"] = (
-        proj[..., _NON_S_ORBITAL_SLICE] * orb_w[_NON_S_ORBITAL_SLICE]
+        proj[..., NON_S_ORBITAL_SLICE] * orb_w[NON_S_ORBITAL_SLICE]
     )
     weights: Float[Array, "K B"] = jnp.sum(
         jnp.sum(weighted_proj, axis=-1), axis=-1
@@ -438,7 +438,7 @@ def simulate_basicplus(
     weighted_proj: Float[Array, "K B A 9"] = proj * orb_w
     weights: Float[Array, "K B"] = jnp.sum(
         jnp.sum(
-            weighted_proj[..., _NON_S_ORBITAL_SLICE],
+            weighted_proj[..., NON_S_ORBITAL_SLICE],
             axis=-1,
         ),
         axis=-1,
@@ -616,11 +616,11 @@ def simulate_advanced(
         w_s: Float[Array, "K B A 9"] = proj * orb_w * m_s
         w_p: Float[Array, "K B A 9"] = proj * orb_w * m_p
         ws_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_s[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_s[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         wp_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_p[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_p[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         i_s: Float[Array, "K B"] = jnp.abs(ws_sum) ** 2
@@ -632,7 +632,7 @@ def simulate_advanced(
         weighted: Float[Array, "K B A 9"] = proj * orb_w * m_elem
         w_sum: Float[Array, "K B"] = jnp.sum(
             jnp.sum(
-                weighted[..., _NON_S_ORBITAL_SLICE],
+                weighted[..., NON_S_ORBITAL_SLICE],
                 axis=-1,
             ),
             axis=-1,
@@ -810,11 +810,11 @@ def simulate_expert(
         w_s: Float[Array, "K B A 9"] = proj * orb_w * m_s
         w_p: Float[Array, "K B A 9"] = proj * orb_w * m_p
         ws_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_s[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_s[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         wp_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_p[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_p[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         i_s: Float[Array, "K B"] = jnp.abs(ws_sum) ** 2
@@ -826,7 +826,7 @@ def simulate_expert(
         weighted: Float[Array, "K B A 9"] = proj * orb_w * m_elem
         w_sum: Float[Array, "K B"] = jnp.sum(
             jnp.sum(
-                weighted[..., _NON_S_ORBITAL_SLICE],
+                weighted[..., NON_S_ORBITAL_SLICE],
                 axis=-1,
             ),
             axis=-1,
@@ -993,11 +993,11 @@ def simulate_soc(
         w_s: Float[Array, "K B A 9"] = proj * orb_w * m_s
         w_p: Float[Array, "K B A 9"] = proj * orb_w * m_p
         ws_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_s[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_s[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         wp_sum: Float[Array, "K B"] = jnp.sum(
-            jnp.sum(w_p[..., _NON_S_ORBITAL_SLICE], axis=-1),
+            jnp.sum(w_p[..., NON_S_ORBITAL_SLICE], axis=-1),
             axis=-1,
         )
         i_s: Float[Array, "K B"] = jnp.abs(ws_sum) ** 2
@@ -1009,7 +1009,7 @@ def simulate_soc(
         weighted: Float[Array, "K B A 9"] = proj * orb_w * m_elem
         w_sum: Float[Array, "K B"] = jnp.sum(
             jnp.sum(
-                weighted[..., _NON_S_ORBITAL_SLICE],
+                weighted[..., NON_S_ORBITAL_SLICE],
                 axis=-1,
             ),
             axis=-1,

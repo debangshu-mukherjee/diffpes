@@ -1,64 +1,317 @@
-r"""Dependency-light numerical and physical constants used by diffpes.
+r"""Numerical, physical, orbital, and VASP-format constants for diffpes.
 
 Extended Summary
 ----------------
-Single home for the scalar constants shared across subpackages, kept
-free of JAX imports so it can be imported anywhere without side
-effects. Physical constants (CODATA values in eV-based units: the
+Single home for the scalar and small-array constants shared across
+subpackages. Physical constants (CODATA values in eV-based units: the
 Bohr-to-Angstrom conversion, :math:`\hbar c` in eV Angstrom,
 :math:`\hbar` in eV s, :math:`k_B` in eV/K, and the electron rest
 energy in eV) fix the unit system stated in the conventions charter —
-energies in eV, lengths in Angstrom. Numerical guards (epsilon floors,
-minimum-sum thresholds, the small-argument cutoff for spherical Bessel
-seeds, and the Faddeeva Taylor-series order) centralize the tolerances
-that keep kernels finite and differentiable near singular points.
-The physical constants and :obj:`L_MAX` are public API;
-underscore-prefixed numerical guards are private implementation
-details.
+energies in eV, lengths in Angstrom. Numerical tolerances (epsilon
+floors, minimum-sum thresholds, the small-argument cutoff for
+spherical Bessel seeds, and the Faddeeva Taylor-series order)
+centralize the values that keep kernels finite and differentiable
+near singular points. Orbital conventions (the VASP nine-orbital
+ordering, index slices, magnetic quantum numbers, and normalized
+orbital directions) pin the projection basis every subpackage shares.
+VASP-format constants (parser token counts, column layouts, block
+counts, HDF5 attribute names, and plotting preset names) pin the
+declarative structure of the file formats ``diffpes.inout`` reads
+and writes. Everything consumed outside ``diffpes.types`` is public
+and re-exported through :mod:`diffpes.types`; the only private names
+are module-internal intermediates.
 
 Routine Listings
 ----------------
+:obj:`ATTR_AUX`
+    HDF5 attribute name storing auxiliary PyTree data as JSON.
+:obj:`ATTR_NONE`
+    HDF5 attribute name listing PyTree fields stored as None.
+:obj:`ATTR_TYPE`
+    HDF5 attribute name storing the PyTree type name.
+:obj:`BAND_LINE_MIN_VALUES`
+    Minimum tokens on an EIGENVAL band line.
+:obj:`BAND_LINE_SPIN_VALUES`
+    Tokens on a spin-polarized EIGENVAL band line.
+:obj:`BAND_NDIM`
+    Expected dimensionality of band-energy arrays.
 :obj:`BOHR_TO_ANGSTROM`
     Bohr radius in Angstrom.
+:obj:`COORDINATE_MODE_TOKENS`
+    Recognized KPOINTS coordinate-mode tokens.
+:obj:`D_ORBITAL_SLICE`
+    Slice selecting the five d orbitals.
+:obj:`EIG_DOWN_INDEX`
+    Column index of spin-down eigenvalues in EIGENVAL.
+:obj:`EIG_UP_INDEX`
+    Column index of spin-up eigenvalues in EIGENVAL.
+:obj:`ENERGY_AXIS_NDIM`
+    Expected dimensionality of energy-axis arrays.
+:obj:`EPS`
+    Epsilon floor guarding divisions and norms.
+:obj:`FLOAT_TOKEN_RE`
+    Compiled regex matching floating-point tokens.
+:obj:`GAUNT_IMAG_TOL`
+    Tolerance for discarding imaginary Gaunt residues.
 :obj:`HBAR_C_EV_A`
     Reduced Planck constant times c in eV Angstrom.
 :obj:`HBAR_EV_S`
     Reduced Planck constant in eV s.
+:obj:`INTENSITY_NDIM`
+    Expected dimensionality of intensity arrays.
+:obj:`ISPIN2_BLOCKS`
+    PROCAR block count for ISPIN=2 calculations.
+:obj:`ISPIN_SPIN_POLARIZED`
+    ISPIN value marking spin-polarized VASP runs.
 :obj:`KB_EV_PER_K`
     Boltzmann constant in eV per kelvin.
+:obj:`KPATH_AUX_WITH_COMMENT_LEN`
+    KPathInfo auxiliary-data length including a comment.
+:obj:`KPATH_AUX_WITH_COORD_MODE_LEN`
+    KPathInfo auxiliary-data length including a coordinate mode.
+:obj:`KPOINT_LINE_VALUES`
+    Tokens on an EIGENVAL k-point line.
 :obj:`L_MAX`
     Maximum angular momentum supported by the precomputed table.
+:obj:`LATTICE_ROWS`
+    Number of lattice-vector rows in POSCAR/CHGCAR headers.
+:obj:`M_D`
+    Magnetic quantum numbers of the d orbitals.
+:obj:`M_P`
+    Magnetic quantum numbers of the p orbitals.
 :obj:`ME_EV`
     Electron rest energy in eV.
+:obj:`MIN_SUM`
+    Minimum-sum floor guarding normalizations.
+:obj:`N_ORBITALS`
+    Number of orbitals in the VASP projection basis.
+:obj:`N_SOC_MAG_BLOCKS`
+    Magnetization block count in SOC CHGCAR files.
+:obj:`N_SPIN_COMPONENTS`
+    Spin-projection component count in PROCAR.
+:obj:`N_TAYLOR`
+    Taylor-series order for the Faddeeva evaluation.
+:obj:`NON_S_ORBITAL_SLICE`
+    Slice selecting all non-s orbitals.
+:obj:`NONSPIN_COLS`
+    DOSCAR column count without spin polarization.
+:obj:`NORM_EPS`
+    Epsilon floor guarding eigenvector normalization.
+:obj:`ORBITAL_DIRS_NORMALIZED`
+    Unit-normalized orbital directions in VASP orbital order.
+:obj:`ORBITAL_INDEX`
+    Mapping from orbital name to VASP orbital index.
+:obj:`P_ORBITAL_SLICE`
+    Slice selecting the three p orbitals.
+:obj:`PHASE_LOSS_MESSAGE`
+    Warning text for PROCAR magnitude-only eigenvectors.
+:obj:`PRESET_NAMES`
+    Recognized band-scatter plotting preset names.
+:obj:`S_IDX`
+    Index of the s orbital.
+:obj:`SCALAR_LINE_COMPONENTS`
+    Tokens on a scalar CHGCAR header line.
+:obj:`SMALL_ARGUMENT`
+    Small-argument cutoff for spherical Bessel seeds.
+:obj:`SOC_BLOCKS`
+    PROCAR block count for SOC calculations.
+:obj:`SPIN_COLS`
+    DOSCAR column count with spin polarization.
+:obj:`WEIGHT_COMPONENT_COUNT`
+    Tokens on a weighted k-point line.
+:obj:`WEIGHT_COMPONENT_INDEX`
+    Index of the weight token on a k-point line.
+:obj:`XYZ_COMPONENTS`
+    Number of Cartesian vector components.
 
 Notes
 -----
-Changing a private guard value here changes the numerical behavior of
-every consumer at once; treat edits as physics changes requiring the
+Changing a tolerance here changes the numerical behavior of every
+consumer at once; treat edits as physics changes requiring the
 grad-vs-finite-difference gates to be rerun, not as free refactors.
+This module imports JAX (the orbital tables are device arrays), so it
+is not import-side-effect-free; constants that must stay importable
+without JAX do not belong here.
 """
 
+import re
+from types import MappingProxyType
+
+import jax.numpy as jnp
 from beartype.typing import Final
+from jaxtyping import Array, Float
 
-_EPS: Final[float] = 1e-12
-_GAUNT_IMAG_TOL: Final[float] = 1e-12
-_MIN_SUM: Final[float] = 1e-30
-_NORM_EPS: Final[float] = 1e-12
-_N_TAYLOR: Final[int] = 64
-_SMALL_ARGUMENT: Final[float] = 1e-8
-
+ATTR_AUX: Final[str] = "_aux_data_json"
+ATTR_NONE: Final[str] = "_none_fields"
+ATTR_TYPE: Final[str] = "_pytree_type"
+BAND_LINE_MIN_VALUES: Final[int] = 2
+BAND_LINE_SPIN_VALUES: Final[int] = 3
+BAND_NDIM: Final[int] = 2
 BOHR_TO_ANGSTROM: Final[float] = 0.529177
+COORDINATE_MODE_TOKENS: Final[frozenset[str]] = frozenset(
+    {"cartesian", "reciprocal", "direct", "fractional"}
+)
+D_ORBITAL_SLICE: Final[slice] = slice(4, 9)
+EIG_DOWN_INDEX: Final[int] = 2
+EIG_UP_INDEX: Final[int] = 1
+ENERGY_AXIS_NDIM: Final[int] = 1
+EPS: Final[float] = 1e-12
+FLOAT_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
+    r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+)
+GAUNT_IMAG_TOL: Final[float] = 1e-12
 HBAR_C_EV_A: Final[float] = 1973.269804
 HBAR_EV_S: Final[float] = 6.582119569e-16
+INTENSITY_NDIM: Final[int] = 2
+ISPIN2_BLOCKS: Final[int] = 2
+ISPIN_SPIN_POLARIZED: Final[int] = 2
 KB_EV_PER_K: Final[float] = 8.617333e-5
+KPATH_AUX_WITH_COMMENT_LEN: Final[int] = 3
+KPATH_AUX_WITH_COORD_MODE_LEN: Final[int] = 4
+KPOINT_LINE_VALUES: Final[int] = 4
 L_MAX: Final[int] = 4
+LATTICE_ROWS: Final[int] = 3
+M_D: Float[Array, " 5"] = jnp.array(
+    [-2.0, -1.0, 0.0, 1.0, 2.0], dtype=jnp.float64
+)
+M_P: Float[Array, " 3"] = jnp.array([1.0, 0.0, -1.0], dtype=jnp.float64)
 ME_EV: Final[float] = 510998.95
+MIN_SUM: Final[float] = 1e-30
+N_ORBITALS: Final[int] = 9
+N_SOC_MAG_BLOCKS: Final[int] = 3
+N_SPIN_COMPONENTS: Final[int] = 6
+N_TAYLOR: Final[int] = 64
+NON_S_ORBITAL_SLICE: Final[slice] = slice(1, 9)
+NONSPIN_COLS: Final[int] = 3
+NORM_EPS: Final[float] = 1e-12
+ORBITAL_INDEX: Final[MappingProxyType] = MappingProxyType(
+    {
+        "s": 0,
+        "py": 1,
+        "pz": 2,
+        "px": 3,
+        "dxy": 4,
+        "dyz": 5,
+        "dz2": 6,
+        "dxz": 7,
+        "dx2y2": 8,
+    }
+)
+P_ORBITAL_SLICE: Final[slice] = slice(1, 4)
+PHASE_LOSS_MESSAGE: Final[str] = (
+    "vasp_to_diagonalized uses sqrt(|c|^2) magnitudes from PROCAR and cannot "
+    "recover complex eigenvector phases. Matrix elements that depend on phase "
+    "interference are approximate."
+)
+PRESET_NAMES: Final[tuple[str, ...]] = (
+    "s",
+    "py",
+    "pz",
+    "px",
+    "p",
+    "dxy",
+    "dyz",
+    "dz2",
+    "dxz",
+    "dx2y2",
+    "d",
+    "non_s",
+    "total",
+    "spin_x_up",
+    "spin_x_down",
+    "spin_y_up",
+    "spin_y_down",
+    "spin_z_up",
+    "spin_z_down",
+    "spin_x",
+    "spin_y",
+    "spin_z",
+    "oam_p",
+    "oam_d",
+    "oam_total",
+    "oam_abs_total",
+)
+S_IDX: Final[int] = 0
+SCALAR_LINE_COMPONENTS: Final[int] = 3
+SMALL_ARGUMENT: Final[float] = 1e-8
+SOC_BLOCKS: Final[int] = 4
+SPIN_COLS: Final[int] = 5
+WEIGHT_COMPONENT_COUNT: Final[int] = 4
+WEIGHT_COMPONENT_INDEX: Final[int] = 3
+XYZ_COMPONENTS: Final[int] = 3
+
+_ORBITAL_DIRS: Float[Array, "9 3"] = jnp.array(
+    [
+        [0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, -1.0, 0.0],
+    ],
+    dtype=jnp.float64,
+)
+_ORBITAL_NORMS: Float[Array, " 9"] = jnp.where(
+    jnp.linalg.norm(_ORBITAL_DIRS, axis=1) > 0.0,
+    jnp.linalg.norm(_ORBITAL_DIRS, axis=1),
+    1.0,
+)
+ORBITAL_DIRS_NORMALIZED: Float[Array, "9 3"] = (
+    _ORBITAL_DIRS / _ORBITAL_NORMS[:, jnp.newaxis]
+)
 
 __all__: list[str] = [
+    "ATTR_AUX",
+    "ATTR_NONE",
+    "ATTR_TYPE",
+    "BAND_LINE_MIN_VALUES",
+    "BAND_LINE_SPIN_VALUES",
+    "BAND_NDIM",
     "BOHR_TO_ANGSTROM",
+    "COORDINATE_MODE_TOKENS",
+    "D_ORBITAL_SLICE",
+    "EIG_DOWN_INDEX",
+    "EIG_UP_INDEX",
+    "ENERGY_AXIS_NDIM",
+    "EPS",
+    "FLOAT_TOKEN_RE",
+    "GAUNT_IMAG_TOL",
     "HBAR_C_EV_A",
     "HBAR_EV_S",
+    "INTENSITY_NDIM",
+    "ISPIN2_BLOCKS",
+    "ISPIN_SPIN_POLARIZED",
     "KB_EV_PER_K",
+    "KPATH_AUX_WITH_COMMENT_LEN",
+    "KPATH_AUX_WITH_COORD_MODE_LEN",
+    "KPOINT_LINE_VALUES",
     "L_MAX",
+    "LATTICE_ROWS",
+    "M_D",
+    "M_P",
     "ME_EV",
+    "MIN_SUM",
+    "N_ORBITALS",
+    "N_SOC_MAG_BLOCKS",
+    "N_SPIN_COMPONENTS",
+    "N_TAYLOR",
+    "NON_S_ORBITAL_SLICE",
+    "NONSPIN_COLS",
+    "NORM_EPS",
+    "ORBITAL_DIRS_NORMALIZED",
+    "ORBITAL_INDEX",
+    "P_ORBITAL_SLICE",
+    "PHASE_LOSS_MESSAGE",
+    "PRESET_NAMES",
+    "S_IDX",
+    "SCALAR_LINE_COMPONENTS",
+    "SMALL_ARGUMENT",
+    "SOC_BLOCKS",
+    "SPIN_COLS",
+    "WEIGHT_COMPONENT_COUNT",
+    "WEIGHT_COMPONENT_INDEX",
+    "XYZ_COMPONENTS",
 ]

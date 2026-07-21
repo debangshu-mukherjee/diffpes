@@ -17,8 +17,6 @@ Routine Listings
     Run an end-to-end VASP-to-ARPES workflow in one call.
 :func:`simulate_context`
     Run a level-dispatched simulation from a loaded workflow context.
-:class:`WorkflowContext`
-    Container for parsed VASP inputs used by workflow helpers.
 """
 
 from pathlib import Path
@@ -28,11 +26,14 @@ from beartype import beartype
 from beartype.typing import Literal, Optional, cast
 from jaxtyping import Array, Float
 
-from diffpes.inout.doscar import read_doscar
-from diffpes.inout.eigenval import read_eigenval
-from diffpes.inout.helpers import check_consistency, select_atoms
-from diffpes.inout.kpoints import read_kpoints
-from diffpes.inout.procar import read_procar
+from diffpes.inout import (
+    check_consistency,
+    read_doscar,
+    read_eigenval,
+    read_kpoints,
+    read_procar,
+    select_atoms,
+)
 from diffpes.types import (
     ArpesSpectrum,
     BandStructure,

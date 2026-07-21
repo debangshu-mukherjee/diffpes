@@ -43,18 +43,16 @@ from matplotlib.image import AxesImage
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
+    BAND_NDIM,
+    ENERGY_AXIS_NDIM,
+    INTENSITY_NDIM,
+    ORBITAL_INDEX,
+    PRESET_NAMES,
     ArpesSpectrum,
     BandStructure,
     KPathInfo,
     OrbitalProjection,
     SpinOrbitalProjection,
-)
-from diffpes.types.orbital_constants import _ORBITAL_INDEX
-from diffpes.types.vasp_constants import (
-    _BAND_NDIM,
-    _ENERGY_AXIS_NDIM,
-    _INTENSITY_NDIM,
-    _PRESET_NAMES,
 )
 
 
@@ -104,10 +102,10 @@ def _prepare_plot_arrays(
     energy_axis: Float[NDArray, " E"] = np.asarray(
         spectrum.energy_axis, dtype=np.float64
     )
-    if intensity.ndim != _INTENSITY_NDIM:
+    if intensity.ndim != INTENSITY_NDIM:
         msg: str = "Expected spectrum.intensity to have shape (K, E)."
         raise ValueError(msg)
-    if energy_axis.ndim != _ENERGY_AXIS_NDIM:
+    if energy_axis.ndim != ENERGY_AXIS_NDIM:
         msg = "Expected spectrum.energy_axis to have shape (E,)."
         raise ValueError(msg)
     if intensity.shape[1] != energy_axis.shape[0]:
@@ -405,7 +403,7 @@ def list_band_scatter_presets() -> tuple[str, ...]:
         Available preset names accepted by
         :func:`plot_band_scatter_preset`.
     """
-    return _PRESET_NAMES
+    return PRESET_NAMES
 
 
 @beartype
@@ -416,7 +414,7 @@ def _prepare_band_arrays(
     eigenvalues: Float[NDArray, "K B"] = np.asarray(
         bands.eigenvalues, dtype=np.float64
     )
-    if eigenvalues.ndim != _BAND_NDIM:
+    if eigenvalues.ndim != BAND_NDIM:
         msg: str = "Expected bands.eigenvalues to have shape (K, B)."
         raise ValueError(msg)
     fermi: float = float(np.asarray(bands.fermi_energy, dtype=np.float64))
@@ -464,8 +462,8 @@ def _weights_from_preset(  # noqa: PLR0912
     weights: Optional[Float[NDArray, "K B"]] = None
     signed: bool = False
 
-    if key in _ORBITAL_INDEX:
-        idx: int = _ORBITAL_INDEX[key]
+    if key in ORBITAL_INDEX:
+        idx: int = ORBITAL_INDEX[key]
         weights = np.sum(proj[..., idx], axis=2)
     elif key in orbital_shells:
         weights = np.sum(proj[..., orbital_shells[key]], axis=(2, 3))
@@ -530,7 +528,7 @@ def _weights_from_preset(  # noqa: PLR0912
             signed = False
 
     if weights is None:
-        presets: str = ", ".join(_PRESET_NAMES)
+        presets: str = ", ".join(PRESET_NAMES)
         msg = f"Unknown preset '{preset}'. Available presets: {presets}."
         raise ValueError(msg)
     return weights, signed

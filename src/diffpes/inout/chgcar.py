@@ -24,16 +24,14 @@ from jaxtyping import Array, Float, Int, jaxtyped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
+    LATTICE_ROWS,
+    N_SOC_MAG_BLOCKS,
+    SCALAR_LINE_COMPONENTS,
+    XYZ_COMPONENTS,
     SOCVolumetricData,
     VolumetricData,
     make_soc_volumetric_data,
     make_volumetric_data,
-)
-from diffpes.types.vasp_constants import (
-    _LATTICE_ROWS,
-    _N_SOC_MAG_BLOCKS,
-    _SCALAR_LINE_COMPONENTS,
-    _XYZ_COMPONENTS,
 )
 
 
@@ -164,7 +162,7 @@ def read_chgcar(
     # Read all remaining grid blocks (up to 3 for SOC: mx, my, mz)
     mag_grids: list[Float[NDArray, "Nx Ny Nz"]] = []
     scan_idx: int = end_idx
-    while len(mag_grids) < _N_SOC_MAG_BLOCKS:
+    while len(mag_grids) < N_SOC_MAG_BLOCKS:
         next_idx: Optional[int]
         next_shape: tuple[int, int, int]
         next_idx, next_shape = _find_next_grid_line(rest_lines, scan_idx)
@@ -186,7 +184,7 @@ def read_chgcar(
     )
     counts_arr: Int[Array, " S"] = jnp.asarray(atom_counts, dtype=jnp.int32)
 
-    if len(mag_grids) == _N_SOC_MAG_BLOCKS:
+    if len(mag_grids) == N_SOC_MAG_BLOCKS:
         # SOC: blocks are mx, my, mz
         mag_vector: Float[NDArray, "Nx Ny Nz 3"] = np.stack(mag_grids, axis=-1)
         result_soc: SOCVolumetricData = make_soc_volumetric_data(
@@ -282,15 +280,15 @@ def _read_poscar_header(
     scale: float = float(fid.readline().strip())
 
     lattice: Float[NDArray, "3 3"] = np.zeros(
-        (_LATTICE_ROWS, _XYZ_COMPONENTS),
+        (LATTICE_ROWS, XYZ_COMPONENTS),
         dtype=np.float64,
     )
-    for row in range(_LATTICE_ROWS):
+    for row in range(LATTICE_ROWS):
         vals: list[float] = [float(x) for x in fid.readline().split()]
-        if len(vals) < _XYZ_COMPONENTS:
+        if len(vals) < XYZ_COMPONENTS:
             msg: str = "Invalid CHGCAR lattice line."
             raise ValueError(msg)
-        lattice[row, :] = vals[:_XYZ_COMPONENTS]
+        lattice[row, :] = vals[:XYZ_COMPONENTS]
     lattice = lattice * scale
 
     line: str = fid.readline().strip()
@@ -307,11 +305,11 @@ def _read_poscar_header(
     cartesian: bool = bool(coord_line) and coord_line[0].lower() in ("c", "k")
 
     coords: Float[NDArray, "N 3"] = np.zeros(
-        (natoms, _XYZ_COMPONENTS), dtype=np.float64
+        (natoms, XYZ_COMPONENTS), dtype=np.float64
     )
     for atom_idx in range(natoms):
-        vals = [float(x) for x in fid.readline().split()[:_XYZ_COMPONENTS]]
-        if len(vals) < _XYZ_COMPONENTS:
+        vals = [float(x) for x in fid.readline().split()[:XYZ_COMPONENTS]]
+        if len(vals) < XYZ_COMPONENTS:
             msg: str = "Invalid CHGCAR coordinate line."
             raise ValueError(msg)
         coords[atom_idx, :] = vals
@@ -369,7 +367,7 @@ def _find_next_grid_line(
         if not stripped:
             continue
         parts: list[str] = stripped.split()
-        if len(parts) != _SCALAR_LINE_COMPONENTS:
+        if len(parts) != SCALAR_LINE_COMPONENTS:
             continue
         try:
             values: tuple[int, int, int] = (

@@ -43,8 +43,7 @@ from beartype.typing import Optional, Union
 from jaxtyping import Array, Float, jaxtyped
 
 from .aliases import ScalarNumeric
-from .orbital_constants import _N_ORBITALS
-from .vasp_constants import _N_SPIN_COMPONENTS
+from .constants import N_ORBITALS, N_SPIN_COMPONENTS
 
 
 class BandStructure(eqx.Module):
@@ -210,12 +209,12 @@ def make_spin_orbital_projection(
         raise ValueError(
             "make_spin_orbital_projection: projections and spin axes disagree"
         )
-    if proj_arr.shape[3] != _N_ORBITALS:
+    if proj_arr.shape[3] != N_ORBITALS:
         raise ValueError(
             "make_spin_orbital_projection: projections must have "
-            f"{_N_ORBITALS} orbital columns"
+            f"{N_ORBITALS} orbital columns"
         )
-    if spin_arr.shape[3] != _N_SPIN_COMPONENTS:
+    if spin_arr.shape[3] != N_SPIN_COMPONENTS:
         raise ValueError(
             "make_spin_orbital_projection: spin must have 6 component columns"
         )
@@ -672,10 +671,10 @@ def make_orbital_projection(
     if oam is not None:
         oam_arr = jnp.asarray(oam, dtype=jnp.float64)
 
-    if proj_arr.shape[3] != _N_ORBITALS:
+    if proj_arr.shape[3] != N_ORBITALS:
         raise ValueError(
             "make_orbital_projection: projections must have "
-            f"{_N_ORBITALS} orbital columns"
+            f"{N_ORBITALS} orbital columns"
         )
     if spin_arr is not None and proj_arr.shape[:3] != spin_arr.shape[:3]:
         raise ValueError(

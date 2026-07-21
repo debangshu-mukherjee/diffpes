@@ -483,11 +483,11 @@ class TestPlotBandScatterEdgeCases(chex.TestCase):
         plt.close(fig)
 
     def test_s_orbital_preset(self):
-        """'s' preset uses _ORBITAL_INDEX branch (lines 497-498).
+        """'s' preset uses ORBITAL_INDEX branch (lines 497-498).
 
         Calls ``plot_band_scatter_preset`` with ``preset='s'``. Asserts
         that the scatter renders without error and the point count is
-        correct (exercises the ``_ORBITAL_INDEX[key]`` branch).
+        correct (exercises the ``ORBITAL_INDEX[key]`` branch).
         """
         nk, nb = 6, 2
         eigen = jnp.linspace(-1.0, 0.5, nk * nb, dtype=jnp.float64).reshape(

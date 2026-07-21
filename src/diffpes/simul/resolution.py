@@ -26,8 +26,7 @@ from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
 from diffpes.maths import safe_divide
-from diffpes.types import ScalarFloat
-from diffpes.types.constants import _EPS
+from diffpes.types import EPS, ScalarFloat
 
 
 @jaxtyped(typechecker=beartype)
@@ -105,7 +104,7 @@ def apply_momentum_broadening(
     usage scales as ``O(K^2)``.
     """
     dk_arr: Float[Array, ""] = jnp.asarray(dk, dtype=jnp.float64)
-    safe_dk: Float[Array, ""] = jnp.maximum(dk_arr, _EPS)
+    safe_dk: Float[Array, ""] = jnp.maximum(dk_arr, EPS)
     k_i: Float[Array, " K 1"] = k_distances[:, jnp.newaxis]
     k_j: Float[Array, " 1 K"] = k_distances[jnp.newaxis, :]
     scaled_distances: Float[Array, " K K"] = safe_divide(k_i - k_j, safe_dk)

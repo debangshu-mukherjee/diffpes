@@ -20,7 +20,7 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, Integer, jaxtyped
 
-from diffpes.types.constants import _SMALL_ARGUMENT
+from diffpes.types import SMALL_ARGUMENT
 
 
 def _odd_double_factorial(order: int) -> float:
@@ -102,7 +102,7 @@ def spherical_bessel_jl(
 
     **Small-argument limit:**
 
-    For :math:`|x| < 10^{-8}` (the module constant ``_SMALL_ARGUMENT``),
+    For :math:`|x| < 10^{-8}` (the module constant ``SMALL_ARGUMENT``),
     the function uses the leading-order Taylor expansion:
 
     .. math::
@@ -156,7 +156,7 @@ def spherical_bessel_jl(
         raise ValueError(msg)
 
     x_arr: Float[Array, " ..."] = jnp.asarray(x, dtype=jnp.float64)
-    small_mask: Float[Array, " ..."] = jnp.abs(x_arr) < _SMALL_ARGUMENT
+    small_mask: Float[Array, " ..."] = jnp.abs(x_arr) < SMALL_ARGUMENT
     # The series branch carries the nonzero analytic limiting gradient.
     x_safe: Float[Array, " ..."] = jnp.where(small_mask, 1.0, x_arr)
 

@@ -6,10 +6,9 @@ Tabulated physical data shared by the simulation layer, stored as
 JAX arrays so they can be consumed directly inside jitted kernels.
 Currently holds the simplified Yeh-Lindau photoionization
 cross-section tabulation: the photon-energy grid and the s, p, and
-d subshell cross sections evaluated on it. Unlike
-:mod:`diffpes.types.constants`, this module imports JAX and is not
-dependency-light; tables that must stay importable without JAX do
-not belong here.
+d subshell cross sections evaluated on it. Like
+:mod:`diffpes.types.constants`, this module imports JAX so its
+tables are device arrays consumable directly inside jitted kernels.
 
 Routine Listings
 ----------------

@@ -669,7 +669,7 @@ class TestReadDoscarPdosHeader(chex.TestCase):
 
         Uses the DOSCAR_pdos_header fixture where each atom's PDOS block
         starts with a 4-value header line (EMIN EMAX NEDOS EFERMI).
-        The condition ``_NONSPIN_COLS <= len(line_vals) <= _SPIN_COLS``
+        The condition ``NONSPIN_COLS <= len(line_vals) <= SPIN_COLS``
         is True (4 values), so lines 204-221 are executed. Asserts the
         PDOS array has the correct shape (1 atom, 3 energy points, 9
         orbital columns).
@@ -720,7 +720,7 @@ class TestReadDoscarPdosHeader(chex.TestCase):
         """PDOS block whose header is followed by an empty line exercises doscar.py line 206.
 
         Writes a DOSCAR with natoms=1, NEDOS=3 where the PDOS block has a
-        4-value header line (satisfying ``_NONSPIN_COLS <= len <= _SPIN_COLS``)
+        4-value header line (satisfying ``NONSPIN_COLS <= len <= SPIN_COLS``)
         immediately followed by an empty line. The parser reads the header
         (line 204), then reads the empty line as ``pdos_ncols_check`` and
         hits ``if not pdos_ncols_check.strip(): break`` on line 205-206.
@@ -1071,7 +1071,7 @@ class TestReadKpointsErrors(chex.TestCase):
         """_looks_like_kpoint_line returns False for non-numeric 3-token lines (lines 270-276).
 
         Uses an Explicit KPOINTS where ``mode_line`` is not in
-        ``_COORDINATE_MODE_TOKENS`` (mode = "Explicit") and the first
+        ``COORDINATE_MODE_TOKENS`` (mode = "Explicit") and the first
         remaining line has 3 tokens but the first is non-numeric.
         Asserts the mode header is consumed correctly as coord_mode.
         """
@@ -1095,7 +1095,7 @@ class TestReadKpointsErrors(chex.TestCase):
         """_looks_like_kpoint_line returns True when all three tokens are floats (lines 272-273, 276).
 
         Uses an Explicit KPOINTS where ``mode_line`` ("explicit") is not in
-        ``_COORDINATE_MODE_TOKENS`` and the first remaining line has three
+        ``COORDINATE_MODE_TOKENS`` and the first remaining line has three
         numeric tokens ("0.0 0.0 0.0 1.0"). All three float() calls succeed
         (lines 272-273 executed), so the function reaches ``return True``
         (line 276). This means ``remaining_lines.pop(0)`` is NOT called and

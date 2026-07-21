@@ -20,13 +20,14 @@ import jax.numpy as jnp
 from beartype.typing import Optional
 from jaxtyping import Array, Float, Int
 
-from diffpes.types import KPathInfo, make_kpath_info
-from diffpes.types.vasp_constants import (
-    _COORDINATE_MODE_TOKENS,
-    _FLOAT_TOKEN_RE,
-    _WEIGHT_COMPONENT_COUNT,
-    _WEIGHT_COMPONENT_INDEX,
-    _XYZ_COMPONENTS,
+from diffpes.types import (
+    COORDINATE_MODE_TOKENS,
+    FLOAT_TOKEN_RE,
+    WEIGHT_COMPONENT_COUNT,
+    WEIGHT_COMPONENT_INDEX,
+    XYZ_COMPONENTS,
+    KPathInfo,
+    make_kpath_info,
 )
 
 
@@ -124,7 +125,7 @@ def read_kpoints(  # noqa: PLR0915
             ]
             coord_mode = scheme_or_mode
             if (
-                mode_line not in _COORDINATE_MODE_TOKENS
+                mode_line not in COORDINATE_MODE_TOKENS
                 and remaining_lines
                 and not _looks_like_kpoint_line(remaining_lines[0])
             ):
@@ -227,12 +228,12 @@ def _parse_explicit_kpoints(
         except ValueError as exc:
             msg = f"Invalid explicit KPOINTS coordinate line: {stripped!r}"
             raise ValueError(msg) from exc
-        if len(parts) < _XYZ_COMPONENTS:
+        if len(parts) < XYZ_COMPONENTS:
             msg = "Explicit KPOINTS line must contain at least 3 coordinates."
             raise ValueError(msg)
-        points.append(parts[:_XYZ_COMPONENTS])
-        if len(parts) >= _WEIGHT_COMPONENT_COUNT:
-            weights.append(parts[_WEIGHT_COMPONENT_INDEX])
+        points.append(parts[:XYZ_COMPONENTS])
+        if len(parts) >= WEIGHT_COMPONENT_COUNT:
+            weights.append(parts[WEIGHT_COMPONENT_INDEX])
         else:
             weights.append(1.0)
     return points, weights
@@ -261,7 +262,7 @@ def _looks_like_kpoint_line(line: str) -> bool:
         all be converted to ``float``; ``False`` otherwise.
     """
     parts: list[str] = line.split()
-    if len(parts) < _XYZ_COMPONENTS:
+    if len(parts) < XYZ_COMPONENTS:
         return False
     try:
         float(parts[0])
@@ -299,7 +300,7 @@ def _parse_grid(line: str) -> list[int]:
         If the line contains fewer than 3 whitespace-separated tokens.
     """
     vals: list[str] = line.split()
-    if len(vals) < _XYZ_COMPONENTS:
+    if len(vals) < XYZ_COMPONENTS:
         msg = "Automatic KPOINTS grid line must have 3 values."
         raise ValueError(msg)
     return [
@@ -335,7 +336,7 @@ def _parse_shift(line: str) -> list[float]:
         If the line contains fewer than 3 whitespace-separated tokens.
     """
     vals: list[str] = line.split()
-    if len(vals) < _XYZ_COMPONENTS:
+    if len(vals) < XYZ_COMPONENTS:
         msg = "Automatic KPOINTS shift line must have 3 values."
         raise ValueError(msg)
     return [float(vals[0]), float(vals[1]), float(vals[2])]
@@ -346,7 +347,7 @@ def _extract_coords(line: str) -> list[float]:
 
     Extended Summary
     ----------------
-    Uses a regex (``_FLOAT_TOKEN_RE``) to find all floating-point
+    Uses a regex (``FLOAT_TOKEN_RE``) to find all floating-point
     tokens in the line, regardless of surrounding non-numeric text
     (such as symmetry labels or comment markers). This makes the
     extraction robust to various KPOINTS formatting styles.
@@ -366,8 +367,8 @@ def _extract_coords(line: str) -> list[float]:
     ValueError
         If fewer than 3 float tokens are found on the line.
     """
-    tokens: list[str] = _FLOAT_TOKEN_RE.findall(line)
-    if len(tokens) < _XYZ_COMPONENTS:
+    tokens: list[str] = FLOAT_TOKEN_RE.findall(line)
+    if len(tokens) < XYZ_COMPONENTS:
         msg = f"Could not parse k-point coordinates from line: {line!r}"
         raise ValueError(msg)
     return [float(tokens[0]), float(tokens[1]), float(tokens[2])]

@@ -33,7 +33,7 @@ from beartype import beartype
 from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
 from diffpes.maths import safe_divide
-from diffpes.types.constants import _N_TAYLOR
+from diffpes.types import N_TAYLOR
 
 
 def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
@@ -41,7 +41,7 @@ def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
 
     Extended Summary
     ----------------
-    Computes the first ``_N_TAYLOR`` coefficients of the Taylor expansion
+    Computes the first ``N_TAYLOR`` coefficients of the Taylor expansion
     of the Faddeeva function about the origin.
 
     **Mathematical derivation:**
@@ -85,7 +85,7 @@ def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
     -------
     coeffs : Complex[Array, " N"]
         Taylor coefficients :math:`[a_0, a_1, \ldots, a_{N-1}]` in
-        ascending power order, where ``N = _N_TAYLOR``.
+        ascending power order, where ``N = N_TAYLOR``.
     """
     c0: Complex[Array, " "] = jnp.array(1.0 + 0j, dtype=jnp.complex128)
     c1: Complex[Array, " "] = jnp.array(
@@ -109,7 +109,7 @@ def _faddeeva_taylor_coeffs() -> Complex[Array, " N"]:
     _, rest = jax.lax.scan(
         body,
         (c0, c1),
-        jnp.arange(_N_TAYLOR - 2, dtype=jnp.int32),
+        jnp.arange(N_TAYLOR - 2, dtype=jnp.int32),
     )
     full: Complex[Array, " N"] = jnp.concatenate([c0[None], c1[None], rest])
     return full

@@ -37,8 +37,7 @@ import numpy as np
 from jaxtyping import Array, Float
 from numpy import ndarray as NDArray  # noqa: N812
 
-from diffpes.types import L_MAX
-from diffpes.types.constants import _GAUNT_IMAG_TOL
+from diffpes.types import GAUNT_IMAG_TOL, L_MAX
 
 
 def _wigner3j(j1: int, j2: int, j3: int, m1: int, m2: int, m3: int) -> float:
@@ -362,7 +361,7 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
                 total += coeff * (-1) ** rho * cg
 
     result: float = total.real
-    if abs(total.imag) > _GAUNT_IMAG_TOL:  # pragma: no cover
+    if abs(total.imag) > GAUNT_IMAG_TOL:  # pragma: no cover
         msg: str = f"Imaginary part {total.imag} in real Gaunt coefficient"
         raise ValueError(msg)
     return result

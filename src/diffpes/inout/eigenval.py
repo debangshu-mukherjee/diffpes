@@ -27,19 +27,17 @@ from jaxtyping import Float
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
+    BAND_LINE_MIN_VALUES,
+    BAND_LINE_SPIN_VALUES,
+    EIG_DOWN_INDEX,
+    EIG_UP_INDEX,
+    ISPIN_SPIN_POLARIZED,
+    KPOINT_LINE_VALUES,
     BandStructure,
     ScalarFloat,
     SpinBandStructure,
     make_band_structure,
     make_spin_band_structure,
-)
-from diffpes.types.vasp_constants import (
-    _BAND_LINE_MIN_VALUES,
-    _BAND_LINE_SPIN_VALUES,
-    _EIG_DOWN_INDEX,
-    _EIG_UP_INDEX,
-    _ISPIN_SPIN_POLARIZED,
-    _KPOINT_LINE_VALUES,
 )
 
 
@@ -163,7 +161,7 @@ def read_eigenval(
             (nkpoints, nbands), dtype=np.float64
         )
         eigenvalues_down: Optional[Float[NDArray, "K B"]] = None
-        if ispin == _ISPIN_SPIN_POLARIZED:
+        if ispin == ISPIN_SPIN_POLARIZED:
             eigenvalues_down = np.zeros((nkpoints, nbands), dtype=np.float64)
         for k in range(nkpoints):
             kpoint_line: str = _read_next_nonempty_line(fid)
@@ -171,38 +169,38 @@ def read_eigenval(
                 msg = "Unexpected EOF while reading EIGENVAL k-point block."
                 raise ValueError(msg)
             kpoint_vals: list[float] = [float(x) for x in kpoint_line.split()]
-            if len(kpoint_vals) < _KPOINT_LINE_VALUES:
+            if len(kpoint_vals) < KPOINT_LINE_VALUES:
                 msg = "Invalid EIGENVAL k-point line; expected 4 values."
                 raise ValueError(msg)
-            kpoints[k, :] = kpoint_vals[:_KPOINT_LINE_VALUES]
+            kpoints[k, :] = kpoint_vals[:KPOINT_LINE_VALUES]
             for b in range(nbands):
                 band_line: str = _read_next_nonempty_line(fid)
                 if not band_line:
                     msg = "Unexpected EOF while reading EIGENVAL band line."
                     raise ValueError(msg)
                 vals: list[float] = [float(x) for x in band_line.split()]
-                if len(vals) < _BAND_LINE_MIN_VALUES:
+                if len(vals) < BAND_LINE_MIN_VALUES:
                     msg = "Invalid EIGENVAL band line; expected band energy."
                     raise ValueError(msg)
-                eigenvalues_up[k, b] = vals[_EIG_UP_INDEX]
+                eigenvalues_up[k, b] = vals[EIG_UP_INDEX]
                 if (
-                    ispin == _ISPIN_SPIN_POLARIZED
+                    ispin == ISPIN_SPIN_POLARIZED
                     and eigenvalues_down is not None
                 ):
-                    if len(vals) < _BAND_LINE_SPIN_VALUES:
+                    if len(vals) < BAND_LINE_SPIN_VALUES:
                         msg = (
                             "Invalid spin-polarized EIGENVAL band line; "
                             "expected spin-down energy."
                         )
                         raise ValueError(msg)
-                    eigenvalues_down[k, b] = vals[_EIG_DOWN_INDEX]
+                    eigenvalues_down[k, b] = vals[EIG_DOWN_INDEX]
         eigenvalues_up = np.sort(eigenvalues_up, axis=1)
         if eigenvalues_down is not None:
             eigenvalues_down = np.sort(eigenvalues_down, axis=1)
 
     if (
         return_mode == "full"
-        and ispin == _ISPIN_SPIN_POLARIZED
+        and ispin == ISPIN_SPIN_POLARIZED
         and eigenvalues_down is not None
     ):
         return make_spin_band_structure(

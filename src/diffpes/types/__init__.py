@@ -19,7 +19,7 @@ The submodules are organized as follows:
 - :mod:`bands`
     Band structure and orbital projection data structures.
 - :mod:`constants`
-    Dependency-light numerical and physical constants used by diffpes.
+    Numerical, physical, orbital, and VASP-format constants for diffpes.
 - :mod:`dos`
     Density of states data structures.
 - :mod:`geometry`
@@ -28,8 +28,6 @@ The submodules are organized as follows:
     K-point path information data structure.
 - :mod:`params`
     Simulation parameter data structures.
-- :mod:`orbital_constants`
-    Shared orbital ordering and direction conventions.
 - :mod:`tables`
     Small immutable numerical tables used by simulation routines.
 - :mod:`radial_params`
@@ -40,8 +38,6 @@ The submodules are organized as follows:
     Tight-binding model and diagonalized band data structures.
 - :mod:`volumetric`
     Volumetric data structures for VASP CHGCAR files.
-- :mod:`vasp_constants`
-    VASP parser and serialization conventions.
 - :mod:`context`
     High-level VASP workflow input data structures.
 
@@ -49,10 +45,24 @@ Routine Listings
 ----------------
 :class:`ArpesSpectrum`
     PyTree for ARPES simulation output.
+:obj:`ATTR_AUX`
+    HDF5 attribute name storing auxiliary PyTree data as JSON.
+:obj:`ATTR_NONE`
+    HDF5 attribute name listing PyTree fields stored as None.
+:obj:`ATTR_TYPE`
+    HDF5 attribute name storing the PyTree type name.
+:obj:`BAND_LINE_MIN_VALUES`
+    Minimum tokens on an EIGENVAL band line.
+:obj:`BAND_LINE_SPIN_VALUES`
+    Tokens on a spin-polarized EIGENVAL band line.
+:obj:`BAND_NDIM`
+    Expected dimensionality of band-energy arrays.
 :class:`BandStructure`
     PyTree for electronic band structure.
 :obj:`BOHR_TO_ANGSTROM`
     Bohr radius in Angstrom.
+:obj:`COORDINATE_MODE_TOKENS`
+    Recognized KPOINTS coordinate-mode tokens.
 :obj:`CROSS_SECTION_ENERGIES`
     Photon-energy tabulation grid for the cross-section tables in eV.
 :obj:`CROSS_SECTION_SIGMA_D`
@@ -63,66 +73,58 @@ Routine Listings
     Yeh-Lindau s-subshell cross sections on the tabulation grid.
 :class:`CrystalGeometry`
     PyTree for crystal geometry from VASP POSCAR.
+:obj:`D_ORBITAL_SLICE`
+    Slice selecting the five d orbitals.
 :class:`DensityOfStates`
     PyTree for density of states.
 :class:`DiagonalizedBands`
     PyTree for diagonalized electronic structure.
 :obj:`DosType`
     Density-of-states carrier union used by workflow contexts.
+:obj:`EIG_DOWN_INDEX`
+    Column index of spin-down eigenvalues in EIGENVAL.
+:obj:`EIG_UP_INDEX`
+    Column index of spin-up eigenvalues in EIGENVAL.
+:obj:`ENERGY_AXIS_NDIM`
+    Expected dimensionality of energy-axis arrays.
+:obj:`EPS`
+    Epsilon floor guarding divisions and norms.
+:obj:`FLOAT_TOKEN_RE`
+    Compiled regex matching floating-point tokens.
 :class:`FullDensityOfStates`
     PyTree for complete density of states with spin and PDOS.
+:obj:`GAUNT_IMAG_TOL`
+    Tolerance for discarding imaginary Gaunt residues.
 :obj:`HBAR_C_EV_A`
     Reduced Planck constant times c in eV Angstrom.
 :obj:`HBAR_EV_S`
     Reduced Planck constant in eV s.
+:obj:`INTENSITY_NDIM`
+    Expected dimensionality of intensity arrays.
+:obj:`ISPIN2_BLOCKS`
+    PROCAR block count for ISPIN=2 calculations.
+:obj:`ISPIN_SPIN_POLARIZED`
+    ISPIN value marking spin-polarized VASP runs.
 :obj:`KB_EV_PER_K`
     Boltzmann constant in eV per kelvin.
+:obj:`KPATH_AUX_WITH_COMMENT_LEN`
+    KPathInfo auxiliary-data length including a comment.
+:obj:`KPATH_AUX_WITH_COORD_MODE_LEN`
+    KPathInfo auxiliary-data length including a coordinate mode.
 :class:`KPathInfo`
     PyTree for k-point path metadata.
+:obj:`KPOINT_LINE_VALUES`
+    Tokens on an EIGENVAL k-point line.
 :obj:`L_MAX`
     Maximum angular momentum supported by the precomputed table.
-:obj:`ME_EV`
-    Electron rest energy in eV.
-:obj:`NonJaxNumber`
-    Union of ``int``, ``float``, and ``complex``.
-:obj:`ORBITAL_DIRS_NORMALIZED`
-    Unit-normalized orbital directions in VASP orbital order.
-:class:`OrbitalBasis`
-    PyTree for orbital quantum number metadata.
-:class:`OrbitalProjection`
-    PyTree for orbital-resolved band projections.
-:class:`PolarizationConfig`
-    PyTree for photon polarization geometry.
-:obj:`ProjectionType`
-    Orbital-projection carrier union used by workflow contexts.
-:class:`SOCVolumetricData`
-    PyTree for volumetric data from SOC CHGCAR files.
-:obj:`ScalarBool`
-    Union of ``bool`` and ``Bool[Array, " "]``.
-:obj:`ScalarComplex`
-    Union of ``complex`` and ``Complex[Array, " "]``.
-:obj:`ScalarFloat`
-    Union of ``float`` and ``Float[Array, " "]``.
-:obj:`ScalarInteger`
-    Union of ``int`` and ``Int[Array, " "]``.
-:obj:`ScalarNumeric`
-    Union of ``int``, ``float``, ``complex``, and ``Num[Array, " "]``.
-:class:`SelfEnergyConfig`
-    PyTree for energy-dependent self-energy (lifetime broadening).
-:class:`SimulationParams`
-    PyTree for ARPES simulation parameters.
-:class:`SlaterParams`
-    PyTree for Slater radial wavefunction parameters.
-:class:`SpinBandStructure`
-    PyTree for spin-resolved electronic band structure.
-:class:`SpinOrbitalProjection`
-    PyTree for orbital projections with mandatory spin data.
-:class:`TBModel`
-    PyTree for tight-binding model parameters (legacy).
-:class:`VolumetricData`
-    PyTree for volumetric grid data from CHGCAR.
-:class:`WorkflowContext`
-    PyTree bundling parsed inputs for high-level VASP workflows.
+:obj:`LATTICE_ROWS`
+    Number of lattice-vector rows in POSCAR/CHGCAR headers.
+:obj:`M_D`
+    Magnetic quantum numbers of the d orbitals.
+:obj:`M_P`
+    Magnetic quantum numbers of the p orbitals.
+:func:`make_1d_chain_model`
+    Create a 1D chain tight-binding model.
 :func:`make_arpes_spectrum`
     Create a validated ``ArpesSpectrum`` instance.
 :func:`make_band_structure`
@@ -139,8 +141,6 @@ Routine Listings
     Create a validated ``FullDensityOfStates`` instance.
 :func:`make_graphene_model`
     Create a graphene pz tight-binding model.
-:func:`make_1d_chain_model`
-    Create a 1D chain tight-binding model.
 :func:`make_kpath_info`
     Create a validated KPathInfo instance.
 :func:`make_orbital_basis`
@@ -167,6 +167,88 @@ Routine Listings
     Create a validated ``VolumetricData`` instance.
 :func:`make_workflow_context`
     Create a ``WorkflowContext`` instance from parsed inputs.
+:obj:`ME_EV`
+    Electron rest energy in eV.
+:obj:`MIN_SUM`
+    Minimum-sum floor guarding normalizations.
+:obj:`N_ORBITALS`
+    Number of orbitals in the VASP projection basis.
+:obj:`N_SOC_MAG_BLOCKS`
+    Magnetization block count in SOC CHGCAR files.
+:obj:`N_SPIN_COMPONENTS`
+    Spin-projection component count in PROCAR.
+:obj:`N_TAYLOR`
+    Taylor-series order for the Faddeeva evaluation.
+:obj:`NON_S_ORBITAL_SLICE`
+    Slice selecting all non-s orbitals.
+:obj:`NonJaxNumber`
+    Union of ``int``, ``float``, and ``complex``.
+:obj:`NONSPIN_COLS`
+    DOSCAR column count without spin polarization.
+:obj:`NORM_EPS`
+    Epsilon floor guarding eigenvector normalization.
+:obj:`ORBITAL_DIRS_NORMALIZED`
+    Unit-normalized orbital directions in VASP orbital order.
+:obj:`ORBITAL_INDEX`
+    Mapping from orbital name to VASP orbital index.
+:class:`OrbitalBasis`
+    PyTree for orbital quantum number metadata.
+:class:`OrbitalProjection`
+    PyTree for orbital-resolved band projections.
+:obj:`P_ORBITAL_SLICE`
+    Slice selecting the three p orbitals.
+:obj:`PHASE_LOSS_MESSAGE`
+    Warning text for PROCAR magnitude-only eigenvectors.
+:class:`PolarizationConfig`
+    PyTree for photon polarization geometry.
+:obj:`PRESET_NAMES`
+    Recognized band-scatter plotting preset names.
+:obj:`ProjectionType`
+    Orbital-projection carrier union used by workflow contexts.
+:obj:`S_IDX`
+    Index of the s orbital.
+:obj:`SCALAR_LINE_COMPONENTS`
+    Tokens on a scalar CHGCAR header line.
+:obj:`ScalarBool`
+    Union of ``bool`` and ``Bool[Array, " "]``.
+:obj:`ScalarComplex`
+    Union of ``complex`` and ``Complex[Array, " "]``.
+:obj:`ScalarFloat`
+    Union of ``float`` and ``Float[Array, " "]``.
+:obj:`ScalarInteger`
+    Union of ``int`` and ``Int[Array, " "]``.
+:obj:`ScalarNumeric`
+    Union of ``int``, ``float``, ``complex``, and ``Num[Array, " "]``.
+:class:`SelfEnergyConfig`
+    PyTree for energy-dependent self-energy (lifetime broadening).
+:class:`SimulationParams`
+    PyTree for ARPES simulation parameters.
+:class:`SlaterParams`
+    PyTree for Slater radial wavefunction parameters.
+:obj:`SMALL_ARGUMENT`
+    Small-argument cutoff for spherical Bessel seeds.
+:obj:`SOC_BLOCKS`
+    PROCAR block count for SOC calculations.
+:class:`SOCVolumetricData`
+    PyTree for volumetric data from SOC CHGCAR files.
+:obj:`SPIN_COLS`
+    DOSCAR column count with spin polarization.
+:class:`SpinBandStructure`
+    PyTree for spin-resolved electronic band structure.
+:class:`SpinOrbitalProjection`
+    PyTree for orbital projections with mandatory spin data.
+:class:`TBModel`
+    PyTree for tight-binding model parameters (legacy).
+:class:`VolumetricData`
+    PyTree for volumetric grid data from CHGCAR.
+:obj:`WEIGHT_COMPONENT_COUNT`
+    Tokens on a weighted k-point line.
+:obj:`WEIGHT_COMPONENT_INDEX`
+    Index of the weight token on a k-point line.
+:class:`WorkflowContext`
+    PyTree bundling parsed inputs for high-level VASP workflows.
+:obj:`XYZ_COMPONENTS`
+    Number of Cartesian vector components.
 
 Notes
 -----
@@ -196,12 +278,56 @@ from .bands import (
     make_spin_orbital_projection,
 )
 from .constants import (
+    ATTR_AUX,
+    ATTR_NONE,
+    ATTR_TYPE,
+    BAND_LINE_MIN_VALUES,
+    BAND_LINE_SPIN_VALUES,
+    BAND_NDIM,
     BOHR_TO_ANGSTROM,
+    COORDINATE_MODE_TOKENS,
+    D_ORBITAL_SLICE,
+    EIG_DOWN_INDEX,
+    EIG_UP_INDEX,
+    ENERGY_AXIS_NDIM,
+    EPS,
+    FLOAT_TOKEN_RE,
+    GAUNT_IMAG_TOL,
     HBAR_C_EV_A,
     HBAR_EV_S,
+    INTENSITY_NDIM,
+    ISPIN2_BLOCKS,
+    ISPIN_SPIN_POLARIZED,
     KB_EV_PER_K,
+    KPATH_AUX_WITH_COMMENT_LEN,
+    KPATH_AUX_WITH_COORD_MODE_LEN,
+    KPOINT_LINE_VALUES,
     L_MAX,
+    LATTICE_ROWS,
+    M_D,
+    M_P,
     ME_EV,
+    MIN_SUM,
+    N_ORBITALS,
+    N_SOC_MAG_BLOCKS,
+    N_SPIN_COMPONENTS,
+    N_TAYLOR,
+    NON_S_ORBITAL_SLICE,
+    NONSPIN_COLS,
+    NORM_EPS,
+    ORBITAL_DIRS_NORMALIZED,
+    ORBITAL_INDEX,
+    P_ORBITAL_SLICE,
+    PHASE_LOSS_MESSAGE,
+    PRESET_NAMES,
+    S_IDX,
+    SCALAR_LINE_COMPONENTS,
+    SMALL_ARGUMENT,
+    SOC_BLOCKS,
+    SPIN_COLS,
+    WEIGHT_COMPONENT_COUNT,
+    WEIGHT_COMPONENT_INDEX,
+    XYZ_COMPONENTS,
 )
 from .context import (
     DosType,
@@ -223,7 +349,6 @@ from .kpath import (
     KPathInfo,
     make_kpath_info,
 )
-from .orbital_constants import ORBITAL_DIRS_NORMALIZED
 from .params import (
     PolarizationConfig,
     SimulationParams,
@@ -264,43 +389,46 @@ from .volumetric import (
 
 __all__: list[str] = [
     "ArpesSpectrum",
+    "ATTR_AUX",
+    "ATTR_NONE",
+    "ATTR_TYPE",
+    "BAND_LINE_MIN_VALUES",
+    "BAND_LINE_SPIN_VALUES",
+    "BAND_NDIM",
     "BandStructure",
     "BOHR_TO_ANGSTROM",
+    "COORDINATE_MODE_TOKENS",
     "CROSS_SECTION_ENERGIES",
     "CROSS_SECTION_SIGMA_D",
     "CROSS_SECTION_SIGMA_P",
     "CROSS_SECTION_SIGMA_S",
     "CrystalGeometry",
+    "D_ORBITAL_SLICE",
     "DensityOfStates",
     "DiagonalizedBands",
     "DosType",
+    "EIG_DOWN_INDEX",
+    "EIG_UP_INDEX",
+    "ENERGY_AXIS_NDIM",
+    "EPS",
+    "FLOAT_TOKEN_RE",
     "FullDensityOfStates",
+    "GAUNT_IMAG_TOL",
     "HBAR_C_EV_A",
     "HBAR_EV_S",
+    "INTENSITY_NDIM",
+    "ISPIN2_BLOCKS",
+    "ISPIN_SPIN_POLARIZED",
     "KB_EV_PER_K",
+    "KPATH_AUX_WITH_COMMENT_LEN",
+    "KPATH_AUX_WITH_COORD_MODE_LEN",
     "KPathInfo",
+    "KPOINT_LINE_VALUES",
     "L_MAX",
-    "ME_EV",
-    "NonJaxNumber",
-    "ORBITAL_DIRS_NORMALIZED",
-    "OrbitalBasis",
-    "OrbitalProjection",
-    "PolarizationConfig",
-    "ProjectionType",
-    "SOCVolumetricData",
-    "ScalarBool",
-    "ScalarComplex",
-    "ScalarFloat",
-    "ScalarInteger",
-    "ScalarNumeric",
-    "SelfEnergyConfig",
-    "SimulationParams",
-    "SlaterParams",
-    "SpinBandStructure",
-    "SpinOrbitalProjection",
-    "TBModel",
-    "VolumetricData",
-    "WorkflowContext",
+    "LATTICE_ROWS",
+    "M_D",
+    "M_P",
+    "make_1d_chain_model",
     "make_arpes_spectrum",
     "make_band_structure",
     "make_crystal_geometry",
@@ -309,7 +437,6 @@ __all__: list[str] = [
     "make_expanded_simulation_params",
     "make_full_density_of_states",
     "make_graphene_model",
-    "make_1d_chain_model",
     "make_kpath_info",
     "make_orbital_basis",
     "make_orbital_projection",
@@ -323,4 +450,45 @@ __all__: list[str] = [
     "make_tb_model",
     "make_volumetric_data",
     "make_workflow_context",
+    "ME_EV",
+    "MIN_SUM",
+    "N_ORBITALS",
+    "N_SOC_MAG_BLOCKS",
+    "N_SPIN_COMPONENTS",
+    "N_TAYLOR",
+    "NON_S_ORBITAL_SLICE",
+    "NonJaxNumber",
+    "NONSPIN_COLS",
+    "NORM_EPS",
+    "ORBITAL_DIRS_NORMALIZED",
+    "ORBITAL_INDEX",
+    "OrbitalBasis",
+    "OrbitalProjection",
+    "P_ORBITAL_SLICE",
+    "PHASE_LOSS_MESSAGE",
+    "PolarizationConfig",
+    "PRESET_NAMES",
+    "ProjectionType",
+    "S_IDX",
+    "SCALAR_LINE_COMPONENTS",
+    "ScalarBool",
+    "ScalarComplex",
+    "ScalarFloat",
+    "ScalarInteger",
+    "ScalarNumeric",
+    "SelfEnergyConfig",
+    "SimulationParams",
+    "SlaterParams",
+    "SMALL_ARGUMENT",
+    "SOC_BLOCKS",
+    "SOCVolumetricData",
+    "SPIN_COLS",
+    "SpinBandStructure",
+    "SpinOrbitalProjection",
+    "TBModel",
+    "VolumetricData",
+    "WEIGHT_COMPONENT_COUNT",
+    "WEIGHT_COMPONENT_INDEX",
+    "WorkflowContext",
+    "XYZ_COMPONENTS",
 ]

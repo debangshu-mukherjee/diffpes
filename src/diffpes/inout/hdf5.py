@@ -36,6 +36,9 @@ from jaxtyping import Shaped
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
+    ATTR_AUX,
+    ATTR_NONE,
+    ATTR_TYPE,
     ArpesSpectrum,
     BandStructure,
     CrystalGeometry,
@@ -55,11 +58,6 @@ from diffpes.types import (
     TBModel,
     VolumetricData,
     WorkflowContext,
-)
-from diffpes.types.vasp_constants import (
-    _ATTR_AUX,
-    _ATTR_NONE,
-    _ATTR_TYPE,
 )
 
 
@@ -379,8 +377,8 @@ def save_to_h5(
             aux_data = static_values[0]
         elif static_values:
             aux_data = static_values
-        grp.attrs[_ATTR_TYPE] = type_name
-        grp.attrs[_ATTR_AUX] = json.dumps(_encode_static(aux_data))
+        grp.attrs[ATTR_TYPE] = type_name
+        grp.attrs[ATTR_AUX] = json.dumps(_encode_static(aux_data))
 
         none_fields: list[str] = []
         for field_name in meta.children_fields:
@@ -401,7 +399,7 @@ def save_to_h5(
                     chunks=chunks,
                 )
                 grp.create_dataset(field_name, data=child_arr, **ds_kwargs)
-        grp.attrs[_ATTR_NONE] = json.dumps(none_fields)
+        grp.attrs[ATTR_NONE] = json.dumps(none_fields)
 
     file_path: Path = Path(path)
     with h5py.File(file_path, "w") as f:
@@ -473,16 +471,16 @@ def load_from_h5(
     def _load_group(
         grp: h5py.Group,
     ) -> Any:  # noqa: ANN401
-        type_name: str = str(grp.attrs[_ATTR_TYPE])
+        type_name: str = str(grp.attrs[ATTR_TYPE])
         if type_name not in _PYTREE_REGISTRY:
             msg = f"Unknown PyTree type: {type_name}"
             raise TypeError(msg)
 
         meta: _PyTreeMeta = _PYTREE_REGISTRY[type_name]
-        aux_json: Any = json.loads(str(grp.attrs[_ATTR_AUX]))
+        aux_json: Any = json.loads(str(grp.attrs[ATTR_AUX]))
         aux_data: Any = _decode_aux_data(type_name, aux_json)
 
-        none_fields: list[str] = json.loads(str(grp.attrs[_ATTR_NONE]))
+        none_fields: list[str] = json.loads(str(grp.attrs[ATTR_NONE]))
 
         children: list[Any] = []
         for field_name in meta.children_fields:

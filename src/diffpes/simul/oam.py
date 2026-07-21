@@ -22,11 +22,11 @@ import jax.numpy as jnp
 from beartype import beartype
 from jaxtyping import Array, Float, jaxtyped
 
-from diffpes.types.orbital_constants import (
-    _D_ORBITAL_SLICE,
-    _M_D,
-    _M_P,
-    _P_ORBITAL_SLICE,
+from diffpes.types import (
+    D_ORBITAL_SLICE,
+    M_D,
+    M_P,
+    P_ORBITAL_SLICE,
 )
 
 
@@ -104,10 +104,10 @@ def compute_oam(
     The s-orbital (index 0) has m = 0 and does not contribute to
     the OAM.
     """
-    p_proj: Float[Array, "K B A 3"] = projections[..., _P_ORBITAL_SLICE]
-    p_oam: Float[Array, "K B A"] = jnp.sum(_M_P * p_proj**2, axis=-1)
-    d_proj: Float[Array, "K B A 5"] = projections[..., _D_ORBITAL_SLICE]
-    d_oam: Float[Array, "K B A"] = jnp.sum(_M_D * d_proj**2, axis=-1)
+    p_proj: Float[Array, "K B A 3"] = projections[..., P_ORBITAL_SLICE]
+    p_oam: Float[Array, "K B A"] = jnp.sum(M_P * p_proj**2, axis=-1)
+    d_proj: Float[Array, "K B A 5"] = projections[..., D_ORBITAL_SLICE]
+    d_oam: Float[Array, "K B A"] = jnp.sum(M_D * d_proj**2, axis=-1)
     total_oam: Float[Array, "K B A"] = p_oam + d_oam
     oam: Float[Array, "K B A 3"] = jnp.stack(
         [p_oam, d_oam, total_oam], axis=-1

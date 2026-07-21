@@ -23,15 +23,13 @@ from beartype.typing import Optional, Union
 from jaxtyping import Array, Float, Int
 
 from diffpes.types import (
+    D_ORBITAL_SLICE,
+    P_ORBITAL_SLICE,
+    S_IDX,
     BandStructure,
     KPathInfo,
     OrbitalProjection,
     SpinOrbitalProjection,
-)
-from diffpes.types.orbital_constants import (
-    _D_ORBITAL_SLICE,
-    _P_ORBITAL_SLICE,
-    _S_IDX,
 )
 
 
@@ -197,12 +195,12 @@ def reduce_orbitals(
     This matches the standard PROCAR output when ``LORBIT=11`` or
     ``LORBIT=12``.
     """
-    s_total: Float[Array, "K B A"] = projections[..., _S_IDX]
+    s_total: Float[Array, "K B A"] = projections[..., S_IDX]
     p_total: Float[Array, "K B A"] = jnp.sum(
-        projections[..., _P_ORBITAL_SLICE], axis=-1
+        projections[..., P_ORBITAL_SLICE], axis=-1
     )
     d_total: Float[Array, "K B A"] = jnp.sum(
-        projections[..., _D_ORBITAL_SLICE], axis=-1
+        projections[..., D_ORBITAL_SLICE], axis=-1
     )
     reduced: Float[Array, "K B A 3"] = jnp.stack(
         [s_total, p_total, d_total], axis=-1

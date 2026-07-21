@@ -28,12 +28,13 @@ from jaxtyping import Array, Float
 from numpy import ndarray as NDArray  # noqa: N812
 
 from diffpes.types import (
+    NONSPIN_COLS,
+    SPIN_COLS,
     DensityOfStates,
     FullDensityOfStates,
     make_density_of_states,
     make_full_density_of_states,
 )
-from diffpes.types.vasp_constants import _NONSPIN_COLS, _SPIN_COLS
 
 
 def read_doscar(  # noqa: PLR0912, PLR0915
@@ -164,7 +165,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
             return result_legacy
 
         # Full mode: extract all columns
-        is_spin: bool = ncols == _SPIN_COLS
+        is_spin: bool = ncols == SPIN_COLS
         energy_arr: Float[Array, " E"] = jnp.asarray(
             data[:, 0], dtype=jnp.float64
         )
@@ -194,7 +195,7 @@ def read_doscar(  # noqa: PLR0912, PLR0915
                 break
             # Check if this is a PDOS header (same format as total DOS header)
             line_vals: list[float] = [float(x) for x in line.split()]
-            if _NONSPIN_COLS <= len(line_vals) <= _SPIN_COLS:
+            if NONSPIN_COLS <= len(line_vals) <= SPIN_COLS:
                 # Could be either a header or short PDOS line
                 # PDOS header has same EMIN EMAX NEDOS EFERMI format
                 # We detect by checking if first value matches energy range

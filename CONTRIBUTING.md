@@ -203,11 +203,20 @@ def simulate_spectrum(
   scalar arguments; these are unions accepting both Python scalars and 0-d JAX
   arrays.
 - Import shared types from `diffpes.types`, not by re-defining them.
-- **Import public names from `diffpes.types` itself, never from its
-  submodules** (`from diffpes.types import KB_EV_PER_K`, not
-  `from diffpes.types.constants import KB_EV_PER_K`) — outside the
-  `types/` subpackage, deep imports are reserved for the private
-  underscore-prefixed guards, which are deliberately not re-exported.
+- **Cross-subpackage imports are public and go through the subpackage.**
+  Whenever a file imports something from a *different* subpackage, two
+  things must hold: (1) the source subpackage **exports the name
+  publicly** (module `Routine Listings` + `__all__` + `__init__.py`
+  re-export — the three-places rule), and (2) the importer takes it
+  **from the subpackage itself, never from an individual file inside
+  it** (`from diffpes.types import KB_EV_PER_K`, not
+  `from diffpes.types.constants import KB_EV_PER_K`; `from
+  diffpes.inout import read_procar`, not `from diffpes.inout.procar
+  import read_procar`). There is no private-name exception: if another
+  subpackage needs it, it is public by definition — promote it. Deep
+  file-level imports are legal only *within* a subpackage (relative
+  imports like `from .constants import ...`, which is how each
+  `__init__.py` is built).
 - **Never rename on import** (`import ... as`) for diffpes names — no
   `KB_EV_PER_K as _KB`, no `_N_ORBITALS as _NORBS`. An alias creates a
   second name for the same constant that grep, listings, and reviewers

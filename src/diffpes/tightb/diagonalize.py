@@ -25,6 +25,7 @@ from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
 from diffpes.maths import safe_divide, safe_norm, safe_sqrt
 from diffpes.types import (
+    PHASE_LOSS_MESSAGE,
     BandStructure,
     DiagonalizedBands,
     OrbitalBasis,
@@ -32,7 +33,6 @@ from diffpes.types import (
     TBModel,
     make_diagonalized_bands,
 )
-from diffpes.types.vasp_constants import _PHASE_LOSS_MESSAGE
 
 from .hamiltonian import build_hamiltonian_k
 
@@ -277,11 +277,11 @@ def vasp_to_diagonalized(
         raise ValueError(msg)
 
     if phase_loss == "error":
-        raise ValueError(_PHASE_LOSS_MESSAGE)
+        raise ValueError(PHASE_LOSS_MESSAGE)
     if phase_loss == "warn":
         import warnings  # noqa: PLC0415
 
-        warnings.warn(_PHASE_LOSS_MESSAGE, RuntimeWarning, stacklevel=2)
+        warnings.warn(PHASE_LOSS_MESSAGE, RuntimeWarning, stacklevel=2)
 
     # Sum projections over atoms: (K, B, A, 9) -> (K, B, 9)
     proj_summed: Float[Array, "K B 9"] = jnp.sum(orb_proj.projections, axis=2)
