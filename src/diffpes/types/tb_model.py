@@ -2,10 +2,10 @@
 
 Extended Summary
 ----------------
-This module defines PyTree types for tight-binding model parameters and
-diagonalized electronic structure. ``DiagonalizedBands`` is the
-common interface between TB-derived and VASP-derived inputs for
-the differentiable forward simulator.
+This module defines the native tight-binding carrier and the diagonalized
+electronic-structure interface consumed by later ARPES stages. Tight-binding
+connectivity is exact static metadata, while energies, complex amplitudes,
+geometry, and eigensystems remain differentiable JAX leaves.
 
 Routine Listings
 ----------------
@@ -15,641 +15,698 @@ Routine Listings
     Store tight-binding parameters in a JAX PyTree.
 :func:`make_diagonalized_bands`
     Create a validated ``DiagonalizedBands`` instance.
-:func:`make_1d_chain_model`
-    Create a 1D chain tight-binding model.
-:func:`make_graphene_model`
-    Create a graphene pz tight-binding model.
 :func:`make_tb_model`
     Create a validated ``TBModel`` instance.
 
 Notes
 -----
-``DiagonalizedBands`` has all-array children (fully differentiable).
-``TBModel`` separates differentiable hopping amplitudes (children)
-from static structural metadata (auxiliary data).
+The tight-binding phase convention is the basis-position gauge. Each physical
+fractional bond displacement follows ``R + tau_j - tau_i`` from exact
+integer-cell metadata and atomic positions.
 """
 
 import equinox as eqx
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Complex, Float, jaxtyped
+from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
-from .aliases import ScalarFloat, ScalarNumeric
-from .radial_params import OrbitalBasis, make_orbital_basis
+from .aliases import ScalarNumeric
+from .geometry import CrystalGeometry
+from .radial_params import OrbitalBasis
+
+_HERMITICITY_TOLERANCE: float = 1e-12
+_PAIR_LENGTH: int = 2
+_CELL_COMPONENTS: int = 3
+_EIGENVALUE_NDIM: int = 2
+_EIGENVECTOR_NDIM: int = 3
+
+
+def _validate_basis_geometry(
+    basis: OrbitalBasis,
+    geometry: CrystalGeometry,
+) -> None:
+    """Validate the orbital-to-atom mapping against a geometry."""
+    n_atoms: int = geometry.positions.shape[0]
+    if any(index >= n_atoms for index in basis.atom_indices):
+        message: str = (
+            "basis atom_indices must refer to geometry.positions rows"
+        )
+        raise ValueError(message)
+
+
+def _validate_hopping_metadata(
+    hopping_pairs: tuple[tuple[int, int], ...],
+    hopping_cells: tuple[tuple[int, int, int], ...],
+    n_orbitals: int,
+) -> tuple[int, ...]:
+    """Validate exact connectivity and derive its closure permutation."""
+    keys: list[tuple[int, int, tuple[int, int, int]]] = []
+    pair: tuple[int, int]
+    cell: tuple[int, int, int]
+    for pair, cell in zip(hopping_pairs, hopping_cells, strict=True):
+        if (
+            type(pair) is not tuple
+            or len(pair) != _PAIR_LENGTH
+            or any(type(index) is not int for index in pair)
+        ):
+            message: str = "hopping_pairs must contain pairs of integers"
+            raise ValueError(message)
+        if (
+            type(cell) is not tuple
+            or len(cell) != _CELL_COMPONENTS
+            or any(type(component) is not int for component in cell)
+        ):
+            message = "hopping_cells must contain integer triples"
+            raise ValueError(message)
+        if any(index < 0 or index >= n_orbitals for index in pair):
+            message = "hopping pair indices must be in [0, n_orbitals)"
+            raise ValueError(message)
+        keys.append((pair[0], pair[1], cell))
+
+    if len(set(keys)) != len(keys):
+        message = "duplicate (i, j, R) hopping records are not allowed"
+        raise ValueError(message)
+
+    buckets: dict[
+        tuple[int, int, tuple[int, int, int]],
+        list[int],
+    ] = {}
+    index: int
+    key: tuple[int, int, tuple[int, int, int]]
+    for index, key in enumerate(keys):
+        buckets.setdefault(key, []).append(index)
+
+    closure: list[int] = [-1] * len(keys)
+    indices: list[int]
+    for key, indices in buckets.items():
+        orbital_i: int
+        orbital_j: int
+        orbital_i, orbital_j, cell = key
+        reverse_key: tuple[int, int, tuple[int, int, int]] = (
+            orbital_j,
+            orbital_i,
+            (-cell[0], -cell[1], -cell[2]),
+        )
+        reverse_indices: list[int] | None = buckets.get(reverse_key)
+        if reverse_indices is None or len(reverse_indices) != len(indices):
+            message = (
+                "hopping metadata must be Hermitian-closed with one "
+                "(j, i, -R) partner per (i, j, R) entry"
+            )
+            raise ValueError(message)
+        occurrence: int
+        for occurrence, index in enumerate(indices):
+            closure[index] = reverse_indices[occurrence]
+    closure_permutation: tuple[int, ...] = tuple(closure)
+    return closure_permutation
+
+
+def _validate_shell_metadata(
+    soc_lambdas: Float[Array, " n_shells"],
+    basis: OrbitalBasis,
+    shell_index: tuple[int, ...],
+) -> None:
+    """Validate contiguous atomic-shell identifiers and their groups."""
+    if any(type(index) is not int or index < -1 for index in shell_index):
+        message: str = (
+            "shell_index entries must be integers greater than or equal to -1"
+        )
+        raise ValueError(message)
+    expected_shells: int = max(shell_index, default=-1) + 1
+    if soc_lambdas.shape[0] != expected_shells:
+        message = (
+            "soc_lambdas length must equal max(shell_index) + 1, with -1 "
+            "denoting no shell"
+        )
+        raise ValueError(message)
+    active_shells: set[int] = {index for index in shell_index if index >= 0}
+    if active_shells != set(range(expected_shells)):
+        message = "nonnegative shell_index IDs must be contiguous from 0"
+        raise ValueError(message)
+
+    shell_groups: dict[int, tuple[int, int, int]] = {}
+    group_shells: dict[tuple[int, int, int], int] = {}
+    orbital: int
+    shell: int
+    for orbital, shell in enumerate(shell_index):
+        if shell < 0:
+            continue
+        group: tuple[int, int, int] = (
+            basis.atom_indices[orbital],
+            basis.n[orbital],
+            basis.l[orbital],
+        )
+        existing_group: tuple[int, int, int] | None = shell_groups.get(shell)
+        if existing_group is not None and existing_group != group:
+            message = "each shell_index ID must map to one (atom, n, l) group"
+            raise ValueError(message)
+        existing_shell: int | None = group_shells.get(group)
+        if existing_shell is not None and existing_shell != shell:
+            message = "each (atom, n, l) group must map to one shell_index ID"
+            raise ValueError(message)
+        shell_groups[shell] = group
+        group_shells[group] = shell
+
+
+def _validate_tb_structure(
+    hopping_amplitudes: Complex[Array, " n_hop"],
+    onsite_energies: Float[Array, " n_orb"],
+    soc_lambdas: Float[Array, " n_shells"],
+    geometry: CrystalGeometry,
+    basis: OrbitalBasis,
+    hopping_pairs: tuple[tuple[int, int], ...],
+    hopping_cells: tuple[tuple[int, int, int], ...],
+    shell_index: tuple[int, ...],
+    spinor: bool,
+) -> tuple[int, ...]:
+    """Validate static tight-binding structure and return reverse indices."""
+    if not isinstance(geometry, CrystalGeometry):
+        message: str = "geometry must be a CrystalGeometry"
+        raise ValueError(message)
+    if not isinstance(basis, OrbitalBasis):
+        message = "basis must be an OrbitalBasis"
+        raise ValueError(message)
+    if any(
+        type(values) is not tuple
+        for values in (hopping_pairs, hopping_cells, shell_index)
+    ):
+        message = (
+            "hopping_pairs, hopping_cells, and shell_index must be tuples"
+        )
+        raise ValueError(message)
+    if hopping_amplitudes.ndim != 1:
+        message = "hopping_amplitudes must be one-dimensional"
+        raise ValueError(message)
+    if onsite_energies.ndim != 1:
+        message = "onsite_energies must be one-dimensional"
+        raise ValueError(message)
+    if soc_lambdas.ndim != 1:
+        message = "soc_lambdas must be one-dimensional"
+        raise ValueError(message)
+
+    n_hoppings: int = hopping_amplitudes.shape[0]
+    n_orbitals: int = onsite_energies.shape[0]
+    if len(hopping_pairs) != n_hoppings or len(hopping_cells) != n_hoppings:
+        message = (
+            "hopping_amplitudes, hopping_pairs, and hopping_cells must have "
+            "the same length"
+        )
+        raise ValueError(message)
+    if len(basis.n) != n_orbitals or len(shell_index) != n_orbitals:
+        message = (
+            "onsite_energies, basis, and shell_index must have the same "
+            "orbital count"
+        )
+        raise ValueError(message)
+    _validate_basis_geometry(basis, geometry)
+
+    _validate_shell_metadata(soc_lambdas, basis, shell_index)
+    if type(spinor) is not bool:
+        message = "spinor must be a bool"
+        raise ValueError(message)
+    if spinor and (
+        len(basis.spin) != n_orbitals
+        or any(channel not in (-1, 1) for channel in basis.spin)
+    ):
+        message = "spinor models require one +1 or -1 basis spin per orbital"
+        raise ValueError(message)
+    if not spinor and basis.spin:
+        message = "spinless models require an empty basis spin tuple"
+        raise ValueError(message)
+
+    closure: tuple[int, ...] = _validate_hopping_metadata(
+        hopping_pairs,
+        hopping_cells,
+        n_orbitals,
+    )
+    return closure
+
+
+def _checked_geometry(
+    geometry: CrystalGeometry, context: str
+) -> CrystalGeometry:
+    """Attach finite-value runtime checks to every geometry array leaf."""
+    lattice: Float[Array, "3 3"] = eqx.error_if(
+        geometry.lattice,
+        ~jnp.all(jnp.isfinite(geometry.lattice)),
+        f"{context}: geometry lattice finite",
+    )
+    reciprocal: Float[Array, "3 3"] = eqx.error_if(
+        geometry.reciprocal,
+        ~jnp.all(jnp.isfinite(geometry.reciprocal)),
+        f"{context}: geometry reciprocal finite",
+    )
+    positions: Float[Array, "n_atoms 3"] = eqx.error_if(
+        geometry.positions,
+        ~jnp.all(jnp.isfinite(geometry.positions)),
+        f"{context}: geometry positions finite",
+    )
+    checked: CrystalGeometry = eqx.tree_at(
+        lambda item: (item.lattice, item.reciprocal, item.positions),
+        geometry,
+        (lattice, reciprocal, positions),
+    )
+    return checked
 
 
 class DiagonalizedBands(eqx.Module):
     """Store diagonalized electronic-structure data in a JAX PyTree.
 
-    This type provides the common interface between VASP-derived and
-    TB-derived inputs for the forward simulator ``simulate_tb_radial``. The
-    native
-    ``diffpes.tightb.diagonalize_tb`` producer constructs this PyTree
-    from a ``TBModel``; the VASP adapter ``vasp_to_diagonalized``
-    constructs it from VASP eigenvectors.
-
-    This single PyTree type lets the differentiable forward simulator accept
-    either tight-binding or first-principles inputs without code branches.
-    The eigenvectors carry the orbital-decomposition
-    information needed to compute dipole matrix elements in the
-    Chinook pipeline.
-
-    All four fields are dense JAX arrays stored as children (no
-    auxiliary data), making the entire object fully differentiable.
-    This enables end-to-end gradient computation from TB hopping
-    parameters through diagonalization to simulated ARPES intensity.
-
+    The carrier is the tight-binding-to-ARPES interface. Geometry and orbital
+    metadata travel with each eigensystem so later matrix-element stages can
+    form Cartesian momenta, atomic interference phases, and orbital operators.
 
     :see: :class:`~.test_tb_model.TestDiagonalizedBands`
 
     Attributes
     ----------
-    eigenvalues : Float[Array, "K B"]
-        Band energies E_n(k) in eV for K k-points and B bands.
-        JAX-traced (differentiable).
-    eigenvectors : Complex[Array, "K B O"]
-        Complex orbital coefficients c_{k,b,orb} from the
-        Hamiltonian diagonalization, where O is the number of
-        orbitals in the basis. These encode the orbital character
-        of each Bloch state and enter the dipole matrix element
-        calculation. JAX-traced (differentiable, complex128).
-    kpoints : Float[Array, "K 3"]
-        k-point coordinates in reciprocal (fractional) space.
-        JAX-traced (differentiable).
-    fermi_energy : Float[Array, " "]
-        Fermi level in eV. A 0-D scalar array.
-        JAX-traced (differentiable).
+    eigenvalues : Float[Array, "n_k n_bands"]
+        Band energies in eV.
+    eigenvectors : Complex[Array, "n_k n_bands n_orb"]
+        Complex orbital coefficients in the basis-position gauge.
+    kpoints : Float[Array, "n_k 3"]
+        Fractional reciprocal-space coordinates.
+    fermi_energy : Float[Array, ""]
+        Fermi energy in eV.
+    geometry : CrystalGeometry
+        Crystal geometry. Its numerical fields are differentiable children.
+    basis : OrbitalBasis
+        Orbital and atom metadata (**static** -- changing it triggers
+        retracing).
 
     Notes
     -----
-    Implemented as an immutable :class:`equinox.Module` PyTree. All four
-    fields are differentiable leaves and no static metadata is present.
+    The numerical eigensystem and geometry fields remain JAX leaves.
+    ``basis`` is static because its quantum numbers and atom mapping shape
+    compiled operator construction.
 
     See Also
     --------
-    TBModel : The tight-binding model whose diagonalization produces
-        a ``DiagonalizedBands``.
-    make_diagonalized_bands : Factory function with validation and
-        dtype casting.
+    TBModel : Tight-binding carrier whose diagonalization produces bands.
+    make_diagonalized_bands : Validating carrier factory.
     """
 
-    eigenvalues: Float[Array, "K B"]
-    eigenvectors: Complex[Array, "K B O"]
-    kpoints: Float[Array, "K 3"]
-    fermi_energy: Float[Array, " "]
+    eigenvalues: Float[Array, "n_k n_bands"]
+    eigenvectors: Complex[Array, "n_k n_bands n_orb"]
+    kpoints: Float[Array, "n_k 3"]
+    fermi_energy: Float[Array, ""]
+    geometry: CrystalGeometry
+    basis: OrbitalBasis = eqx.field(static=True)
+
+    def __check_init__(self) -> None:
+        """Validate the static eigensystem invariants again."""
+        _validate_diagonalized_structure(
+            self.eigenvalues,
+            self.eigenvectors,
+            self.kpoints,
+            self.fermi_energy,
+            self.geometry,
+            self.basis,
+        )
 
 
 class TBModel(eqx.Module):
-    """Store tight-binding parameters in a JAX PyTree.
+    r"""Store tight-binding parameters in a JAX PyTree.
 
-    ``hopping_params`` and ``lattice_vectors`` are differentiable leaves.
-    The connectivity, orbital count, and basis are compile-time metadata;
-    changing any static field changes the PyTree definition and retraces JIT
-    compiled consumers.
-
+    Each hopping record is ``(i, j, R, t)`` with exact integer lattice
+    translation ``R``. In the pinned basis-position gauge, Hamiltonian phases
+    use the physical fractional displacement
+    :math:`R + \tau_j - \tau_i`, derived from ``geometry.positions`` and
+    ``basis.atom_indices``. Physical displacements are never stored in place
+    of ``R`` or rounded back into connectivity.
 
     :see: :class:`~.test_tb_model.TestTBModel`
 
     Attributes
     ----------
-    hopping_params : Float[Array, " H"]
-        Hopping amplitudes in eV.
-    lattice_vectors : Float[Array, "3 3"]
-        Real-space lattice vectors in Angstrom.
-    hopping_indices : tuple
-        Orbital connectivity and lattice translations (**static** -- a
-        compile-time constant; changing it triggers retracing).
-    n_orbitals : int
-        Number of orbitals in the unit cell (**static** -- a compile-time
-        constant; changing it triggers retracing).
-    orbital_basis : OrbitalBasis
-        Orbital quantum-number metadata (**static** -- a compile-time
-        constant; changing it triggers retracing).
+    hopping_amplitudes : Complex[Array, "n_hop"]
+        Complex hopping amplitudes in eV. These differentiable values support
+        spin-orbit and other intrinsically complex couplings.
+    onsite_energies : Float[Array, "n_orb"]
+        Onsite orbital energies in eV.
+    soc_lambdas : Float[Array, "n_shells"]
+        Atomic spin-orbit couplings in eV, one per ``(atom, n, l)`` shell.
+    geometry : CrystalGeometry
+        Differentiable lattice and fractional atomic positions.
+    basis : OrbitalBasis
+        Orbital-to-atom and quantum-number metadata (**static** -- changing it
+        triggers retracing).
+    hopping_pairs : tuple[tuple[int, int], ...]
+        Directed orbital pairs ``(i, j)`` (**static** -- changing them triggers
+        retracing).
+    hopping_cells : tuple[tuple[int, int, int], ...]
+        Exact integer translations ``R`` (**static** -- changing them triggers
+        retracing).
+    shell_index : tuple[int, ...]
+        Orbital-to-SOC-shell mapping; ``-1`` means no shell. Nonnegative IDs
+        are contiguous and map one-to-one to ``(atom, n, l)`` groups, with
+        spin copies sharing an ID (**static** -- changing it triggers
+        retracing).
+    spinor : bool
+        Whether the basis carries explicit spin channels (**static** --
+        changing it triggers retracing).
+
+    Notes
+    -----
+    Hopping metadata excludes duplicate ``(i, j, R)`` records and includes a
+    ``(j, i, -R)`` partner for every entry. The factory checks corresponding
+    amplitudes elementwise against their complex conjugates. Hamiltonian
+    assembly therefore needs no Hermitianization repair.
+
+    See Also
+    --------
+    DiagonalizedBands : Eigensystem carrier produced from this model.
+    make_tb_model : Validating carrier factory.
     """
 
-    hopping_params: Float[Array, " H"]
-    lattice_vectors: Float[Array, "3 3"]
-    hopping_indices: tuple = eqx.field(static=True)
-    n_orbitals: int = eqx.field(static=True)
-    orbital_basis: OrbitalBasis = eqx.field(static=True)
+    hopping_amplitudes: Complex[Array, " n_hop"]
+    onsite_energies: Float[Array, " n_orb"]
+    soc_lambdas: Float[Array, " n_shells"]
+    geometry: CrystalGeometry
+    basis: OrbitalBasis = eqx.field(static=True)
+    hopping_pairs: tuple[tuple[int, int], ...] = eqx.field(static=True)
+    hopping_cells: tuple[tuple[int, int, int], ...] = eqx.field(static=True)
+    shell_index: tuple[int, ...] = eqx.field(static=True)
+    spinor: bool = eqx.field(static=True)
+
+    def __check_init__(self) -> None:
+        """Validate the static tight-binding invariants again."""
+        _validate_tb_structure(
+            self.hopping_amplitudes,
+            self.onsite_energies,
+            self.soc_lambdas,
+            self.geometry,
+            self.basis,
+            self.hopping_pairs,
+            self.hopping_cells,
+            self.shell_index,
+            self.spinor,
+        )
+
+
+def _validate_diagonalized_structure(
+    eigenvalues: Float[Array, "n_k_e n_bands_e"],
+    eigenvectors: Complex[Array, "n_k_v n_bands_v n_orb"],
+    kpoints: Float[Array, "n_k_p 3"],
+    fermi_energy: Float[Array, ""],
+    geometry: CrystalGeometry,
+    basis: OrbitalBasis,
+) -> None:
+    """Validate static eigensystem shapes and context."""
+    if not isinstance(geometry, CrystalGeometry):
+        message: str = "geometry must be a CrystalGeometry"
+        raise ValueError(message)
+    if not isinstance(basis, OrbitalBasis):
+        message = "basis must be an OrbitalBasis"
+        raise ValueError(message)
+    if eigenvalues.ndim != _EIGENVALUE_NDIM:
+        message = "eigenvalues must be two-dimensional"
+        raise ValueError(message)
+    if eigenvectors.ndim != _EIGENVECTOR_NDIM:
+        message = "eigenvectors must be three-dimensional"
+        raise ValueError(message)
+    if (
+        kpoints.ndim != _EIGENVALUE_NDIM
+        or kpoints.shape[1] != _CELL_COMPONENTS
+    ):
+        message = "kpoints must have shape (n_k, 3)"
+        raise ValueError(message)
+    if fermi_energy.ndim != 0:
+        message = "fermi_energy must be scalar"
+        raise ValueError(message)
+    if eigenvalues.shape != eigenvectors.shape[:2]:
+        message = "eigenvalues and eigenvectors must agree on n_k and n_bands"
+        raise ValueError(message)
+    if eigenvalues.shape[0] != kpoints.shape[0]:
+        message = "eigenvalues and kpoints must agree on n_k"
+        raise ValueError(message)
+    if eigenvectors.shape[2] != len(basis.n):
+        message = "eigenvector orbital axis must match basis"
+        raise ValueError(message)
+    _validate_basis_geometry(basis, geometry)
 
 
 @jaxtyped(typechecker=beartype)
-def make_diagonalized_bands(  # noqa: DOC503
-    eigenvalues: Float[Array, "Ke Be"],
-    eigenvectors: Complex[Array, "Kv Bv O"],
-    kpoints: Float[Array, "Kk 3"],
+def make_diagonalized_bands(  # noqa: DOC502, DOC503
+    eigenvalues: Float[Array, "n_k_e n_bands_e"],
+    eigenvectors: Complex[Array, "n_k_v n_bands_v n_orb"],
+    kpoints: Float[Array, "n_k_p 3"],
+    geometry: CrystalGeometry,
+    basis: OrbitalBasis,
     fermi_energy: ScalarNumeric = 0.0,
 ) -> DiagonalizedBands:
     """Create a validated ``DiagonalizedBands`` instance.
 
-    The factory validates and normalizes diagonalized
-    electronic structure data before constructing a
-    ``DiagonalizedBands`` PyTree. It casts real-valued arrays to ``float64``
-    and the complex eigenvector array to
-    ``complex128`` to maintain full double-precision accuracy in
-    the orbital decomposition.
-
-    ``@jaxtyped(typechecker=beartype)`` checks the shape constraints at call
-    time. K must agree across all arrays, and B and O must be consistent.
-
-    Use this factory when constructing ``DiagonalizedBands`` from
-    either TB diagonalization output or VASP eigenvector data.
+    The factory normalizes every numerical array and validates its axes
+    against the supplied geometry and orbital basis.
 
     :see: :class:`~.test_tb_model.TestMakeDiagonalizedBands`
 
-    Implementation Logic
-    --------------------
-    1. **Prepare the normalized values**::
-
-           eig_arr = jnp.asarray(eigenvalues, dtype=jnp.float64)
-
-       This expression gives the later validation steps a stable shape and
-       dtype.
-
-    2. **Apply static validation**::
-
-           eig_arr.shape != vec_arr.shape[:2]
-
-       This predicate rejects invalid structure before JAX traces the
-       numerical checks.
-
-    3. **Apply traced validation**::
-
-           ~jnp.all(jnp.isfinite(eig_arr))
-
-       This predicate remains active during eager and compiled execution.
-
-    4. **Return the named instance**::
-
-           return bands
-
-       The explicit name keeps the implementation and the Returns section
-       synchronized.
-
     Parameters
     ----------
-    eigenvalues : Float[Array, "Ke Be"]
-        Band energies E_n(k) in eV for K k-points and B bands.
-    eigenvectors : Complex[Array, "Kv Bv O"]
-        Complex orbital coefficients c_{k,b,orb} from Hamiltonian
-        diagonalization, where O is the number of orbitals.
-    kpoints : Float[Array, "Kk 3"]
-        k-point coordinates in reciprocal (fractional) space.
+    eigenvalues : Float[Array, "n_k_e n_bands_e"]
+        Band energies in eV.
+    eigenvectors : Complex[Array, "n_k_v n_bands_v n_orb"]
+        Complex orbital coefficients in the basis-position gauge.
+    kpoints : Float[Array, "n_k_p 3"]
+        Fractional reciprocal-space coordinates.
+    geometry : CrystalGeometry
+        Crystal geometry whose numerical leaves remain differentiable.
+    basis : OrbitalBasis
+        Orbital and atom metadata (**static** -- changing it triggers
+        retracing).
     fermi_energy : ScalarNumeric, optional
-        Fermi level in eV. Default is 0.0.
+        Fermi energy in eV. Default is 0.0.
 
     Returns
     -------
     bands : DiagonalizedBands
-        Validated instance with ``float64`` eigenvalues/kpoints
-        and ``complex128`` eigenvectors.
+        Validated double-precision eigensystem and its structural context.
 
     Raises
     ------
     ValueError
-        If the k-point or band dimensions disagree across the arrays.
+        If eigensystem axes, basis size, or atom assignments disagree.
     EquinoxRuntimeError
-        If eigenvalues, eigenvectors, k-points, or the Fermi energy
-        contain a non-finite value.
+        If any numerical leaf is non-finite.
 
     Notes
     -----
-    Static validation raises ``ValueError`` before traced construction when
-    the k-point or band dimensions disagree. Traced validation uses
-    ``eqx.error_if`` and raises ``EquinoxRuntimeError`` when any numerical
-    field contains a non-finite value.
+    Static validation checks array axes and context before tracing. Runtime
+    validation uses :func:`equinox.error_if` for every numerical leaf, so the
+    same rejection behavior remains active under JIT.
 
     See Also
     --------
-    DiagonalizedBands : The PyTree class constructed by this factory.
+    DiagonalizedBands : Carrier constructed by this factory.
+    make_tb_model : Construct the model diagonalized by native TB producers.
     """
-    eig_arr: Float[Array, "K B"] = jnp.asarray(eigenvalues, dtype=jnp.float64)
-    vec_arr: Complex[Array, "K B O"] = jnp.asarray(
-        eigenvectors, dtype=jnp.complex128
+    eigenvalue_array: Float[Array, "n_k n_bands"] = jnp.asarray(
+        eigenvalues,
+        dtype=jnp.float64,
     )
-    kpt_arr: Float[Array, "K 3"] = jnp.asarray(kpoints, dtype=jnp.float64)
-    ef_arr: Float[Array, " "] = jnp.asarray(fermi_energy, dtype=jnp.float64)
-    if eig_arr.shape != vec_arr.shape[:2]:
-        msg: str = "eigenvalues and eigenvectors must agree on K and B"
-        raise ValueError(msg)
-    if eig_arr.shape[0] != kpt_arr.shape[0]:
-        msg: str = "eigenvalues and kpoints must agree on K"
-        raise ValueError(msg)
+    eigenvector_array: Complex[Array, "n_k n_bands n_orb"] = jnp.asarray(
+        eigenvectors,
+        dtype=jnp.complex128,
+    )
+    kpoint_array: Float[Array, "n_k 3"] = jnp.asarray(
+        kpoints,
+        dtype=jnp.float64,
+    )
+    fermi_array: Float[Array, ""] = jnp.asarray(
+        fermi_energy,
+        dtype=jnp.float64,
+    )
+    _validate_diagonalized_structure(
+        eigenvalue_array,
+        eigenvector_array,
+        kpoint_array,
+        fermi_array,
+        geometry,
+        basis,
+    )
 
-    def validate_and_create() -> DiagonalizedBands:
-        nonlocal ef_arr, eig_arr, kpt_arr, vec_arr
-        eig_arr = eqx.error_if(
-            eig_arr,
-            ~(jnp.all(jnp.isfinite(eig_arr))),
-            "make_diagonalized_bands: eigenvalues finite",
-        )
-        kpt_arr = eqx.error_if(
-            kpt_arr,
-            ~(jnp.all(jnp.isfinite(kpt_arr))),
-            "make_diagonalized_bands: kpoints finite",
-        )
-        vec_arr = eqx.error_if(
-            vec_arr,
-            ~(jnp.all(jnp.isfinite(vec_arr))),
-            "make_diagonalized_bands: eigenvectors finite",
-        )
-        ef_arr = eqx.error_if(
-            ef_arr,
-            ~(jnp.isfinite(ef_arr)),
-            "make_diagonalized_bands: fermi energy finite",
-        )
-        validated_bands: DiagonalizedBands = DiagonalizedBands(
-            eigenvalues=eig_arr,
-            eigenvectors=vec_arr,
-            kpoints=kpt_arr,
-            fermi_energy=ef_arr,
-        )
-        return validated_bands
-
-    bands: DiagonalizedBands = validate_and_create()
+    eigenvalue_array = eqx.error_if(
+        eigenvalue_array,
+        ~jnp.all(jnp.isfinite(eigenvalue_array)),
+        "make_diagonalized_bands: eigenvalues finite",
+    )
+    eigenvector_array = eqx.error_if(
+        eigenvector_array,
+        ~jnp.all(jnp.isfinite(eigenvector_array)),
+        "make_diagonalized_bands: eigenvectors finite",
+    )
+    kpoint_array = eqx.error_if(
+        kpoint_array,
+        ~jnp.all(jnp.isfinite(kpoint_array)),
+        "make_diagonalized_bands: kpoints finite",
+    )
+    fermi_array = eqx.error_if(
+        fermi_array,
+        ~jnp.isfinite(fermi_array),
+        "make_diagonalized_bands: fermi energy finite",
+    )
+    checked_geometry: CrystalGeometry = _checked_geometry(
+        geometry,
+        "make_diagonalized_bands",
+    )
+    bands: DiagonalizedBands = DiagonalizedBands(
+        eigenvalues=eigenvalue_array,
+        eigenvectors=eigenvector_array,
+        kpoints=kpoint_array,
+        fermi_energy=fermi_array,
+        geometry=checked_geometry,
+        basis=basis,
+    )
     return bands
 
 
 @jaxtyped(typechecker=beartype)
-def make_tb_model(  # noqa: DOC503
-    hopping_params: Float[Array, " H"],
-    lattice_vectors: Float[Array, "3 3"],
-    hopping_indices: tuple,
-    n_orbitals: int,
-    orbital_basis: OrbitalBasis,
+def make_tb_model(  # noqa: DOC502, DOC503
+    hopping_amplitudes: Complex[Array, " n_hop"],
+    onsite_energies: Float[Array, " n_orb"],
+    soc_lambdas: Float[Array, " n_shells"],
+    geometry: CrystalGeometry,
+    basis: OrbitalBasis,
+    hopping_pairs: tuple[tuple[int, int], ...],
+    hopping_cells: tuple[tuple[int, int, int], ...],
+    shell_index: tuple[int, ...],
+    spinor: bool = False,
 ) -> TBModel:
-    """Create a validated ``TBModel`` instance.
+    r"""Create a validated ``TBModel`` instance.
 
-    The factory validates and normalizes tight-binding
-    model parameters before constructing a ``TBModel`` PyTree. The
-    factory casts the two differentiable arrays to ``float64``. It passes the
-    three static fields unchanged as auxiliary data.
-
-    ``@jaxtyped(typechecker=beartype)`` checks the shape constraints on the
-    differentiable arrays at call time.
-
-    Use this factory to build a ``TBModel`` from raw hopping data. Then pass
-    the model to the Hamiltonian construction and diagonalization routines.
+    The factory normalizes numerical leaves, validates exact connectivity,
+    and enforces complex-conjugate hopping closure under JAX transformations.
 
     :see: :class:`~.test_tb_model.TestMakeTBModel`
 
-    Implementation Logic
-    --------------------
-    1. **Prepare the normalized values**::
-
-           hop_arr = jnp.asarray(hopping_params, dtype=jnp.float64)
-
-       This expression gives the later validation steps a stable shape and
-       dtype.
-
-    2. **Apply static validation**::
-
-           hop_arr.shape[0] != len(hopping_indices)
-
-       This predicate rejects invalid structure before JAX traces the
-       numerical checks.
-
-    3. **Apply traced validation**::
-
-           ~jnp.all(jnp.isfinite(hop_arr))
-
-       This predicate remains active during eager and compiled execution.
-
-    4. **Return the named instance**::
-
-           return model
-
-       The explicit name keeps the implementation and the Returns section
-       synchronized.
-
     Parameters
     ----------
-    hopping_params : Float[Array, " H"]
-        Hopping amplitudes t_{ij,R} in eV, one per connection.
-    lattice_vectors : Float[Array, "3 3"]
-        Real-space lattice vectors as rows, in Angstroms.
-    hopping_indices : tuple
-        Connectivity: ``(orb_i, orb_j, (R_x, R_y, R_z))`` per
-        hopping, where R_x, R_y, R_z are integer lattice translation
-        indices (**static** -- a compile-time constant; changing it triggers
+    hopping_amplitudes : Complex[Array, "n_hop"]
+        Directed hopping amplitudes in eV.
+    onsite_energies : Float[Array, "n_orb"]
+        Onsite orbital energies in eV.
+    soc_lambdas : Float[Array, "n_shells"]
+        Spin-orbit coupling energies in eV, one per atomic shell.
+    geometry : CrystalGeometry
+        Crystal lattice and fractional atomic positions.
+    basis : OrbitalBasis
+        Orbital-to-atom and quantum-number metadata (**static** -- changing it
+        triggers retracing).
+    hopping_pairs : tuple[tuple[int, int], ...]
+        Directed ``(i, j)`` orbital pairs (**static** -- changing them
+        triggers retracing).
+    hopping_cells : tuple[tuple[int, int, int], ...]
+        Exact integer translations ``R`` (**static** -- changing them triggers
         retracing).
-    n_orbitals : int
-        Number of orbitals in the unit cell (**static** -- a compile-time
-        constant; changing it triggers retracing).
-    orbital_basis : OrbitalBasis
-        Quantum number metadata for each orbital (**static** -- a compile-time
-        constant; changing it triggers retracing).
+    shell_index : tuple[int, ...]
+        Orbital-to-SOC-shell map with ``-1`` denoting no shell (**static** --
+        changing it triggers retracing).
+    spinor : bool, optional
+        Whether the basis has explicit spin channels (**static** -- changing
+        it triggers retracing). Default is ``False``.
 
     Returns
     -------
     model : TBModel
-        Validated tight-binding model with ``float64`` arrays and
-        static structural metadata.
+        Validated complex tight-binding model.
 
     Raises
     ------
     ValueError
-        If the hopping parameter count does not match the connectivity,
-        an orbital index lies outside ``[0, n_orbitals)``, or the orbital
-        basis size differs from ``n_orbitals``.
+        If structural lengths, indices, spin metadata, shell metadata, or
+        Hermiticity closure metadata are inconsistent.
     EquinoxRuntimeError
-        If hoppings or lattice vectors are non-finite, or if the lattice
-        is degenerate.
+        If a numerical leaf is non-finite or reverse hopping amplitudes are
+        not complex conjugates to absolute tolerance ``1e-12`` eV.
 
     Notes
     -----
-    Static validation raises ``ValueError`` before traced construction when
-    hopping metadata, orbital counts, or orbital indices are inconsistent.
-    Traced validation uses ``eqx.error_if`` and raises
-    ``EquinoxRuntimeError`` for non-finite arrays or a degenerate lattice.
+    The algorithm is:
+
+    1. Check static dimensions, unique exact integer metadata, contiguous
+       atomic-shell IDs, spin semantics, and closure under
+       ``(i, j, R) -> (j, i, -R)``.
+    2. Derive a static reverse-entry permutation from exact metadata.
+    3. Use :func:`equinox.error_if` to reject non-finite leaves and enforce
+       :math:`t_{ji}(-R) = t_{ij}(R)^*` under eager and compiled execution.
+
+    The physical displacement is not stored. Hamiltonian consumers derive
+    ``R + tau_j - tau_i`` from this carrier in the basis-position gauge.
 
     See Also
     --------
-    TBModel : The PyTree class constructed by this factory.
-    make_orbital_basis : Factory for the ``OrbitalBasis`` argument.
+    TBModel : Carrier constructed by this factory.
+    make_diagonalized_bands : Construct the downstream eigensystem carrier.
     """
-    hop_arr: Float[Array, " H"] = jnp.asarray(
-        hopping_params, dtype=jnp.float64
+    hopping_array: Complex[Array, " n_hop"] = jnp.asarray(
+        hopping_amplitudes,
+        dtype=jnp.complex128,
     )
-    lat_arr: Float[Array, "3 3"] = jnp.asarray(
-        lattice_vectors, dtype=jnp.float64
+    onsite_array: Float[Array, " n_orb"] = jnp.asarray(
+        onsite_energies,
+        dtype=jnp.float64,
     )
-    if hop_arr.shape[0] != len(hopping_indices):
-        msg: str = "hopping_params and hopping_indices must have equal length"
-        raise ValueError(msg)
-    if len(orbital_basis.n_values) != n_orbitals:
-        msg: str = "orbital_basis size must match n_orbitals"
-        raise ValueError(msg)
-    if any(
-        index < 0 or index >= n_orbitals
-        for hopping in hopping_indices
-        for index in hopping[:2]
-    ):
-        msg: str = "hopping orbital indices must be in [0, n_orbitals)"
-        raise ValueError(msg)
-
-    def validate_and_create() -> TBModel:
-        nonlocal hop_arr, lat_arr
-        hop_arr = eqx.error_if(
-            hop_arr,
-            ~(jnp.all(jnp.isfinite(hop_arr))),
-            "make_tb_model: hopping finite",
-        )
-        lat_arr = eqx.error_if(
-            lat_arr,
-            ~(jnp.all(jnp.isfinite(lat_arr))),
-            "make_tb_model: lattice finite",
-        )
-        lat_arr = eqx.error_if(
-            lat_arr,
-            jnp.linalg.det(lat_arr) == 0.0,
-            "make_tb_model: lattice non-degenerate",
-        )
-        validated_model: TBModel = TBModel(
-            hopping_params=hop_arr,
-            lattice_vectors=lat_arr,
-            hopping_indices=hopping_indices,
-            n_orbitals=n_orbitals,
-            orbital_basis=orbital_basis,
-        )
-        return validated_model
-
-    model: TBModel = validate_and_create()
-    return model
-
-
-@jaxtyped(typechecker=beartype)
-def make_1d_chain_model(
-    t: ScalarFloat = -1.0,
-) -> TBModel:
-    r"""Create a 1D chain tight-binding model.
-
-    The model has one orbital in each unit cell and nearest-neighbor hopping t.
-
-    The 1D chain has one s-orbital in each unit cell. Hopping connects only the
-    two nearest neighbors at lattice vectors ``+a1`` and ``-a1``. The function
-    uses an identity lattice matrix. Therefore, fractional and Cartesian
-    coordinates coincide for a lattice constant of 1 in arbitrary units.
-
-    The resulting band dispersion is the standard cosine band:
-
-    .. math::
-
-        E(k) = 2t \cos(2 \pi k)
-
-    with bandwidth ``|4t|``. This model provides a minimal test for the
-    Hamiltonian builder, diagonalizer, and gradient machinery.
-
-    The hopping list contains ``(0, 0, (+1,0,0))`` and
-    ``(0, 0, (-1,0,0))``. These entries connect the single orbital to itself
-    in adjacent unit cells. Hermitianization in ``build_hamiltonian_k`` makes
-    these entries redundant because each is its own conjugate. The diagonal
-    entry therefore receives ``2t cos(2 pi k)``.
-
-    :see: :class:`~.test_tb_model.TestMake1dChainModel`
-
-    Implementation Logic
-    --------------------
-    1. **Create the orbital basis**::
-
-           basis = make_orbital_basis(...)
-
-       The basis contains one s orbital per unit cell.
-    2. **Define nearest-neighbor hops**::
-
-           hopping_indices = ((0, 0, (1, 0, 0)), (0, 0, (-1, 0, 0)))
-
-       The two entries connect the orbital to both adjacent unit cells.
-    3. **Construct the model**::
-
-           model = make_tb_model(...)
-
-       The validated factory preserves gradients through the hopping value.
-
-    Parameters
-    ----------
-    t : ScalarFloat
-        Hopping amplitude. Default -1.0.
-
-    Returns
-    -------
-    model : TBModel
-        1D chain model.
-    """
-    basis: OrbitalBasis = make_orbital_basis(
-        n_values=(1,),
-        l_values=(0,),
-        m_values=(0,),
-        labels=("s",),
+    soc_array: Float[Array, " n_shells"] = jnp.asarray(
+        soc_lambdas,
+        dtype=jnp.float64,
     )
-    hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
-        (0, 0, (1, 0, 0)),
-        (0, 0, (-1, 0, 0)),
+    closure: tuple[int, ...] = _validate_tb_structure(
+        hopping_array,
+        onsite_array,
+        soc_array,
+        geometry,
+        basis,
+        hopping_pairs,
+        hopping_cells,
+        shell_index,
+        spinor,
     )
-    lattice: Float[Array, "3 3"] = jnp.eye(3, dtype=jnp.float64)
-    model: TBModel = make_tb_model(
-        hopping_params=jnp.array([t, t], dtype=jnp.float64),
-        lattice_vectors=lattice,
-        hopping_indices=hopping_indices,
-        n_orbitals=1,
-        orbital_basis=basis,
+
+    hopping_array = eqx.error_if(
+        hopping_array,
+        ~jnp.all(jnp.isfinite(hopping_array)),
+        "make_tb_model: hopping amplitudes finite",
     )
-    return model
-
-
-@jaxtyped(typechecker=beartype)
-def make_graphene_model(
-    t: ScalarFloat = -2.7,
-) -> TBModel:
-    """Create a graphene pz tight-binding model.
-
-    The model has two orbitals (A/B sublattices) on a honeycomb lattice. It
-    uses nearest-neighbor hopping t.
-
-    Graphene's honeycomb lattice has two atoms (sublattices A and B)
-    per primitive cell.  The lattice vectors used here are:
-
-    * ``a1 = (a, 0, 0)``
-    * ``a2 = (a/2, a*sqrt(3)/2, 0)``
-    * ``a3 = (0, 0, 10)``  (vacuum slab for 2-D periodicity)
-
-    with ``a = 2.46`` Angstrom (the experimental graphene lattice
-    constant). The function labels the two orbitals ``A_pz`` and ``B_pz``.
-    Their quantum numbers are ``(n=2, l=1, m=0)``. These orbitals represent
-    carbon p_z orbitals on each sublattice.
-
-    Each A-site atom has three nearest-neighbor B-site atoms.  In
-    fractional coordinates the three A -> B hoppings connect to cells
-    ``(0,0,0)``, ``(-1,0,0)``, and ``(0,-1,0)``.  The reverse B -> A
-    hoppings use ``(0,0,0)``, ``(+1,0,0)``, and ``(0,+1,0)``. The function
-    lists these reverse hoppings explicitly. The raw Hamiltonian is therefore
-    nearly Hermitian before ``build_hamiltonian_k`` applies Hermitianization.
-
-    The resulting 2x2 Hamiltonian produces the classic Dirac-cone
-    band structure with linear dispersion near the K and K' points
-    and a bandwidth of ``|6t|``.
-
-    :see: :class:`~.test_tb_model.TestMakeGrapheneModel`
-
-    Implementation Logic
-    --------------------
-    1. **Create the orbital basis**::
-
-           basis: OrbitalBasis = make_orbital_basis(
-               n_values=(2, 2),
-               l_values=(1, 1),
-               m_values=(0, 0),
-               labels=("A_pz", "B_pz"),
-           )
-
-       These static quantum numbers identify the two carbon p-z orbitals.
-
-    2. **Construct the primitive lattice**::
-
-           a: float = 2.46
-           a1 = jnp.array([a, 0.0, 0.0], dtype=jnp.float64)
-           a2 = jnp.array(
-               [a / 2.0, a * jnp.sqrt(3.0) / 2.0, 0.0],
-               dtype=jnp.float64,
-           )
-           a3 = jnp.array([0.0, 0.0, 10.0], dtype=jnp.float64)
-           lattice = jnp.stack([a1, a2, a3])
-
-       The first two vectors define the honeycomb plane. The third vector
-       adds vacuum normal to that plane.
-
-    3. **Enumerate the nearest-neighbor hoppings**::
-
-           hopping_indices = (
-               (0, 1, (0, 0, 0)),
-               (0, 1, (-1, 0, 0)),
-               (0, 1, (0, -1, 0)),
-               (1, 0, (0, 0, 0)),
-               (1, 0, (1, 0, 0)),
-               (1, 0, (0, 1, 0)),
-           )
-
-       The forward and reverse entries preserve the Hermitian lattice model.
-
-    4. **Construct the validated model**::
-
-           t_val = jnp.asarray(t, dtype=jnp.float64)
-           hopping_params = jnp.array(
-               [t_val, t_val, t_val, t_val, t_val, t_val],
-               dtype=jnp.float64,
-           )
-           model = make_tb_model(
-               hopping_params=hopping_params,
-               lattice_vectors=lattice,
-               hopping_indices=hopping_indices,
-               n_orbitals=2,
-               orbital_basis=basis,
-           )
-
-       The shared JAX scalar keeps one differentiable hopping value for all
-       six directed bonds. The factory applies the model validation contract.
-
-    5. **Return the named instance**::
-
-           return model
-
-       The explicit name keeps the implementation and the Returns section
-       synchronized.
-
-    Parameters
-    ----------
-    t : ScalarFloat
-        Nearest-neighbor hopping. Default -2.7 eV.
-
-    Returns
-    -------
-    model : TBModel
-        Graphene model.
-
-    Notes
-    -----
-    The default hopping value of -2.7 eV reproduces the standard
-    nearest-neighbor graphene band structure. Castro Neto et al. use this
-    value in Rev. Mod. Phys. 81, 109.
-    The negative sign follows the convention that bonding states
-    are lower in energy.
-
-    The conversion with ``jnp.asarray`` keeps ``t`` on the JAX gradient tape.
-    Gradients of downstream spectra therefore propagate to the shared hopping.
-    """
-    basis: OrbitalBasis = make_orbital_basis(
-        n_values=(2, 2),
-        l_values=(1, 1),
-        m_values=(0, 0),
-        labels=("A_pz", "B_pz"),
+    onsite_array = eqx.error_if(
+        onsite_array,
+        ~jnp.all(jnp.isfinite(onsite_array)),
+        "make_tb_model: onsite energies finite",
     )
-    a: float = 2.46
-    a1: Float[Array, " 3"] = jnp.array([a, 0.0, 0.0], dtype=jnp.float64)
-    a2: Float[Array, " 3"] = jnp.array(
-        [a / 2.0, a * jnp.sqrt(3.0) / 2.0, 0.0], dtype=jnp.float64
+    soc_array = eqx.error_if(
+        soc_array,
+        ~jnp.all(jnp.isfinite(soc_array)),
+        "make_tb_model: soc lambdas finite",
     )
-    a3: Float[Array, " 3"] = jnp.array([0.0, 0.0, 10.0], dtype=jnp.float64)
-    lattice: Float[Array, "3 3"] = jnp.stack([a1, a2, a3])
-
-    hopping_indices: tuple[tuple[int, int, tuple[int, int, int]], ...] = (
-        (0, 1, (0, 0, 0)),
-        (0, 1, (-1, 0, 0)),
-        (0, 1, (0, -1, 0)),
-        (1, 0, (0, 0, 0)),
-        (1, 0, (1, 0, 0)),
-        (1, 0, (0, 1, 0)),
+    closure_indices: Int[Array, " n_hop"] = jnp.asarray(
+        closure,
+        dtype=jnp.int32,
     )
-    t_val: Float[Array, " "] = jnp.asarray(t, dtype=jnp.float64)
-    hopping_params: Float[Array, " H"] = jnp.array(
-        [t_val, t_val, t_val, t_val, t_val, t_val], dtype=jnp.float64
+    reverse_amplitudes: Complex[Array, " n_hop"] = hopping_array[
+        closure_indices
+    ]
+    closure_error: Float[Array, " n_hop"] = jnp.abs(
+        reverse_amplitudes - jnp.conj(hopping_array)
     )
-    model: TBModel = make_tb_model(
-        hopping_params=hopping_params,
-        lattice_vectors=lattice,
-        hopping_indices=hopping_indices,
-        n_orbitals=2,
-        orbital_basis=basis,
+    hopping_array = eqx.error_if(
+        hopping_array,
+        ~jnp.all(closure_error <= _HERMITICITY_TOLERANCE),
+        "make_tb_model: reverse hopping amplitudes must be complex conjugates",
+    )
+    checked_geometry: CrystalGeometry = _checked_geometry(
+        geometry,
+        "make_tb_model",
+    )
+    model: TBModel = TBModel(
+        hopping_amplitudes=hopping_array,
+        onsite_energies=onsite_array,
+        soc_lambdas=soc_array,
+        geometry=checked_geometry,
+        basis=basis,
+        hopping_pairs=hopping_pairs,
+        hopping_cells=hopping_cells,
+        shell_index=shell_index,
+        spinor=spinor,
     )
     return model
 
@@ -657,8 +714,6 @@ def make_graphene_model(
 __all__: list[str] = [
     "DiagonalizedBands",
     "TBModel",
-    "make_1d_chain_model",
     "make_diagonalized_bands",
-    "make_graphene_model",
     "make_tb_model",
 ]

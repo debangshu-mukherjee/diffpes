@@ -686,9 +686,27 @@ tests/
 **Use external truths, never diffpes outputs.** Compare verification results
 against a closed-form result, a `scipy` or `sympy` reference value, or a
 published number. Closed-form examples include hydrogenic radial integrals,
-Rashba spinors, and free-electron kinematics. A pinned chinook cross-check is
-an example of a published number. Do not use a stored diffpes output or an
-unverified magic number.
+Rashba spinors, and free-electron kinematics. Do not use a stored diffpes
+output or an unverified magic number.
+
+**Physics is the oracle. chinook is not.** A pinned chinook artifact is a
+cross-check against an independent implementation. It does not define
+correctness. When chinook and the physics canon disagree, use C-type evidence
+to resolve the dispute. This evidence includes analytic results, invariants,
+normative formats, and independent convergence. Amend the canon if necessary.
+Record each disagreement and its resolution beside the artifact.
+
+**Never import chinook in the test suite.** Tests read pinned chinook values
+from committed artifacts in `tests/data/`. Chinook-importing generators live
+only outside the DiffPES source and test trees, under the planning repository's
+`verification/` area, and run manually in a separate pinned environment. Only
+immutable data, hashes, and provenance cross into DiffPES. Do not add chinook
+to any dependency group. Do not import or invoke it from source, tests,
+conftest, fixtures, helpers, or CI. Keep generator Python outside `tests/`.
+Never use a conditional skip based on Chinook availability. Tests
+must read each comparison value from a committed artifact, not an inline magic
+number. Repository-floor checks and the pytest import firewall enforce this
+one-way boundary.
 
 **Test gradients explicitly.** Give every differentiable primitive a central
 finite-difference test with a stated tolerance. Add a zero-gradient tripwire

@@ -10,7 +10,7 @@ The convention follows the Condon-Shortley phase:
 
 .. math::
 
-    Y_l^m = \sqrt{2} N_l^{|m|} P_l^{|m|}(\cos\theta) \cos(m\varphi)
+    Y_l^m = (-1)^m \sqrt{2} N_l^{|m|} P_l^{|m|}(\cos\theta) \cos(m\varphi)
         \quad (m > 0)
 
     Y_l^0 = N_l^0 P_l^0(\cos\theta)
@@ -214,7 +214,7 @@ def real_spherical_harmonic(
 
     .. math::
 
-        Y_l^m(\theta, \varphi) = \sqrt{2} \, N_l^{|m|} \,
+        Y_l^m(\theta, \varphi) = (-1)^m \sqrt{2} \, N_l^{|m|} \,
             P_l^{|m|}(\cos\theta) \, \cos(m\varphi)
             \quad (m > 0)
 
@@ -224,9 +224,9 @@ def real_spherical_harmonic(
             P_l^{|m|}(\cos\theta) \, \sin(|m|\varphi)
             \quad (m < 0)
 
-    For negative m, the :math:`(-1)^{|m|}` factor cancels the
-    Condon-Shortley phase. The `_associated_legendre_plm` function includes
-    this phase in :math:`P_l^{|m|}`. The result follows the real-to-complex
+    For nonzero m, the explicit :math:`(-1)^{|m|}` factor cancels the
+    Condon-Shortley phase already included by `_associated_legendre_plm` in
+    :math:`P_l^{|m|}`. The result follows the real-to-complex
     convention of the Gaunt table. Consequently, the complex-basis Gaunt
     coefficients match direct integrals of these real harmonics.
 
@@ -293,7 +293,7 @@ def real_spherical_harmonic(
 
     ylm: Float[Array, " ..."]
     if m > 0:
-        ylm = jnp.sqrt(2.0) * norm * plm * jnp.cos(m * phi)
+        ylm = ((-1.0) ** m) * jnp.sqrt(2.0) * norm * plm * jnp.cos(m * phi)
         return ylm
     if m == 0:
         ylm = norm * plm

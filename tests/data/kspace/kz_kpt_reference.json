@@ -1,0 +1,1709 @@
+{
+  "chinook_constants": {
+    "angstrom_m": 1e-10,
+    "electron_charge_coulomb": 1.602e-19,
+    "electron_mass_kg": 9.11e-31,
+    "hbar_joule_second": 1.0545606529268985e-34,
+    "momentum_prefactor_inv_ang_sqrt_ev": 0.5123112337420551
+  },
+  "gate": "03.G3",
+  "maximum_production_relative_delta": 1.641030044571317e-05,
+  "metadata": {
+    "chinook_commit": "24913de8cc5b8c162f7c1b4acc64bd1b54dd548b",
+    "diffpes_commit": "afe36cfbb703510f01de6da376b35627eaac8d4d",
+    "environment_sha256": "6d00cb4df251508b6392273b1df166f6a17abe8f6691cffead45c636e8ef2531",
+    "generator": "gen_chinook_kspace_reference.py",
+    "machine": "x86_64",
+    "numpy_build_configuration": "{\n  \"Compilers\": {\n    \"c\": {\n      \"name\": \"gcc\",\n      \"linker\": \"ld.bfd\",\n      \"version\": \"10.2.1\",\n      \"commands\": \"cc\",\n      \"args\": \"-fno-strict-aliasing\",\n      \"linker args\": \"-Wl,--strip-debug, -fno-strict-aliasing\"\n    },\n    \"cython\": {\n      \"name\": \"cython\",\n      \"linker\": \"cython\",\n      \"version\": \"3.0.8\",\n      \"commands\": \"cython\"\n    },\n    \"c++\": {\n      \"name\": \"gcc\",\n      \"linker\": \"ld.bfd\",\n      \"version\": \"10.2.1\",\n      \"commands\": \"c++\",\n      \"linker args\": \"-Wl,--strip-debug\"\n    }\n  },\n  \"Machine Information\": {\n    \"host\": {\n      \"cpu\": \"x86_64\",\n      \"family\": \"x86_64\",\n      \"endian\": \"little\",\n      \"system\": \"linux\"\n    },\n    \"build\": {\n      \"cpu\": \"x86_64\",\n      \"family\": \"x86_64\",\n      \"endian\": \"little\",\n      \"system\": \"linux\"\n    }\n  },\n  \"Build Dependencies\": {\n    \"blas\": {\n      \"name\": \"openblas64\",\n      \"found\": true,\n      \"version\": \"0.3.23.dev\",\n      \"detection method\": \"pkgconfig\",\n      \"include directory\": \"/usr/local/include\",\n      \"lib directory\": \"/usr/local/lib\",\n      \"openblas configuration\": \"USE_64BITINT=1 DYNAMIC_ARCH=1 DYNAMIC_OLDER= NO_CBLAS= NO_LAPACK= NO_LAPACKE= NO_AFFINITY=1 USE_OPENMP= HASWELL MAX_THREADS=2\",\n      \"pc file directory\": \"/usr/local/lib/pkgconfig\"\n    },\n    \"lapack\": {\n      \"name\": \"dep140213194937296\",\n      \"found\": true,\n      \"version\": \"1.26.4\",\n      \"detection method\": \"internal\",\n      \"include directory\": \"unknown\",\n      \"lib directory\": \"unknown\",\n      \"openblas configuration\": \"unknown\",\n      \"pc file directory\": \"unknown\"\n    }\n  },\n  \"Python Information\": {\n    \"path\": \"/opt/python/cp311-cp311/bin/python\",\n    \"version\": \"3.11\"\n  },\n  \"SIMD Extensions\": {\n    \"baseline\": [\n      \"SSE\",\n      \"SSE2\",\n      \"SSE3\"\n    ],\n    \"found\": [\n      \"SSSE3\",\n      \"SSE41\",\n      \"POPCNT\",\n      \"SSE42\",\n      \"AVX\",\n      \"F16C\",\n      \"FMA3\",\n      \"AVX2\",\n      \"AVX512F\",\n      \"AVX512CD\",\n      \"AVX512_SKX\"\n    ],\n    \"not found\": [\n      \"AVX512_KNL\",\n      \"AVX512_KNM\",\n      \"AVX512_CLX\",\n      \"AVX512_CNL\",\n      \"AVX512_ICL\"\n    ]\n  }\n}\n",
+    "numpy_version": "1.26.4",
+    "platform": "Linux-5.15.0-185-generic-x86_64-with-glibc2.35",
+    "python": "3.11.13"
+  },
+  "production_constant": {
+    "hbar_squared_over_2me_ev_angstrom_squared": 3.8099821,
+    "momentum_prefactor_inv_ang_sqrt_ev": 0.5123167230536405
+  },
+  "records": [
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.571781982497997,
+      "kz_injected_constants_inv_ang": 2.571781982497997,
+      "kz_production_constants_inv_ang": 2.571809538623457,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0714798395687061e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.5596020326412714,
+      "kz_injected_constants_inv_ang": 2.5596020326412714,
+      "kz_production_constants_inv_ang": 2.559629719892039,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0817013900812025e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.5227093700030783,
+      "kz_injected_constants_inv_ang": 2.5227093700030783,
+      "kz_production_constants_inv_ang": 2.52273746215388,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1135706370147083e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.459992391350292,
+      "kz_injected_constants_inv_ang": 2.459992391350292,
+      "kz_production_constants_inv_ang": 2.460021199696173,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1710745928545914e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.369401309508655,
+      "kz_injected_constants_inv_ang": 2.3694013095086546,
+      "kz_production_constants_inv_ang": 2.369431219291794,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.2623350472152043e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.2475681447959097,
+      "kz_injected_constants_inv_ang": 2.2475681447959097,
+      "kz_production_constants_inv_ang": 2.247599675866367,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.4028971949210193e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.0890338832822524,
+      "kz_injected_constants_inv_ang": 2.0890338832822524,
+      "kz_production_constants_inv_ang": 2.089067807170126,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.6239031901286163e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.7683774609641936,
+      "kz_injected_constants_inv_ang": 2.7683774609641936,
+      "kz_production_constants_inv_ang": 2.768407123570571,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.071479839568101e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.757066151976509,
+      "kz_injected_constants_inv_ang": 2.7570661519765087,
+      "kz_production_constants_inv_ang": 2.7570959362772056,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0802896649793065e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.7228503018665116,
+      "kz_injected_constants_inv_ang": 2.7228503018665116,
+      "kz_production_constants_inv_ang": 2.7228804604382253,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1076103483566682e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.664847794222881,
+      "kz_injected_constants_inv_ang": 2.6648477942228808,
+      "kz_production_constants_inv_ang": 2.664878609212112,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1563508166495963e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.5814557455773968,
+      "kz_injected_constants_inv_ang": 2.5814557455773968,
+      "kz_production_constants_inv_ang": 2.5814875560103485,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.232267220007521e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.4701039991009597,
+      "kz_injected_constants_inv_ang": 2.4701039991009597,
+      "kz_production_constants_inv_ang": 2.470137243522368,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.3458713244573463e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.326781847611536,
+      "kz_injected_constants_inv_ang": 2.326781847611536,
+      "kz_production_constants_inv_ang": 2.3268171397504105,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.5167790186544465e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.9071123416595848,
+      "kz_injected_constants_inv_ang": 2.9071123416595848,
+      "kz_production_constants_inv_ang": 2.9071434907822393,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0714798395709452e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.896342895278367,
+      "kz_injected_constants_inv_ang": 2.896342895278367,
+      "kz_production_constants_inv_ang": 2.8963741602212836,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0794627586172616e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.863791571855304,
+      "kz_injected_constants_inv_ang": 2.8637915718553044,
+      "kz_production_constants_inv_ang": 2.863823192167691,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1041415408119581e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.8087011530295416,
+      "kz_injected_constants_inv_ang": 2.808701153029541,
+      "kz_production_constants_inv_ang": 2.8087333935419263,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.147879771756117e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.729707340912112,
+      "kz_injected_constants_inv_ang": 2.729707340912112,
+      "kz_production_constants_inv_ang": 2.7297405144074673,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.2152766290344722e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.6246527707545386,
+      "kz_injected_constants_inv_ang": 2.624652770754538,
+      "kz_production_constants_inv_ang": 2.62468727203786,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.314508483019946e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.490241387301535,
+      "kz_injected_constants_inv_ang": 2.4902413873015354,
+      "kz_production_constants_inv_ang": 2.4902777507735046,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.4602388409005715e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.5461404449464635,
+      "kz_injected_constants_inv_ang": 2.546140444946463,
+      "kz_production_constants_inv_ang": 2.546167726328018,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0714798395518954e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.5338372412986936,
+      "kz_injected_constants_inv_ang": 2.5338372412986936,
+      "kz_production_constants_inv_ang": 2.533864655145256,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0819103183013938e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.4965638716828726,
+      "kz_injected_constants_inv_ang": 2.496563871682872,
+      "kz_production_constants_inv_ang": 2.496591694810024,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1144568527619746e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.4331730652364567,
+      "kz_injected_constants_inv_ang": 2.4331730652364567,
+      "kz_production_constants_inv_ang": 2.4332016132236944,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1732822315683322e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.3415446110190117,
+      "kz_injected_constants_inv_ang": 2.3415446110190117,
+      "kz_production_constants_inv_ang": 2.3415742761215985,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.2669031564566294e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.218181950470289,
+      "kz_injected_constants_inv_ang": 2.2181819504702887,
+      "kz_production_constants_inv_ang": 2.2182132653544357,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.4117364961882432e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.057384544851102,
+      "kz_injected_constants_inv_ang": 2.0573845448511014,
+      "kz_production_constants_inv_ang": 2.0574183071496153,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.641030044571317e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.7445732575876716,
+      "kz_injected_constants_inv_ang": 2.744573257587671,
+      "kz_production_constants_inv_ang": 2.7446026651368083,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0714798395494463e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.733163435703288,
+      "kz_injected_constants_inv_ang": 2.733163435703288,
+      "kz_production_constants_inv_ang": 2.733192966015402,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0804444303814589e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.698644542407429,
+      "kz_injected_constants_inv_ang": 2.6986445424074286,
+      "kz_production_constants_inv_ang": 2.6986744504434155,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1082614074018938e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.6401102943372274,
+      "kz_injected_constants_inv_ang": 2.6401102943372274,
+      "kz_production_constants_inv_ang": 2.6401408654607943,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1579487278402804e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.5559112594660642,
+      "kz_injected_constants_inv_ang": 2.555911259466064,
+      "kz_production_constants_inv_ang": 2.5559428376777267,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.2354971850250648e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.44339566306102,
+      "kz_injected_constants_inv_ang": 2.4433956630610196,
+      "kz_production_constants_inv_ang": 2.443428695394255,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.3519027529723136e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.2984086595436857,
+      "kz_injected_constants_inv_ang": 2.2984086595436852,
+      "kz_production_constants_inv_ang": 2.2984437755742624,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.527841031702399e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 2.8844532873527906,
+      "kz_injected_constants_inv_ang": 2.8844532873527906,
+      "kz_production_constants_inv_ang": 2.8844841936882464,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0714798395690366e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 2.873598922417727,
+      "kz_injected_constants_inv_ang": 2.873598922417727,
+      "kz_production_constants_inv_ang": 2.873629945493562,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.0795896251523955e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 2.840786997808938,
+      "kz_injected_constants_inv_ang": 2.840786997808938,
+      "kz_production_constants_inv_ang": 2.84081837920648,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.104672668738957e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 2.785241599380621,
+      "kz_injected_constants_inv_ang": 2.785241599380621,
+      "kz_production_constants_inv_ang": 2.78527360660265,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.1491721951841643e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 2.705562929765324,
+      "kz_injected_constants_inv_ang": 2.7055629297653234,
+      "kz_production_constants_inv_ang": 2.7055958795868484,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.2178545603976376e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 2.599532797815854,
+      "kz_injected_constants_inv_ang": 2.599532797815854,
+      "kz_production_constants_inv_ang": 2.5995670915822373,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.3192280709958587e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 2.4637513606125765,
+      "kz_injected_constants_inv_ang": 2.463751360612576,
+      "kz_production_constants_inv_ang": 2.4637875443384587,
+      "photon_energy_ev": 21.2,
+      "production_relative_delta": 1.4686435677183786e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 3.7647033364912783,
+      "kz_injected_constants_inv_ang": 3.764703336491278,
+      "kz_production_constants_inv_ang": 3.764743674528548,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395547597e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.756393378200499,
+      "kz_injected_constants_inv_ang": 3.7563933782004995,
+      "kz_production_constants_inv_ang": 3.7564338054733124,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0762257501571687e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.731352464159418,
+      "kz_injected_constants_inv_ang": 3.731352464159418,
+      "kz_production_constants_inv_ang": 3.7313931627346255,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0907191319673109e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.6892399233159883,
+      "kz_injected_constants_inv_ang": 3.6892399233159883,
+      "kz_production_constants_inv_ang": 3.689281086458812,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.11576215370276e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.6294615594862774,
+      "kz_injected_constants_inv_ang": 3.6294615594862774,
+      "kz_production_constants_inv_ang": 3.629503400591149,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1528185155213375e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.5511253444209148,
+      "kz_injected_constants_inv_ang": 3.5511253444209148,
+      "kz_production_constants_inv_ang": 3.5511681085105944,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2042405021498645e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.4529684637697695,
+      "kz_injected_constants_inv_ang": 3.452968463769769,
+      "kz_production_constants_inv_ang": 3.453012443490859,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.273678620318688e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 3.9016461157647018,
+      "kz_injected_constants_inv_ang": 3.9016461157647018,
+      "kz_production_constants_inv_ang": 3.9016879211162436,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395718527e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.893628437930587,
+      "kz_injected_constants_inv_ang": 3.8936284379305874,
+      "kz_production_constants_inv_ang": 3.893670329365905,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0758970966482158e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.8694757283980716,
+      "kz_injected_constants_inv_ang": 3.8694757283980716,
+      "kz_production_constants_inv_ang": 3.869517881310848,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0893701300916914e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.8288826585130273,
+      "kz_injected_constants_inv_ang": 3.828882658513027,
+      "kz_production_constants_inv_ang": 3.8289252583178475,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1125910250975256e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.7713183918441286,
+      "kz_injected_constants_inv_ang": 3.7713183918441286,
+      "kz_production_constants_inv_ang": 3.7713616418721227,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1468145486637892e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.69599004498954,
+      "kz_injected_constants_inv_ang": 3.6959900449895406,
+      "kz_production_constants_inv_ang": 3.6960341764903086,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1940373277859959e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.601783226772787,
+      "kz_injected_constants_inv_ang": 3.6017832267727865,
+      "kz_production_constants_inv_ang": 3.601828512545315,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2573153262339104e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 4.001278647297225,
+      "kz_injected_constants_inv_ang": 4.001278647297225,
+      "kz_production_constants_inv_ang": 4.001321520191255,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395619754e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.993461006860679,
+      "kz_injected_constants_inv_ang": 3.9934610068606786,
+      "kz_production_constants_inv_ang": 3.9935039636822265,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.075679003090933e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.9699157186666705,
+      "kz_injected_constants_inv_ang": 3.9699157186666705,
+      "kz_production_constants_inv_ang": 3.9699589302593115,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0884763230059773e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.9303601378648128,
+      "kz_injected_constants_inv_ang": 3.9303601378648123,
+      "kz_production_constants_inv_ang": 3.930403784338914,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.110495541634174e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.8743039133909853,
+      "kz_injected_constants_inv_ang": 3.874303913390986,
+      "kz_production_constants_inv_ang": 3.8743481913666016,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1428627336950862e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.801017076167471,
+      "kz_injected_constants_inv_ang": 3.8010170761674704,
+      "kz_production_constants_inv_ang": 3.8010622078500185,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1873580582045535e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.709478509617856,
+      "kz_injected_constants_inv_ang": 3.7094785096178553,
+      "kz_production_constants_inv_ang": 3.7095247549983617,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2466814509251572e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 3.747233621177015,
+      "kz_injected_constants_inv_ang": 3.747233621177015,
+      "kz_production_constants_inv_ang": 3.7472737720298075,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395645883e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.7388848353057633,
+      "kz_injected_constants_inv_ang": 3.7388848353057633,
+      "kz_production_constants_inv_ang": 3.7389250758129,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.076270302757262e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.7137258665226502,
+      "kz_injected_constants_inv_ang": 3.71372586652265,
+      "kz_production_constants_inv_ang": 3.7137663796397455,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0909021977228541e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.6714111471856983,
+      "kz_injected_constants_inv_ang": 3.6714111471856983,
+      "kz_production_constants_inv_ang": 3.6714521272301104,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1161932774410717e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.6113376762190774,
+      "kz_injected_constants_inv_ang": 3.6113376762190774,
+      "kz_production_constants_inv_ang": 3.611379337945891,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.153636977458297e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.5325995826981873,
+      "kz_injected_constants_inv_ang": 3.532599582698187,
+      "kz_production_constants_inv_ang": 3.5326421730119373,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.205636607063434e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.43391319221663,
+      "kz_injected_constants_inv_ang": 3.4339131922166297,
+      "kz_production_constants_inv_ang": 3.43395700650758,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2759289037744889e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 3.884792274054384,
+      "kz_injected_constants_inv_ang": 3.884792274054384,
+      "kz_production_constants_inv_ang": 3.8848338988204096,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395667307e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.8767397401105783,
+      "kz_injected_constants_inv_ang": 3.8767397401105783,
+      "kz_production_constants_inv_ang": 3.8767814513361705,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0759356672977523e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.8524811501878418,
+      "kz_injected_constants_inv_ang": 3.8524811501878413,
+      "kz_production_constants_inv_ang": 3.8525231240609297,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0895283182855195e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.811707099522816,
+      "kz_injected_constants_inv_ang": 3.811707099522815,
+      "kz_production_constants_inv_ang": 3.8117495223878737,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.112962353876691e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.753879461643998,
+      "kz_injected_constants_inv_ang": 3.753879461643998,
+      "kz_production_constants_inv_ang": 3.7539225380159595,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1475161203650298e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.678193987890339,
+      "kz_injected_constants_inv_ang": 3.6781939878903387,
+      "kz_production_constants_inv_ang": 3.678237950625841,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1952261258247097e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.583519361263817,
+      "kz_injected_constants_inv_ang": 3.5835193612638165,
+      "kz_production_constants_inv_ang": 3.583564485456371,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2592144203785496e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 3.9848462220275898,
+      "kz_injected_constants_inv_ang": 3.9848462220275893,
+      "kz_production_constants_inv_ang": 3.984888918851496,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0714798395533702e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 3.976996280260714,
+      "kz_injected_constants_inv_ang": 3.9769962802607135,
+      "kz_production_constants_inv_ang": 3.9770390613602786,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0757138440641697e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 3.953352933043995,
+      "kz_injected_constants_inv_ang": 3.9533529330439943,
+      "kz_production_constants_inv_ang": 3.953395969996611,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.0886190366700668e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 3.913629953535152,
+      "kz_injected_constants_inv_ang": 3.9136299535351515,
+      "kz_production_constants_inv_ang": 3.913673427304001,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1108298271676019e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 3.8573306071955455,
+      "kz_injected_constants_inv_ang": 3.857330607195545,
+      "kz_production_constants_inv_ang": 3.857374715474949,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1434923239744606e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 3.7837150280124896,
+      "kz_injected_constants_inv_ang": 3.783715028012489,
+      "kz_production_constants_inv_ang": 3.7837599944480416,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.1884202488574563e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 3.691747474192615,
+      "kz_injected_constants_inv_ang": 3.691747474192615,
+      "kz_production_constants_inv_ang": 3.691793560802858,
+      "photon_energy_ev": 50.0,
+      "production_relative_delta": 1.2483684370440097e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.224569955767067,
+      "kz_injected_constants_inv_ang": 5.224569955767067,
+      "kz_production_constants_inv_ang": 5.224625935980847,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.071479839565882e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.2185851744226515,
+      "kz_injected_constants_inv_ang": 5.2185851744226515,
+      "kz_production_constants_inv_ang": 5.218641218835009,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0739388260225463e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.200589507229339,
+      "kz_injected_constants_inv_ang": 5.200589507229338,
+      "kz_production_constants_inv_ang": 5.2006457455708075,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0813839736821448e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.170457544812054,
+      "kz_injected_constants_inv_ang": 5.170457544812054,
+      "kz_production_constants_inv_ang": 5.170514110891077,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0940246299741755e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.127975353168529,
+      "kz_injected_constants_inv_ang": 5.127975353168528,
+      "kz_production_constants_inv_ang": 5.128032387858304,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1122262851622508e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.072832662596303,
+      "kz_injected_constants_inv_ang": 5.072832662596302,
+      "kz_production_constants_inv_ang": 5.072890317257386,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1365378067318939e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 5.004610996141848,
+      "kz_injected_constants_inv_ang": 5.004610996141847,
+      "kz_production_constants_inv_ang": 5.004669436728438,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.167734847633289e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.3240945167772065,
+      "kz_injected_constants_inv_ang": 5.3240945167772065,
+      "kz_production_constants_inv_ang": 5.324151563376593,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0714798395629727e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.318221735089383,
+      "kz_injected_constants_inv_ang": 5.318221735089383,
+      "kz_production_constants_inv_ang": 5.318278844683252,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0738475511891164e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.300564349536482,
+      "kz_injected_constants_inv_ang": 5.300564349536483,
+      "kz_production_constants_inv_ang": 5.300621649373348,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.081013889974615e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.2710039293835775,
+      "kz_injected_constants_inv_ang": 5.271003929383578,
+      "kz_production_constants_inv_ang": 5.271061550561274,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0931727327235739e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.229338622003468,
+      "kz_injected_constants_inv_ang": 5.229338622003467,
+      "kz_production_constants_inv_ang": 5.229396702278899,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1106619714272227e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.175276072208817,
+      "kz_injected_constants_inv_ang": 5.175276072208817,
+      "kz_production_constants_inv_ang": 5.175334759202097,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1339876841605301e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 5.1084226942939175,
+      "kz_injected_constants_inv_ang": 5.108422694293917,
+      "kz_production_constants_inv_ang": 5.10848214930868,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1638624741944898e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.3975337724031,
+      "kz_injected_constants_inv_ang": 5.3975337724031,
+      "kz_production_constants_inv_ang": 5.397591605889305,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0714798395714744e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.391740982672669,
+      "kz_injected_constants_inv_ang": 5.391740982672669,
+      "kz_production_constants_inv_ang": 5.391798878293467,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0737834214217836e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.374325150587006,
+      "kz_injected_constants_inv_ang": 5.374325150587006,
+      "kz_production_constants_inv_ang": 5.374383233820108,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0807539825899388e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.345172665520923,
+      "kz_injected_constants_inv_ang": 5.345172665520922,
+      "kz_production_constants_inv_ang": 5.345231065535585,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0925748954585912e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.304090009062068,
+      "kz_injected_constants_inv_ang": 5.304090009062067,
+      "kz_production_constants_inv_ang": 5.304148861407143,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1095653537946018e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.250797160834918,
+      "kz_injected_constants_inv_ang": 5.250797160834918,
+      "kz_production_constants_inv_ang": 5.250856610493823,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.13220254151996e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 5.184917629454883,
+      "kz_injected_constants_inv_ang": 5.184917629454882,
+      "kz_production_constants_inv_ang": 5.184977834472071,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1611566757705603e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.211995761950957,
+      "kz_injected_constants_inv_ang": 5.211995761950957,
+      "kz_production_constants_inv_ang": 5.212051607434786,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0714798395675684e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.20599652541132,
+      "kz_injected_constants_inv_ang": 5.20599652541132,
+      "kz_production_constants_inv_ang": 5.206052435249143,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.073950732593411e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.187957191669447,
+      "kz_injected_constants_inv_ang": 5.187957191669447,
+      "kz_production_constants_inv_ang": 5.18801329591237,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0814322641802345e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.1577514308654635,
+      "kz_injected_constants_inv_ang": 5.1577514308654635,
+      "kz_production_constants_inv_ang": 5.1578078636726605,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0941358449210346e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.115163714153706,
+      "kz_injected_constants_inv_ang": 5.115163714153706,
+      "kz_production_constants_inv_ang": 5.115220616802714,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.112430651053594e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.059881404004914,
+      "kz_injected_constants_inv_ang": 5.059881404004914,
+      "kz_production_constants_inv_ang": 5.059938928343259,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1368712772522686e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 4.991482727867015,
+      "kz_injected_constants_inv_ang": 4.991482727867015,
+      "kz_production_constants_inv_ang": 4.991541040456697,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1682418403793756e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.311755926571549,
+      "kz_injected_constants_inv_ang": 5.311755926571548,
+      "kz_production_constants_inv_ang": 5.311812840965428,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0714798395378472e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.305869487979135,
+      "kz_injected_constants_inv_ang": 5.305869487979135,
+      "kz_production_constants_inv_ang": 5.305926465514313,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0738585882494508e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.288170858006383,
+      "kz_injected_constants_inv_ang": 5.288170858006383,
+      "kz_production_constants_inv_ang": 5.288228026233855,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.081058630799964e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.258540769402474,
+      "kz_injected_constants_inv_ang": 5.258540769402474,
+      "kz_production_constants_inv_ang": 5.2585982597499505,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0932756823126616e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.216775922297982,
+      "kz_injected_constants_inv_ang": 5.216775922297982,
+      "kz_production_constants_inv_ang": 5.216833872900805,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.110850910337182e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.162581817605215,
+      "kz_injected_constants_inv_ang": 5.162581817605215,
+      "kz_production_constants_inv_ang": 5.162640376536527,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1342954626369056e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 5.095561894773526,
+      "kz_injected_constants_inv_ang": 5.0955618947735255,
+      "kz_production_constants_inv_ang": 5.095621223898536,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1643293955497024e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 5.385363444014051,
+      "kz_injected_constants_inv_ang": 5.385363444014051,
+      "kz_production_constants_inv_ang": 5.385421147097642,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0714798395746279e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 5.379557549104098,
+      "kz_injected_constants_inv_ang": 5.3795575491040974,
+      "kz_production_constants_inv_ang": 5.379615314463152,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0737938673611027e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 5.36210214599861,
+      "kz_injected_constants_inv_ang": 5.362102145998609,
+      "kz_production_constants_inv_ang": 5.362160099400844,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.080796311903799e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 5.332882843652473,
+      "kz_injected_constants_inv_ang": 5.332882843652473,
+      "kz_production_constants_inv_ang": 5.332941114582691,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.0926722361299815e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 5.291704774845521,
+      "kz_injected_constants_inv_ang": 5.29170477484552,
+      "kz_production_constants_inv_ang": 5.291763499213327,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1097438406806367e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 5.238285924243052,
+      "kz_injected_constants_inv_ang": 5.238285924243052,
+      "kz_production_constants_inv_ang": 5.238345247461881,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1324929506862749e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 5.172247038195574,
+      "kz_injected_constants_inv_ang": 5.172247038195573,
+      "kz_production_constants_inv_ang": 5.172307118840341,
+      "photon_energy_ev": 100.0,
+      "production_relative_delta": 1.1615965811983635e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.357615215913844,
+      "kz_injected_constants_inv_ang": 6.357615215913843,
+      "kz_production_constants_inv_ang": 6.357683336479159,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.071479839551884e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.352697949188142,
+      "kz_injected_constants_inv_ang": 6.3526979491881415,
+      "kz_production_constants_inv_ang": 6.352766122481196,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0731392173640482e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.3379232587354055,
+      "kz_injected_constants_inv_ang": 6.3379232587354055,
+      "kz_production_constants_inv_ang": 6.337991590949358,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0781483328612717e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.313221937617846,
+      "kz_injected_constants_inv_ang": 6.313221937617845,
+      "kz_production_constants_inv_ang": 6.31329053718778,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0866015896752223e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.278476824327635,
+      "kz_injected_constants_inv_ang": 6.278476824327635,
+      "kz_production_constants_inv_ang": 6.278545803523676,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0986613150189636e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.233519971382079,
+      "kz_injected_constants_inv_ang": 6.233519971382078,
+      "kz_production_constants_inv_ang": 6.233589448058379,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.114565712776245e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.17812845719634,
+      "kz_injected_constants_inv_ang": 6.1781284571963395,
+      "kz_production_constants_inv_ang": 6.178198556775653,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1346410130264846e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.4396523535430426,
+      "kz_injected_constants_inv_ang": 6.4396523535430426,
+      "kz_production_constants_inv_ang": 6.439721353119749,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.071479839567914e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.434797777280375,
+      "kz_injected_constants_inv_ang": 6.434797777280375,
+      "kz_production_constants_inv_ang": 6.434866828911571,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0730971444026679e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.420212024107339,
+      "kz_injected_constants_inv_ang": 6.420212024107339,
+      "kz_production_constants_inv_ang": 6.4202812326117344,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0779784863174887e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.3958285182212675,
+      "kz_injected_constants_inv_ang": 6.395828518221267,
+      "kz_production_constants_inv_ang": 6.395897990573838,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0862134963803947e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.361534597445215,
+      "kz_injected_constants_inv_ang": 6.361534597445215,
+      "kz_production_constants_inv_ang": 6.36160444430699,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0979561724508614e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.317168862274655,
+      "kz_injected_constants_inv_ang": 6.317168862274654,
+      "kz_production_constants_inv_ang": 6.317239199668353,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1134322230632404e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.262517260215134,
+      "kz_injected_constants_inv_ang": 6.262517260215132,
+      "kz_production_constants_inv_ang": 6.262588211420774,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.132950260931545e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.500500814179425,
+      "kz_injected_constants_inv_ang": 6.500500814179425,
+      "kz_production_constants_inv_ang": 6.50057046573512,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0714798395773423e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.4956917133702845,
+      "kz_injected_constants_inv_ang": 6.495691713370284,
+      "kz_production_constants_inv_ang": 6.495761416492121,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0730669636416428e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.481243000779046,
+      "kz_injected_constants_inv_ang": 6.481243000779045,
+      "kz_production_constants_inv_ang": 6.481312859289213,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0778566728393676e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.457089966474633,
+      "kz_injected_constants_inv_ang": 6.457089966474633,
+      "kz_production_constants_inv_ang": 6.4571600862908545,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0859352523491429e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.423123137162122,
+      "kz_injected_constants_inv_ang": 6.423123137162121,
+      "kz_production_constants_inv_ang": 6.423193627782656,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0974508666307761e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.37918575016807,
+      "kz_injected_constants_inv_ang": 6.37918575016807,
+      "kz_production_constants_inv_ang": 6.379256726295605,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1126204865958377e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.325070026106223,
+      "kz_injected_constants_inv_ang": 6.325070026106222,
+      "kz_production_constants_inv_ang": 6.325141609480986,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.131740430816084e-05,
+      "work_function_ev": 4.0
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.347286021088862,
+      "kz_injected_constants_inv_ang": 6.347286021088862,
+      "kz_production_constants_inv_ang": 6.347354030978937,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.071479839559732e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.3423607460873805,
+      "kz_injected_constants_inv_ang": 6.3423607460873805,
+      "kz_production_constants_inv_ang": 6.3424288087912,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0731446309110869e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.327561918583655,
+      "kz_injected_constants_inv_ang": 6.327561918583656,
+      "kz_production_constants_inv_ang": 6.3276301404700135,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0781701899816371e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.302819990568513,
+      "kz_injected_constants_inv_ang": 6.302819990568513,
+      "kz_production_constants_inv_ang": 6.302888480259234,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0866515436577963e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.268017217071924,
+      "kz_injected_constants_inv_ang": 6.268017217071924,
+      "kz_production_constants_inv_ang": 6.268086087043202,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0987521076088423e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.2229848010026565,
+      "kz_injected_constants_inv_ang": 6.2229848010026565,
+      "kz_production_constants_inv_ang": 6.223054169343584,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1147117202702276e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 8.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.167498669112955,
+      "kz_injected_constants_inv_ang": 6.1674986691129545,
+      "kz_production_constants_inv_ang": 6.167568661521699,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1348589192897048e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.429454956244992,
+      "kz_injected_constants_inv_ang": 6.429454956244992,
+      "kz_production_constants_inv_ang": 6.429523846558642,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0714798395652524e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.424592674589052,
+      "kz_injected_constants_inv_ang": 6.424592674589051,
+      "kz_production_constants_inv_ang": 6.4246616170399395,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0731022864751844e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.409983700009174,
+      "kz_injected_constants_inv_ang": 6.409983700009174,
+      "kz_production_constants_inv_ang": 6.410052799584903,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0779992424750079e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.385561137001454,
+      "kz_injected_constants_inv_ang": 6.385561137001454,
+      "kz_production_constants_inv_ang": 6.385630500856298,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0862609151445518e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.351211776848832,
+      "kz_injected_constants_inv_ang": 6.351211776848832,
+      "kz_production_constants_inv_ang": 6.351281515841213,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0980423080072795e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.306773425007695,
+      "kz_injected_constants_inv_ang": 6.306773425007695,
+      "kz_production_constants_inv_ang": 6.3068436553847,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1135706370252705e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 12.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.252030952769132,
+      "kz_injected_constants_inv_ang": 6.252030952769132,
+      "kz_production_constants_inv_ang": 6.252101798072888,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1331566380906183e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.0,
+      "kz_chinook_inv_ang": 6.490399019708898,
+      "kz_injected_constants_inv_ang": 6.490399019708898,
+      "kz_production_constants_inv_ang": 6.490468563025901,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0714798395680981e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.25,
+      "kz_chinook_inv_ang": 6.4855824283589385,
+      "kz_injected_constants_inv_ang": 6.485582428358938,
+      "kz_production_constants_inv_ang": 6.485652023322521,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0730719152988308e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.5,
+      "kz_chinook_inv_ang": 6.471111143771077,
+      "kz_injected_constants_inv_ang": 6.471111143771077,
+      "kz_production_constants_inv_ang": 6.471180894367542,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0778766569632658e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 0.75,
+      "kz_chinook_inv_ang": 6.446920151129391,
+      "kz_injected_constants_inv_ang": 6.446920151129391,
+      "kz_production_constants_inv_ang": 6.4469901634505,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0859808942464933e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.0,
+      "kz_chinook_inv_ang": 6.412899456177231,
+      "kz_injected_constants_inv_ang": 6.412899456177231,
+      "kz_production_constants_inv_ang": 6.4129698399125115,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.0975337405781675e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.25,
+      "kz_chinook_inv_ang": 6.368891538960153,
+      "kz_injected_constants_inv_ang": 6.368891538960153,
+      "kz_production_constants_inv_ang": 6.368962409029237,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.112753587509216e-05,
+      "work_function_ev": 4.5
+    },
+    {
+      "inner_potential_ev": 15.0,
+      "k_parallel_inv_ang": 1.5,
+      "kz_chinook_inv_ang": 6.314687595996988,
+      "kz_injected_constants_inv_ang": 6.314687595996988,
+      "kz_production_constants_inv_ang": 6.314759074392902,
+      "photon_energy_ev": 150.0,
+      "production_relative_delta": 1.1319387511657767e-05,
+      "work_function_ev": 4.5
+    }
+  ],
+  "rtol": 1e-10
+}

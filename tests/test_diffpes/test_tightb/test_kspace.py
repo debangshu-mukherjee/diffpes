@@ -510,13 +510,9 @@ class TestFirstBzMask:
         The test validates the gate and source metadata. It reconstructs the
         geometry and compares its reciprocal basis and retained mesh points.
         """
-        repository_root: Path = Path(__file__).resolve().parents[3]
+        tests_root: Path = Path(__file__).resolve().parents[2]
         artifact_path: Path = (
-            repository_root
-            / "diffpes-plans"
-            / "verification"
-            / "kspace"
-            / "mesh_reduce_reference.json"
+            tests_root / "data" / "kspace" / "mesh_reduce_reference.json"
         )
         reference: dict[str, Any] = json.loads(
             artifact_path.read_text(encoding="utf-8")

@@ -7,21 +7,17 @@ coupling. It adds spin-orbit coupling, slabs, and degeneracy-safe
 diagonalization as the plan series progresses. It also consumes
 ``DiagonalizedBands`` from other electronic-structure sources.
 
-This module retains:
-
-- **ARPES-side adapters** that stay here permanently:
-  ``vasp_to_diagonalized``, ``eigenvector_orbital_weights``,
-  ``orbital_coefficients``.
-- **Current fixtures, superseded by plan 04**:
-  ``build_hamiltonian_k``, ``diagonalize_single_k``,
-  ``diagonalize_tb``.
+The package exposes native basis-position-gauge Hamiltonian assembly,
+degeneracy-regularized diagonalization, an eigenvalues-only fast path, and
+ARPES-side adapters. Analytic chain and graphene models live only in the test
+fixture layer.
 
 The following list describes the submodules:
 
 - :mod:`diagonalize`
-    Diagonalize bands and adapt VASP outputs.
+    Diagonalize native bands and adapt atom-resolved VASP projections.
 - :mod:`hamiltonian`
-    Build tight-binding Hamiltonians in JAX.
+    Assemble native tight-binding Bloch Hamiltonians.
 - :mod:`kspace`
     Build differentiable paths and fixed-shape rasters in k-space.
 - :mod:`projections`
@@ -29,8 +25,10 @@ The following list describes the submodules:
 
 Routine Listings
 ----------------
-:func:`build_hamiltonian_k`
-    Build the Bloch Hamiltonian H(k) at a single k-point.
+:func:`bloch_hamiltonian`
+    Assemble one basis-position-gauge Bloch Hamiltonian.
+:func:`bloch_hamiltonian_batch`
+    Assemble Bloch Hamiltonians for a batch of fractional k-points.
 :func:`build_arpes_kmesh`
     Build a fixed-kz ARPES raster in fractional coordinates.
 :func:`build_bz_mesh`
@@ -39,10 +37,12 @@ Routine Listings
     Build a photon-energy raster in fractional coordinates.
 :func:`build_kpath`
     Build a labeled path between k-space anchors.
-:func:`diagonalize_single_k`
-    Diagonalize H(k) at a single k-point.
 :func:`diagonalize_tb`
-    Diagonalize a TB model at all k-points.
+    Diagonalize a native tight-binding model over k-points.
+:func:`eigh_safe`
+    Diagonalize a Hermitian matrix with a regularized eigenvector JVP.
+:func:`eigvalsh_bands`
+    Compute only native tight-binding eigenvalues over k-points.
 :func:`eigenvector_orbital_weights`
     Compute orbital weights from eigenvectors.
 :func:`first_bz_mask`
@@ -56,16 +56,18 @@ Routine Listings
 :func:`orbital_coefficients`
     Return the raw complex orbital coefficients.
 :func:`vasp_to_diagonalized`
-    Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
+    Convert atom-resolved VASP projections to approximate band vectors.
 """
 
 from .diagonalize import (
-    diagonalize_single_k,
     diagonalize_tb,
+    eigh_safe,
+    eigvalsh_bands,
     vasp_to_diagonalized,
 )
 from .hamiltonian import (
-    build_hamiltonian_k,
+    bloch_hamiltonian,
+    bloch_hamiltonian_batch,
 )
 from .kspace import (
     build_arpes_kmesh,
@@ -80,13 +82,15 @@ from .kspace import (
 from .projections import eigenvector_orbital_weights, orbital_coefficients
 
 __all__: list[str] = [
+    "bloch_hamiltonian",
+    "bloch_hamiltonian_batch",
     "build_arpes_kmesh",
     "build_bz_mesh",
-    "build_hamiltonian_k",
     "build_kmesh_hv",
     "build_kpath",
-    "diagonalize_single_k",
     "diagonalize_tb",
+    "eigh_safe",
+    "eigvalsh_bands",
     "eigenvector_orbital_weights",
     "first_bz_mask",
     "kpath_arc_length",

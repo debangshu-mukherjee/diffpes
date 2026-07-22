@@ -327,7 +327,7 @@ def dipole_intensities_all_orbitals(
     and coefficients remain traced leaves with gradients through the scan.
     """
     basis: OrbitalBasis = slater_params.orbital_basis
-    n_orbitals: int = len(basis.n_values)
+    n_orbitals: int = len(basis.n)
 
     def _evaluate_orbital(
         operand: tuple[Float[Array, ""], Float[Array, ""]],
@@ -361,9 +361,9 @@ def dipole_intensities_all_orbitals(
     ] = tuple(
         partial(_evaluate_orbital, n=n, l=l, m=m)
         for n, l, m in zip(
-            basis.n_values,
-            basis.l_values,
-            basis.m_values,
+            basis.n,
+            basis.l,
+            basis.m,
             strict=True,
         )
     )

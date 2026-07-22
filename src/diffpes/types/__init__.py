@@ -303,6 +303,8 @@ Routine Listings
     Set the physical kinetic-energy floor in eV.
 :obj:`EPS`
     Epsilon floor guarding divisions and norms.
+:obj:`EPS_DEG`
+    Lorentzian width regularizing degenerate eigenvector derivatives.
 :obj:`FLOAT_TOKEN_RE`
     Compiled regex matching floating-point tokens.
 :class:`FullDensityOfStates`
@@ -345,8 +347,6 @@ Routine Listings
     Magnetic quantum numbers of the d orbitals.
 :obj:`M_P`
     Magnetic quantum numbers of the p orbitals.
-:func:`make_1d_chain_model`
-    Create a 1D chain tight-binding model.
 :func:`make_arpes_spectrum`
     Create a validated ``ArpesSpectrum`` instance.
 :func:`make_band_structure`
@@ -361,8 +361,6 @@ Routine Listings
     Build simulation parameters with auto-derived energy window.
 :func:`make_full_density_of_states`
     Create a validated ``FullDensityOfStates`` instance.
-:func:`make_graphene_model`
-    Create a graphene pz tight-binding model.
 :func:`make_experiment_geometry`
     Create a validated geometry for an ARPES experiment.
 :func:`make_kgrid`
@@ -610,6 +608,7 @@ from .constants import (
     EKIN_FLOOR_EV,
     ENERGY_AXIS_NDIM,
     EPS,
+    EPS_DEG,
     FLOAT_TOKEN_RE,
     GAUNT_IMAG_TOL,
     HBAR_C_EV_A,
@@ -717,9 +716,7 @@ from .tables import (
 from .tb_model import (
     DiagonalizedBands,
     TBModel,
-    make_1d_chain_model,
     make_diagonalized_bands,
-    make_graphene_model,
     make_tb_model,
 )
 from .volumetric import (
@@ -792,6 +789,7 @@ __all__: list[str] = [
     "ENERGY_AXIS_NDIM",
     "EKIN_FLOOR_EV",
     "EPS",
+    "EPS_DEG",
     "EvidenceRef",
     "EvidenceReport",
     "ExecutionManifest",
@@ -822,7 +820,6 @@ __all__: list[str] = [
     "LATTICE_ROWS",
     "M_D",
     "M_P",
-    "make_1d_chain_model",
     "make_artifact_ref",
     "make_arpes_spectrum",
     "make_band_structure",
@@ -847,7 +844,6 @@ __all__: list[str] = [
     "make_forward_certificate",
     "make_forward_model_spec",
     "make_full_density_of_states",
-    "make_graphene_model",
     "make_handshake_report",
     "make_information_spectrum",
     "make_information_state",

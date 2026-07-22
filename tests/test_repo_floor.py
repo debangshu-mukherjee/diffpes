@@ -165,6 +165,41 @@ class TestConftest:
         result.assert_outcomes(passed=1, errors=1)
         result.stdout.fnmatch_lines(["*retained*MiB RSS*limit is 100.0 MiB*"])
 
+    def test_chinook_import_firewall_trips(
+        self,
+        pytester: pytest.Pytester,
+    ) -> None:
+        """Reject even an import-or-skip request for Chinook.
+
+        The case proves that ``pytest.importorskip`` cannot turn the runtime
+        firewall into a passing skip.
+
+        Notes
+        -----
+        Run an isolated session with the repository conftest. Require its
+        planted Chinook request to fail with the boundary diagnostic.
+        """
+        conftest_path: Path = Path(__file__).with_name("conftest.py")
+        pytester.makeconftest(conftest_path.read_text())
+        pytester.makepyfile(
+            """
+            import pytest
+
+            def test_forbidden_reference_import():
+                pytest.importorskip("chinook")
+            """
+        )
+        result: Any = pytester.runpytest_subprocess(
+            "-q",
+            "-n",
+            "0",
+        )
+
+        result.assert_outcomes(failed=1)
+        result.stdout.fnmatch_lines(
+            ["*tests must consume frozen Chinook artifacts*forbidden*"]
+        )
+
 
 class TestHelpers:
     """Validate deterministic shared factories and assertion wrappers.
@@ -286,6 +321,7 @@ class TestMetadata(chex.TestCase):
         )
         retired_names: tuple[str, ...] = (
             "diff" + "tb",
+            "chinook",
             "black",
             "isort",
             "twine",
@@ -436,17 +472,21 @@ class TestRegressionReferences(chex.TestCase):
         chain_bands: DiagonalizedBands
         chain_model, chain_bands = toy_chain_diagonalized(n_k=16)
         del graphene_model, chain_model
-        slater: SlaterParams = toy_slater_params()
+        graphene_slater: SlaterParams = toy_slater_params()
+        chain_slater: SlaterParams = make_slater_params(
+            zeta=jnp.asarray([1.625], dtype=jnp.float64),
+            orbital_basis=chain_bands.basis,
+        )
         graphene_payload: tuple[
             ArpesSpectrum,
             Float[Array, ""],
             Float[Array, " n_orbitals"],
-        ] = _tb_reference_payload(graphene_bands, slater)
+        ] = _tb_reference_payload(graphene_bands, graphene_slater)
         chain_payload: tuple[
             ArpesSpectrum,
             Float[Array, ""],
             Float[Array, " n_orbitals"],
-        ] = _tb_reference_payload(chain_bands, slater)
+        ] = _tb_reference_payload(chain_bands, chain_slater)
 
         assert_matches_reference(novice, "novice_toy", rtol=1e-12)
         assert_matches_reference(
@@ -520,6 +560,66 @@ class TestRepositoryArchitecture(chex.TestCase):
             for path in sorted(test_root.rglob("*.py"))
         )
         return modules
+
+    def test_chinook_import_boundary(self) -> None:
+        """Keep Chinook outside production and the complete test tree.
+
+        The test rejects direct imports and literal dynamic imports through
+        ``importlib.import_module``, ``__import__``, or
+        ``pytest.importorskip``. Offline generators belong in the separate
+        planning-repository verification area; DiffPES consumes only their
+        immutable artifacts.
+
+        Notes
+        -----
+        Parse every production and test Python file, including non-collected
+        helpers under ``tests/``, and report each forbidden module reference.
+        """
+        repository_root: Path = Path(__file__).resolve().parents[1]
+        dynamic_importers: set[str] = {
+            "__import__",
+            "importlib.import_module",
+            "pytest.importorskip",
+        }
+        offenders: list[str] = []
+        path: Path
+        module: ast.Module
+        node: ast.AST
+        for path, module in self._production_modules() + self._test_modules():
+            for node in ast.walk(module):
+                if isinstance(node, ast.Import):
+                    imported: ast.alias
+                    for imported in node.names:
+                        if (
+                            imported.name.split(".", maxsplit=1)[0]
+                            == "chinook"
+                        ):
+                            offenders.append(
+                                f"{path.relative_to(repository_root)}:{node.lineno}"
+                            )
+                elif (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module is not None
+                    and node.module.split(".", maxsplit=1)[0] == "chinook"
+                ):
+                    offenders.append(
+                        f"{path.relative_to(repository_root)}:{node.lineno}"
+                    )
+                elif isinstance(node, ast.Call) and node.args:
+                    importer: str = ast.unparse(node.func)
+                    requested: ast.expr = node.args[0]
+                    if (
+                        importer in dynamic_importers
+                        and isinstance(requested, ast.Constant)
+                        and isinstance(requested.value, str)
+                        and requested.value.split(".", maxsplit=1)[0]
+                        == "chinook"
+                    ):
+                        offenders.append(
+                            f"{path.relative_to(repository_root)}:{node.lineno}"
+                        )
+
+        self.assertEqual(offenders, [])
 
     @staticmethod
     def _literal_exports(module: ast.Module) -> set[str]:

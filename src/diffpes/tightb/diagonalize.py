@@ -1,24 +1,34 @@
-"""Diagonalize bands and adapt VASP outputs.
+r"""Diagonalize native bands and adapt atom-resolved VASP projections.
 
 Extended Summary
 ----------------
-The module wraps ``jnp.linalg.eigh`` with vmap over k-points to produce
-a ``DiagonalizedBands`` PyTree from a ``TBModel``. Also provides
-an adapter to convert VASP ``BandStructure`` + ``OrbitalProjection``
-to the same interface.
+The module provides an eigenvalues-only fast path and an epsilon-regularized
+Hermitian eigendecomposition whose eigenvector JVP remains finite at exact
+degeneracy. Native diagonalization returns the geometry-bearing
+``DiagonalizedBands`` interface. The VASP adapter retains its explicit
+phase-loss policy and now preserves atom-resolved orbital data.
 
 Routine Listings
 ----------------
-:func:`diagonalize_single_k`
-    Diagonalize H(k) at a single k-point.
+:func:`eigh_safe`
+    Diagonalize a Hermitian matrix with a regularized eigenvector JVP.
+:func:`eigvalsh_bands`
+    Compute only native tight-binding eigenvalues over k-points.
 :func:`diagonalize_tb`
-    Diagonalize a TB model at all k-points.
+    Diagonalize a native tight-binding model over k-points.
 :func:`vasp_to_diagonalized`
-    Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
+    Convert atom-resolved VASP projections to approximate band vectors.
+
+Notes
+-----
+Individual eigenvectors remain undefined inside a degenerate subspace. The
+regularization prevents divergent autodiff. Scientific losses at a degeneracy
+must consume fixed-group projectors, traces, or smooth spectral invariants.
 """
 
 import warnings
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 from beartype import beartype
@@ -27,8 +37,11 @@ from jaxtyping import Array, Complex, Float, Int, jaxtyped
 
 from diffpes.maths import safe_divide, safe_norm, safe_sqrt
 from diffpes.types import (
+    EPS,
+    EPS_DEG,
     PHASE_LOSS_MESSAGE,
     BandStructure,
+    CrystalGeometry,
     DiagonalizedBands,
     OrbitalBasis,
     OrbitalProjection,
@@ -36,252 +49,340 @@ from diffpes.types import (
     make_diagonalized_bands,
 )
 
-from .hamiltonian import build_hamiltonian_k
+from .hamiltonian import bloch_hamiltonian, bloch_hamiltonian_batch
 
 
+def _checked_hermitian(
+    hamiltonian: Complex[Array, "n n"],
+    *,
+    context: str,
+) -> Complex[Array, "n n"]:
+    """Reject non-finite or detectably non-Hermitian matrices under JAX."""
+    checked: Complex[Array, "n n"] = eqx.error_if(
+        hamiltonian,
+        ~jnp.all(jnp.isfinite(hamiltonian)),
+        f"{context}: Hamiltonian entries must be finite",
+    )
+    checked = eqx.error_if(
+        checked,
+        ~jnp.allclose(
+            checked,
+            checked.conj().T,
+            rtol=EPS,
+            atol=EPS,
+        ),
+        f"{context}: Hamiltonian must be Hermitian",
+    )
+    return checked  # noqa: RET504 -- both checks must thread the returned value.
+
+
+@jax.custom_jvp
 @jaxtyped(typechecker=beartype)
-def diagonalize_single_k(
-    H_k: Complex[Array, "O O"],
-) -> tuple[Float[Array, " O"], Complex[Array, "O O"]]:
-    """Diagonalize H(k) at a single k-point.
+def eigh_safe(  # noqa: DOC502 -- validation is delegated to a traced helper.
+    hamiltonian: Complex[Array, "n n"],
+) -> tuple[Float[Array, " n"], Complex[Array, "n n"]]:
+    r"""Diagonalize a Hermitian matrix with a regularized eigenvector JVP.
 
-    The function calls the standard LAPACK-style Hermitian eigensolver
-    ``jnp.linalg.eigh``. The Hamiltonian construction guarantees Hermitian
-    symmetry. Therefore, ``eigh`` produces real eigenvalues and an orthonormal
-    eigenvector basis.
+    The function preserves standard Hermitian eigenpairs while regularizing
+    only inverse-gap factors in eigenvector tangents.
 
-    ``jnp.linalg.eigh`` returns eigenvalues in **ascending** order and
-    eigenvectors as **columns** of the returned matrix: that is,
-    ``eigenvectors[:, i]`` is the eigenvector corresponding to
-    ``eigenvalues[i]``.  This column-eigenvector convention is the
-    LAPACK/NumPy/JAX standard but differs from some physics textbooks
-    that store eigenvectors as rows.  The caller (``diagonalize_tb``)
-    transposes to a band-major layout after vmapping.
-
-    This function contains one call to ``eigh``. Tests can isolate or replace
-    this function with a custom differentiable eigensolver.
-
-    :see: :class:`~.test_diagonalize.TestDiagonalizeSingleK`
+    :see: :class:`~.test_diagonalize.TestEighSafe`
 
     Parameters
     ----------
-    H_k : Complex[Array, "O O"]
-        Hermitian Hamiltonian matrix.
+    hamiltonian : Complex[Array, "n n"]
+        Complex Hermitian matrix.
 
     Returns
     -------
-    eigenvalues : Float[Array, " O"]
-        Eigenvalues in ascending order.
-    eigenvectors : Complex[Array, "O O"]
-        Eigenvector columns (eigenvectors[:, i] is the i-th).
+    eigensystem : tuple[Float[Array, " n"], Complex[Array, "n n"]]
+        Ascending eigenvalues and corresponding eigenvector columns.
+
+    Raises
+    ------
+    EquinoxRuntimeError
+        If the input contains a non-finite entry or is not Hermitian within
+        the types-owned numerical tolerance.
 
     Notes
     -----
-    JAX provides analytical gradients through ``eigh`` via implicit
-    differentiation of the eigenvalue equation, so
-    ``jax.grad(lambda p: eigenvalues(p).sum())`` works without additional
-    configuration.
-    Degenerate eigenvalues can cause numerical instability in the
-    backward pass; this is a known JAX limitation.
+    The primal result equals :func:`jax.numpy.linalg.eigh`. Its custom JVP
+    replaces the nondegenerate factor :math:`1/\Delta` by
+    :math:`\Delta/(\Delta^2+\epsilon^2)`, with ``epsilon = EPS_DEG`` eV.
+    Eigenvector tangents are therefore finite but biased by
+    :math:`O(\epsilon^2/g^2)` for a gap ``g`` near the regularization scale.
+    No correctness claim applies to individual vectors inside a degenerate
+    group.
     """
-    eigenvalues: Float[Array, " O"]
-    eigenvectors: Complex[Array, "O O"]
-    eigenvalues, eigenvectors = jnp.linalg.eigh(H_k)
-    result: tuple[Float[Array, " O"], Complex[Array, "O O"]] = (
+    checked_hamiltonian: Complex[Array, "n n"] = _checked_hermitian(
+        hamiltonian,
+        context="eigh_safe",
+    )
+    eigenvalues: Float[Array, " n"]
+    eigenvectors: Complex[Array, "n n"]
+    eigenvalues, eigenvectors = jnp.linalg.eigh(checked_hamiltonian)
+    eigensystem: tuple[Float[Array, " n"], Complex[Array, "n n"]] = (
         eigenvalues,
         eigenvectors,
     )
-    return result
+    return eigensystem
+
+
+@eigh_safe.defjvp
+def _eigh_safe_jvp(
+    primals: tuple[Complex[Array, "n n"]],
+    tangents: tuple[Complex[Array, "n n"]],
+) -> tuple[
+    tuple[Float[Array, " n"], Complex[Array, "n n"]],
+    tuple[Float[Array, " n"], Complex[Array, "n n"]],
+]:
+    """Apply the Lorentzian-regularized Hermitian eigensystem JVP."""
+    hamiltonian: Complex[Array, "n n"]
+    hamiltonian_tangent: Complex[Array, "n n"]
+    (hamiltonian,) = primals
+    (hamiltonian_tangent,) = tangents
+    checked_hamiltonian: Complex[Array, "n n"] = _checked_hermitian(
+        hamiltonian,
+        context="eigh_safe",
+    )
+    eigenvalues: Float[Array, " n"]
+    eigenvectors: Complex[Array, "n n"]
+    eigenvalues, eigenvectors = jnp.linalg.eigh(checked_hamiltonian)
+    projected: Complex[Array, "n n"] = (
+        eigenvectors.conj().T @ hamiltonian_tangent @ eigenvectors
+    )
+    eigenvalue_tangent: Float[Array, " n"] = jnp.real(jnp.diagonal(projected))
+    gaps: Float[Array, "n n"] = eigenvalues[None, :] - eigenvalues[:, None]
+    inverse_gaps: Float[Array, "n n"] = gaps / (
+        gaps * gaps + EPS_DEG * EPS_DEG
+    )
+    eigenvector_tangent: Complex[Array, "n n"] = eigenvectors @ (
+        inverse_gaps * projected
+    )
+    primal_output: tuple[Float[Array, " n"], Complex[Array, "n n"]] = (
+        eigenvalues,
+        eigenvectors,
+    )
+    tangent_output: tuple[Float[Array, " n"], Complex[Array, "n n"]] = (
+        eigenvalue_tangent,
+        eigenvector_tangent,
+    )
+    result: tuple[
+        tuple[Float[Array, " n"], Complex[Array, "n n"]],
+        tuple[Float[Array, " n"], Complex[Array, "n n"]],
+    ] = (primal_output, tangent_output)
+    return result  # noqa: RET504 -- assign-before-return is required.
+
+
+@jaxtyped(typechecker=beartype)
+def eigvalsh_bands(  # noqa: DOC502 -- validation is delegated to a traced helper.
+    model: TBModel,
+    kpoints: Float[Array, "n_k 3"],
+) -> Float[Array, "n_k n_bands"]:
+    """Compute only native tight-binding eigenvalues over k-points.
+
+    This fast path avoids eigenvector construction and returns one ascending
+    spectrum for every supplied k-point.
+
+    :see: :class:`~.test_diagonalize.TestEigvalshBands`
+
+    Parameters
+    ----------
+    model : TBModel
+        Validated native tight-binding model.
+    kpoints : Float[Array, "n_k 3"]
+        Fractional reciprocal-space k-points.
+
+    Returns
+    -------
+    eigenvalues : Float[Array, "n_k n_bands"]
+        Ascending band energies in eV.
+
+    Raises
+    ------
+    EquinoxRuntimeError
+        If an assembled Hamiltonian contains a non-finite entry or is not
+        Hermitian within the types-owned numerical tolerance.
+
+    Notes
+    -----
+    This path avoids eigenvectors and their inverse-gap derivative factors.
+    Losses at exact crossings must still be symmetric within each degenerate
+    eigenvalue group.
+    """
+    hamiltonians: Complex[Array, "n_k n_orb n_orb"] = bloch_hamiltonian_batch(
+        model, kpoints
+    )
+
+    def diagonalize_matrix(
+        hamiltonian: Complex[Array, "n_orb n_orb"],
+    ) -> Float[Array, " n_bands"]:
+        checked_hamiltonian: Complex[Array, "n_orb n_orb"] = (
+            _checked_hermitian(
+                hamiltonian,
+                context="eigvalsh_bands",
+            )
+        )
+        spectrum: Float[Array, " n_bands"] = jnp.linalg.eigvalsh(
+            checked_hamiltonian
+        )
+        return spectrum
+
+    eigenvalues: Float[Array, "n_k n_bands"] = jax.vmap(diagonalize_matrix)(
+        hamiltonians
+    )
+    return eigenvalues
 
 
 @jaxtyped(typechecker=beartype)
 def diagonalize_tb(
-    tb_model: TBModel,
-    kpoints: Float[Array, "K 3"],
+    model: TBModel,
+    kpoints: Float[Array, "n_k 3"],
 ) -> DiagonalizedBands:
-    """Diagonalize a TB model at all k-points.
+    """Diagonalize a native tight-binding model over k-points.
 
-    The function builds H(k) for each k-point and calls ``jnp.linalg.eigh``.
-    ``jax.vmap`` vectorizes both operations. JAX differentiates them with
-    respect to ``tb_model.hopping_params``.
-
-    The internal ``_build_and_diag`` closure captures the model parameters. It
-    maps one k-point to its eigenvalues and eigenvectors. ``jax.vmap`` applies
-    this closure along the leading k-point axis. One vectorized call computes
-    the complete band structure without Python loops.
-
-    After vmapping, the eigenvector array has shape ``(K, O, O)`` in
-    the column-eigenvector convention of ``eigh``. Thus,
-    ``evecs[k, :, b]`` is band ``b`` at k-point ``k``).  A transpose
-    ``(0, 2, 1)`` converts this to the band-major convention
-    ``(K, B, O)`` where ``evecs[k, b, :]`` gives the orbital
-    coefficients of band ``b`` at k-point ``k``.  This layout matches
-    the ``DiagonalizedBands.eigenvectors`` contract used by the rest
-    of the ARPYES pipeline (projections, matrix elements, spectral
-    function).
-
-    The function sets the Fermi energy to 0.0 because bare tight-binding models
-    have no absolute energy reference.
+    The function assembles and diagonalizes each Bloch Hamiltonian, converts
+    eigenvectors to band-major order, and attaches model context.
 
     :see: :class:`~.test_diagonalize.TestDiagonalizeTB`
 
     Parameters
     ----------
-    tb_model : TBModel
-        Tight-binding model.
-    kpoints : Float[Array, "K 3"]
-        k-points in fractional coordinates.
+    model : TBModel
+        Validated native tight-binding model.
+    kpoints : Float[Array, "n_k 3"]
+        Fractional reciprocal-space k-points.
 
     Returns
     -------
     bands : DiagonalizedBands
-        Diagonalized electronic structure.
+        Geometry-bearing eigensystem with band-major eigenvectors.
 
     Notes
     -----
-    Because ``jax.vmap`` traces the function once and broadcasts over
-    the batch dimension, the number of k-points does not affect
-    compilation time -- only runtime.  The full forward + backward
-    pass (eigenvalues and their gradients with respect to hopping
-    parameters) is differentiable end-to-end.
+    :func:`jax.vmap` applies :func:`eigh_safe` to each fractional k-point.
+    The result retains the model geometry and static orbital basis.
     """
 
-    def _build_and_diag(k: Float[Array, " 3"]) -> tuple:
-        H: Complex[Array, "O O"] = build_hamiltonian_k(
-            k,
-            tb_model.hopping_params,
-            tb_model.hopping_indices,
-            tb_model.n_orbitals,
-            tb_model.lattice_vectors,
+    def diagonalize_point(
+        point: Float[Array, " 3"],
+    ) -> tuple[Float[Array, " n_bands"], Complex[Array, "n_orb n_bands"]]:
+        hamiltonian: Complex[Array, "n_orb n_orb"] = bloch_hamiltonian(
+            model,
+            point,
         )
-        evals: Float[Array, " O"]
-        evecs: Complex[Array, "O O"]
-        evals, evecs = diagonalize_single_k(H)
-        eigensystem: tuple[Float[Array, " O"], Complex[Array, "O O"]] = (
-            evals,
-            evecs,
-        )
-        return eigensystem
+        eigensystem: tuple[
+            Float[Array, " n_bands"], Complex[Array, "n_orb n_bands"]
+        ] = eigh_safe(hamiltonian)
+        return eigensystem  # noqa: RET504 -- assign-before-return is required.
 
-    eigenvalues: Float[Array, "K O"]
-    eigenvectors: Complex[Array, "K O O"]
-    eigenvalues, eigenvectors = jax.vmap(_build_and_diag)(kpoints)
-    eigenvectors = jnp.transpose(eigenvectors, (0, 2, 1))
-
+    eigenvalues: Float[Array, "n_k n_bands"]
+    eigenvector_columns: Complex[Array, "n_k n_orb n_bands"]
+    eigenvalues, eigenvector_columns = jax.vmap(diagonalize_point)(kpoints)
+    eigenvectors: Complex[Array, "n_k n_bands n_orb"] = jnp.swapaxes(
+        eigenvector_columns,
+        -1,
+        -2,
+    )
     bands: DiagonalizedBands = make_diagonalized_bands(
         eigenvalues=eigenvalues,
         eigenvectors=eigenvectors,
         kpoints=kpoints,
+        geometry=model.geometry,
+        basis=model.basis,
         fermi_energy=0.0,
     )
     return bands
 
 
 @jaxtyped(typechecker=beartype)
-def vasp_to_diagonalized(
+def vasp_to_diagonalized(  # noqa: DOC503 -- traced checks raise indirectly.
     bands: BandStructure,
     orb_proj: OrbitalProjection,
+    geometry: CrystalGeometry,
     orbital_basis: OrbitalBasis,
     phase_loss: Literal["warn", "ignore", "error"] = "warn",
 ) -> DiagonalizedBands:
-    """Convert VASP BandStructure + OrbitalProjection to DiagonalizedBands.
+    """Convert atom-resolved VASP projections to approximate band vectors.
 
-    VASP PROCAR gives ``|c_{k,b,orb}|^2``, not the complex
-    coefficients. This adapter uses ``sqrt(|c|^2)`` with positive
-    sign as an approximation. Phase information is lost.
-
-    The adapter sums the orbital projections over atoms. It then maps them to
-    the orbital basis order.
-
-    VASP's PROCAR file provides site- and orbital-projected squared
-    moduli ``|c_{k,b,atom,orb}|^2`` for each eigenstate. The VASP projection
-    discards the complex phase of each coefficient. Therefore, PROCAR data
-    cannot recover the true complex eigenvectors. This adapter takes
-    ``sqrt(|c|^2)`` with a positive sign. The approximation produces real,
-    nonnegative coefficients.
-
-    The approximation is exact for an observable that depends only on the
-    coefficient modulus. It introduces errors when an observable depends on
-    relative orbital phases. Photoemission interference terms have this phase
-    dependence.
-
-    **Orbital mapping.** VASP stores projections in a fixed 9-orbital
-    ordering for the s, p, and d channels::
-
-        [s, py, pz, px, dxy, dyz, dz2, dxz, dx2 - y2]
-
-    This order differs from some standard orders, such as the ``(l, m)``
-    convention with m running from -l to +l).  The function maps from
-    ``(l, m)`` quantum numbers in the ``OrbitalBasis`` to VASP's
-    9-orbital column index via a lookup table.
-
-    **Sum the atoms.** Before the orbital mapping, the adapter sums the
-    projections over atom axis 2, which changes
-    ``(K, B, A, 9) -> (K, B, 9)``.  This is correct when the
-    ``OrbitalBasis`` describes a single composite orbital per
-    ``(l, m)`` channel rather than per-atom resolution.
-
-    **Normalize the vectors.** After the square root, the adapter normalizes
-    each k-point and band eigenvector. Therefore,
-    ``sum_orb |c_{k,b,orb}|^2 = 1``. A safe division selects a zero vector and
-    zero gradient when all projections equal zero.
+    VASP PROCAR provides orbital weights rather than complex coefficients.
+    This adapter selects each basis orbital at its registered atom, takes the
+    positive square root, and normalizes the resulting vectors. Relative
+    phases are irrecoverably absent, so phase-sensitive observables remain an
+    explicitly approximate path.
 
     :see: :class:`~.test_diagonalize.TestVaspToDiagonalized`
 
     Parameters
     ----------
     bands : BandStructure
-        VASP eigenvalues and k-points.
+        VASP eigenvalues, k-points, and Fermi energy.
     orb_proj : OrbitalProjection
-        VASP orbital projections of shape (K, B, A, 9).
+        Atom- and orbital-resolved PROCAR weights with final axis in VASP's
+        nine-orbital order.
+    geometry : CrystalGeometry
+        Geometry associated with the VASP calculation.
     orbital_basis : OrbitalBasis
-        Quantum number metadata defining which VASP orbital
-        indices to use.
-    phase_loss : Literal["warn", "ignore", "error"]
-        Policy for handling lost phase information:
-        - ``"warn"`` (default): emit a runtime warning.
-        - ``"ignore"``: proceed without a warning.
-        - ``"error"``: raise ``ValueError`` and abort.
+        Atom mapping and real-harmonic channels to retain (**static** --
+        changing them triggers retracing).
+    phase_loss : Literal["warn", "ignore", "error"], optional
+        Policy for missing complex phases. Default is ``"warn"``.
 
     Returns
     -------
-    diag : DiagonalizedBands
-        Approximate diagonalized bands.
+    diagonalized : DiagonalizedBands
+        Approximate normalized coefficients with geometry and basis context.
 
     Raises
     ------
     ValueError
-        If ``phase_loss`` is invalid, is ``"error"``, or the orbital basis
-        contains a channel outside the VASP nine-orbital set.
+        If the phase policy has an invalid value or requests an error.
+        Also raised when the geometry and projection atom counts disagree,
+        for a spin-resolved basis, an invalid atom index, or an unsupported
+        basis channel.
+    EquinoxRuntimeError
+        If a selected projection weight is non-finite or negative, or if any
+        selected band vector has zero norm.
 
     Notes
     -----
-    The VASP 9-orbital ordering used here covers s, p, and d channels
-    only. The adapter does not support f-orbital projections and raises
-    ``ValueError`` for them. A PROCAR file from ``LORBIT=11`` or higher
-    contains all nine channels. ``LORBIT=10`` can omit the decomposition by m
-    and does not support this adapter.
-
-    The adapter converts the resulting eigenvectors to ``complex128`` for the
-    ``DiagonalizedBands`` type. Their imaginary parts remain zero.
+    The adapter gathers one atom and VASP channel for each basis orbital.
+    Every selected band vector must contain nonzero projection weight because
+    a zero vector cannot define a normalized approximate eigenstate. Spinful
+    bases remain unsupported until the adapter can resolve spin channels.
     """
-    i: int
-
-    if phase_loss not in ("warn", "ignore", "error"):  # pragma: no cover
-        msg: str = (
+    if phase_loss not in ("warn", "ignore", "error"):
+        message: str = (
             "phase_loss must be one of {'warn', 'ignore', 'error'}, "
             f"got '{phase_loss}'"
         )
-        raise ValueError(msg)
-
+        raise ValueError(message)
     if phase_loss == "error":
         raise ValueError(PHASE_LOSS_MESSAGE)
     if phase_loss == "warn":
         warnings.warn(PHASE_LOSS_MESSAGE, RuntimeWarning, stacklevel=2)
 
-    proj_summed: Float[Array, "K B 9"] = jnp.sum(orb_proj.projections, axis=2)
+    n_projection_atoms: int = orb_proj.projections.shape[2]
+    n_geometry_atoms: int = geometry.positions.shape[0]
+    if n_geometry_atoms != n_projection_atoms:
+        message = (
+            "vasp_to_diagonalized: geometry and projection atom counts "
+            "must agree"
+        )
+        raise ValueError(message)
+    if orbital_basis.spin:
+        message = (
+            "vasp_to_diagonalized: spin-resolved orbital bases are not "
+            "supported"
+        )
+        raise ValueError(message)
+    if any(
+        index >= n_projection_atoms for index in orbital_basis.atom_indices
+    ):
+        message = "orbital basis atom_indices exceed the projection atom axis"
+        raise ValueError(message)
 
-    vasp_lm_to_idx: dict[tuple[int, int], int] = {
+    vasp_lm_to_index: dict[tuple[int, int], int] = {
         (0, 0): 0,
         (1, -1): 1,
         (1, 0): 2,
@@ -292,37 +393,78 @@ def vasp_to_diagonalized(
         (2, 1): 7,
         (2, 2): 8,
     }
+    orbital_channels: list[int] = []
+    angular: int
+    magnetic: int
+    for angular, magnetic in zip(
+        orbital_basis.l,
+        orbital_basis.m,
+        strict=True,
+    ):
+        channel: int | None = vasp_lm_to_index.get((angular, magnetic))
+        if channel is None:
+            message = (
+                f"Orbital (l={angular}, m={magnetic}) is not in VASP "
+                "9-orbital set"
+            )
+            raise ValueError(message)
+        orbital_channels.append(channel)
 
-    n_orbs: int = len(orbital_basis.l_values)
-    orbital_indices: list[int] = []
-    for i in range(n_orbs):
-        l_val: int = orbital_basis.l_values[i]
-        m_val: int = orbital_basis.m_values[i]
-        idx: int | None = vasp_lm_to_idx.get((l_val, m_val))
-        if idx is None:
-            msg = f"Orbital (l={l_val}, m={m_val}) not in VASP 9-orbital set"
-            raise ValueError(msg)
-        orbital_indices.append(idx)
-
-    idx_arr: Int[Array, " N"] = jnp.array(orbital_indices)
-    approx_c2: Float[Array, "K B N"] = proj_summed[:, :, idx_arr]
-    approx_c: Float[Array, "K B N"] = safe_sqrt(approx_c2)
-
-    norm: Float[Array, "K B 1"] = safe_norm(approx_c, axis=-1, keepdims=True)
-    normalized: Float[Array, "K B N"] = safe_divide(approx_c, norm)
-    eigenvectors: Complex[Array, "K B N"] = normalized.astype(jnp.complex128)
-
-    diag: DiagonalizedBands = make_diagonalized_bands(
+    atom_index_array: Int[Array, " n_orb"] = jnp.asarray(
+        orbital_basis.atom_indices,
+        dtype=jnp.int32,
+    )
+    channel_array: Int[Array, " n_orb"] = jnp.asarray(
+        orbital_channels,
+        dtype=jnp.int32,
+    )
+    raw_selected_weights: Float[Array, "n_k n_bands n_orb"] = (
+        orb_proj.projections[:, :, atom_index_array, channel_array]
+    )
+    selected_weights: Float[Array, "n_k n_bands n_orb"] = eqx.error_if(
+        raw_selected_weights,
+        ~jnp.all(jnp.isfinite(raw_selected_weights)),
+        "vasp_to_diagonalized: selected projection weights must be finite",
+    )
+    selected_weights = eqx.error_if(
+        selected_weights,
+        ~jnp.all(selected_weights >= 0.0),
+        "vasp_to_diagonalized: selected weights must be nonnegative",
+    )
+    coefficients: Float[Array, "n_k n_bands n_orb"] = safe_sqrt(
+        selected_weights
+    )
+    normalization: Float[Array, "n_k n_bands 1"] = safe_norm(
+        coefficients,
+        axis=-1,
+        keepdims=True,
+    )
+    normalization = eqx.error_if(
+        normalization,
+        jnp.any(normalization == 0.0),
+        "vasp_to_diagonalized: selected projection norm must be nonzero",
+    )
+    normalized: Float[Array, "n_k n_bands n_orb"] = safe_divide(
+        coefficients,
+        normalization,
+    )
+    eigenvectors: Complex[Array, "n_k n_bands n_orb"] = normalized.astype(
+        jnp.complex128
+    )
+    diagonalized: DiagonalizedBands = make_diagonalized_bands(
         eigenvalues=bands.eigenvalues,
         eigenvectors=eigenvectors,
         kpoints=bands.kpoints,
+        geometry=geometry,
+        basis=orbital_basis,
         fermi_energy=bands.fermi_energy,
     )
-    return diag
+    return diagonalized
 
 
 __all__: list[str] = [
-    "diagonalize_single_k",
     "diagonalize_tb",
+    "eigh_safe",
+    "eigvalsh_bands",
     "vasp_to_diagonalized",
 ]

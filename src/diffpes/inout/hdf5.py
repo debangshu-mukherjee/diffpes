@@ -19,6 +19,9 @@ The codec supports all twenty-two numerical types-owned carriers.
 Dataclass fields define the serialization metadata.
 The codec stores dynamic fields as datasets or recursive module groups.
 It encodes ``eqx.field(static=True)`` values as tuple-preserving JSON.
+Consequently, tight-binding carriers preserve nested crystal geometry as
+recursive numerical children and their orbital basis as static metadata
+without carrier-specific serialization rules.
 """
 
 import json

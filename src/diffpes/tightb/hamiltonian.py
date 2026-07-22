@@ -1,107 +1,235 @@
-"""Build tight-binding Hamiltonians in JAX.
+r"""Assemble native tight-binding Bloch Hamiltonians.
 
 Extended Summary
 ----------------
-The module provides a minimal Slater-Koster Hamiltonian builder and convenience
-functions for creating test models (graphene, 1D chain). The
-Hamiltonian is fully JAX-traceable so that ``jax.grad`` can
-differentiate eigenvalues with respect to hopping parameters.
+The module assembles a validated :class:`~diffpes.types.TBModel` in the
+basis-position Bloch gauge. Exact integer cells remain static connectivity;
+the model geometry determines fractional bond displacements at runtime.
+One vectorized scatter operation accumulates all hoppings.
 
 Routine Listings
 ----------------
-:func:`build_hamiltonian_k`
-    Build the Bloch Hamiltonian H(k) at a single k-point.
+:func:`bloch_hamiltonian`
+    Assemble one basis-position-gauge Bloch Hamiltonian.
+:func:`bloch_hamiltonian_batch`
+    Assemble Bloch Hamiltonians for a batch of fractional k-points.
+
+Notes
+-----
+The model factory requires an explicitly Hermitian-closed hopping list. This
+module rechecks the numerical closure at evaluation time so differentiable
+updates cannot bypass that invariant. It never repairs input with
+``(H + H.conj().T) / 2``.
 """
 
+import equinox as eqx
+import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Complex, Float, jaxtyped
+from jaxtyping import Array, Complex, Float, Int, jaxtyped
+
+from diffpes.types import EPS, TBModel
+
+
+def _reverse_hopping_indices(model: TBModel) -> Int[Array, " n_hop"]:
+    """Derive the reverse-entry permutation from exact static metadata."""
+    records: tuple[tuple[int, int, tuple[int, int, int]], ...] = tuple(
+        (pair[0], pair[1], cell)
+        for pair, cell in zip(
+            model.hopping_pairs,
+            model.hopping_cells,
+            strict=True,
+        )
+    )
+    lookup: dict[tuple[int, int, tuple[int, int, int]], int] = {
+        record: index for index, record in enumerate(records)
+    }
+    reverse: tuple[int, ...] = tuple(
+        lookup[(orbital_j, orbital_i, (-cell[0], -cell[1], -cell[2]))]
+        for orbital_i, orbital_j, cell in records
+    )
+    indices: Int[Array, " n_hop"] = jnp.asarray(reverse, dtype=jnp.int32)
+    return indices
+
+
+def _validated_hopping_amplitudes(
+    model: TBModel,
+) -> Complex[Array, " n_hop"]:
+    """Validate unsupported physics and traced hopping invariants again."""
+    amplitudes: Complex[Array, " n_hop"] = eqx.error_if(
+        model.hopping_amplitudes,
+        ~jnp.all(jnp.isfinite(model.hopping_amplitudes)),
+        "bloch_hamiltonian: hopping amplitudes finite",
+    )
+    reverse_indices: Int[Array, " n_hop"] = _reverse_hopping_indices(model)
+    reverse_amplitudes: Complex[Array, " n_hop"] = amplitudes[reverse_indices]
+    amplitudes = eqx.error_if(
+        amplitudes,
+        ~jnp.all(jnp.abs(reverse_amplitudes - jnp.conj(amplitudes)) <= EPS),
+        "bloch_hamiltonian: hopping amplitudes must remain Hermitian-closed",
+    )
+    return amplitudes  # noqa: RET504 -- assign-before-return is required.
+
+
+def _assemble_bloch_hamiltonian(
+    model: TBModel,
+    k: Float[Array, " 3"],
+    amplitudes: Complex[Array, " n_hop"],
+) -> Complex[Array, "n_orb n_orb"]:
+    """Assemble one Hamiltonian from already validated amplitudes."""
+    n_orbitals: int = model.onsite_energies.shape[0]
+    atom_indices: Int[Array, " n_orb"] = jnp.asarray(
+        model.basis.atom_indices,
+        dtype=jnp.int32,
+    )
+    orbital_positions: Float[Array, "n_orb 3"] = model.geometry.positions[
+        atom_indices
+    ]
+    pairs: Int[Array, "n_hop 2"] = jnp.asarray(
+        model.hopping_pairs,
+        dtype=jnp.int32,
+    ).reshape((-1, 2))
+    cells: Float[Array, "n_hop 3"] = jnp.asarray(
+        model.hopping_cells,
+        dtype=jnp.float64,
+    ).reshape((-1, 3))
+    source: Int[Array, " n_hop"] = pairs[:, 0]
+    target: Int[Array, " n_hop"] = pairs[:, 1]
+    displacements: Float[Array, "n_hop 3"] = (
+        cells + orbital_positions[target] - orbital_positions[source]
+    )
+    phases: Complex[Array, " n_hop"] = jnp.exp(
+        2j * jnp.pi * (displacements @ k)
+    )
+    flat_indices: Int[Array, " n_hop"] = source * n_orbitals + target
+    flattened: Complex[Array, " n_flat"] = jnp.zeros(
+        (n_orbitals * n_orbitals,),
+        dtype=jnp.complex128,
+    )
+    flattened = flattened.at[flat_indices].add(amplitudes * phases)
+    hamiltonian: Complex[Array, "n_orb n_orb"] = flattened.reshape(
+        (n_orbitals, n_orbitals)
+    )
+    diagonal_indices: Int[Array, " n_orb"] = jnp.arange(
+        n_orbitals,
+        dtype=jnp.int32,
+    )
+    hamiltonian = hamiltonian.at[
+        diagonal_indices,
+        diagonal_indices,
+    ].add(model.onsite_energies)
+    hamiltonian = eqx.error_if(
+        hamiltonian,
+        ~jnp.all(model.soc_lambdas == 0.0),
+        "bloch_hamiltonian: nonzero SOC requires the WP4.5 SOC engine",
+    )
+    hamiltonian = eqx.error_if(
+        hamiltonian,
+        ~jnp.all(jnp.isfinite(hamiltonian)),
+        "bloch_hamiltonian: assembled Hamiltonian finite",
+    )
+    hamiltonian = eqx.error_if(
+        hamiltonian,
+        ~jnp.all(jnp.abs(hamiltonian - hamiltonian.conj().T) <= EPS),
+        "bloch_hamiltonian: assembled Hamiltonian Hermitian",
+    )
+    return hamiltonian  # noqa: RET504 -- assign-before-return is required.
 
 
 @jaxtyped(typechecker=beartype)
-def build_hamiltonian_k(
+def bloch_hamiltonian(  # noqa: DOC502
+    model: TBModel,
     k: Float[Array, " 3"],
-    hopping_params: Float[Array, " H"],
-    hopping_indices: tuple,
-    n_orbitals: int,
-    lattice_vectors: Float[Array, "3 3"],  # noqa: ARG001
-) -> Complex[Array, "O O"]:
-    r"""Build the Bloch Hamiltonian H(k) at a single k-point.
+) -> Complex[Array, "n_orb n_orb"]:
+    r"""Assemble one basis-position-gauge Bloch Hamiltonian.
 
-    .. math::
+    The phase of hopping record ``(i, j, R)`` is
+    :math:`\exp[2\pi i k\cdot(R+\tau_j-\tau_i)]`. Here ``R`` is the exact
+    model cell. ``basis.atom_indices`` selects each :math:`\tau` from
+    ``geometry.positions``.
 
-        H_{ij}(\mathbf{k}) = \sum_{\mathbf{R}} t_{ij,\mathbf{R}}
-            \exp(i \mathbf{k} \cdot \mathbf{R})
-
-    where the sum runs over lattice vectors R defined by the
-    hopping indices. The function makes the result Hermitian:
-    ``H = (H_raw + H_raw^dag) / 2``.
-
-    The function computes the Bloch sum entirely in fractional coordinates.
-    ``k`` uses reciprocal lattice units, and each hopping ``R`` uses direct
-    lattice units. Therefore, ``k_frac . R_frac`` includes the metric. The
-    Cartesian phase equals
-    ``exp(2 pi i k_frac . R_frac)``. This stage does not need the lattice
-    matrix. The model retains it for Cartesian conversions.
-
-    The function iterates over each hopping in Python because the hopping count
-    is small and static. For each hopping, it computes the Bloch phase. It adds
-    the corresponding amplitude to ``H[orb_i, orb_j]``.
-
-    After the accumulation, the function applies ``(H + H^dag) / 2``. A
-    user-supplied hopping list can contain only the upper triangle. This
-    operation fills the lower triangle symmetrically. It also corrects
-    floating-point rounding that can prevent ``jnp.linalg.eigh`` from working.
-
-    :see: :class:`~.test_hamiltonian.TestBuildHamiltonianK`
+    :see: :class:`~.test_hamiltonian.TestBlochHamiltonian`
 
     Parameters
     ----------
+    model : TBModel
+        Validated tight-binding model. Static connectivity changes trigger
+        retracing.
     k : Float[Array, " 3"]
-        k-point in fractional coordinates.
-    hopping_params : Float[Array, " H"]
-        Hopping amplitudes (differentiable).
-    hopping_indices : tuple
-        ``(orb_i, orb_j, (R_x, R_y, R_z))`` per hopping.
-    n_orbitals : int
-        Number of orbitals in the unit cell.
-    lattice_vectors : Float[Array, "3 3"]
-        Real-space lattice vectors (rows).
+        Fractional reciprocal-space k-point.
 
     Returns
     -------
-    H_k : Complex[Array, "O O"]
-        Hermitian Hamiltonian matrix.
+    hamiltonian : Complex[Array, "n_orb n_orb"]
+        Complex Hermitian Bloch Hamiltonian in eV.
+
+    Raises
+    ------
+    EquinoxRuntimeError
+        If SOC is nonzero, hopping amplitudes are non-finite or no longer
+        conjugate-closed, or the assembled Hamiltonian is non-finite or
+        non-Hermitian.
 
     Notes
     -----
-    The hopping amplitudes ``hopping_params`` are plain real floats.
-    Complex spin-orbit hoppings require ``complex128`` values and no automatic
-    Hermitian completion.
-
-    The ``@jaxtyped`` and ``@beartype`` decorators detect shape and dtype
-    errors when the caller invokes the function.
+    The algorithm derives all bond displacements at once, evaluates their
+    phases, and performs one flattened scatter-add. It then adds onsite
+    energies to the diagonal. The Plan 04 SOC workstream adds atomic SOC;
+    this implementation supports the spin-diagonal kinetic block and zero SOC
+    couplings.
     """
-    h_idx: int
-    orb_i: int
-    orb_j: int
-    R_ijk: Array
-
-    H: Complex[Array, "O O"] = jnp.zeros(
-        (n_orbitals, n_orbitals), dtype=jnp.complex128
+    amplitudes: Complex[Array, " n_hop"] = _validated_hopping_amplitudes(model)
+    hamiltonian: Complex[Array, "n_orb n_orb"] = _assemble_bloch_hamiltonian(
+        model, k, amplitudes
     )
+    return hamiltonian  # noqa: RET504 -- assign-before-return is required.
 
-    for h_idx, (orb_i, orb_j, R_ijk) in enumerate(hopping_indices):
-        t: Float[Array, " "] = hopping_params[h_idx]
-        R_frac: Float[Array, " 3"] = jnp.array(R_ijk, dtype=jnp.float64)
-        phase: Complex[Array, " "] = jnp.exp(2j * jnp.pi * jnp.dot(k, R_frac))
-        H = H.at[orb_i, orb_j].add(t * phase)
 
-    H = (H + H.conj().T) / 2.0
-    H_k: Complex[Array, "O O"] = H
-    return H_k
+@jaxtyped(typechecker=beartype)
+def bloch_hamiltonian_batch(  # noqa: DOC502
+    model: TBModel,
+    kpoints: Float[Array, "n_k 3"],
+) -> Complex[Array, "n_k n_orb n_orb"]:
+    """Assemble Bloch Hamiltonians for a batch of fractional k-points.
+
+    The function maps the single-point assembler over the leading k-point
+    axis while retaining one shared model structure.
+
+    :see: :class:`~.test_hamiltonian.TestBlochHamiltonianBatch`
+
+    Parameters
+    ----------
+    model : TBModel
+        Validated tight-binding model. Static connectivity changes trigger
+        retracing.
+    kpoints : Float[Array, "n_k 3"]
+        Fractional reciprocal-space k-points.
+
+    Returns
+    -------
+    hamiltonians : Complex[Array, "n_k n_orb n_orb"]
+        Complex Hermitian Bloch Hamiltonians in eV.
+
+    Raises
+    ------
+    EquinoxRuntimeError
+        If SOC is nonzero, hopping amplitudes are non-finite or no longer
+        conjugate-closed, or an assembled Hamiltonian is non-finite or
+        non-Hermitian.
+
+    Notes
+    -----
+    :func:`jax.vmap` traces one assembler and broadcasts the shared model over
+    all supplied fractional k-points.
+    """
+    amplitudes: Complex[Array, " n_hop"] = _validated_hopping_amplitudes(model)
+    hamiltonians: Complex[Array, "n_k n_orb n_orb"] = jax.vmap(
+        lambda point: _assemble_bloch_hamiltonian(model, point, amplitudes)
+    )(kpoints)
+    return hamiltonians
 
 
 __all__: list[str] = [
-    "build_hamiltonian_k",
+    "bloch_hamiltonian",
+    "bloch_hamiltonian_batch",
 ]

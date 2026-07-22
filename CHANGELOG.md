@@ -9,6 +9,12 @@ and the project uses calendar versioning.
 
 ### Changed
 
+- Plan 04 begins the native tight-binding carrier migration. Bloch assembly
+  now uses exact integer hopping cells and the basis-position gauge. This
+  migration intentionally repins the graphene radial-gradient and
+  deterministic tight-binding references.
+- The real-harmonic convention now fixes positive ``m=1`` to ``+p_x`` and
+  keeps Gaunt transformations consistent with that sign.
 - `CrystalGeometry` now follows the roadmap field contract. It uses
   `lattice`, `reciprocal`, `positions`, and static per-atom `species`.
   `read_poscar` expands VASP species counts at the parser boundary.

@@ -87,11 +87,12 @@ class TestRealSphericalHarmonic:
         assert jnp.allclose(vals, expected, atol=1e-10)
 
     def test_y11_sin_cos(self) -> None:
-        """Verify Y_1^1 = -sqrt(3/(4*pi)) * sin(theta) * cos(phi).
+        """Verify Y_1^1 = +sqrt(3/(4*pi)) * sin(theta) * cos(phi).
 
         The test evaluates Y_1^{+1} at theta=pi/4, phi=0 and compares against the
-        Condon-Shortley convention expression.  The negative sign comes
-        from the (-1)^m phase factor for m > 0.  Asserts agreement to
+        package real-harmonic convention expression. The explicit real-basis
+        phase cancels the complex Condon--Shortley sign, so this is the
+        positive p_x orbital fixed by canon C5. Asserts agreement to
         within 1e-10.
 
         Notes
@@ -107,7 +108,7 @@ class TestRealSphericalHarmonic:
         val = real_spherical_harmonic(1, 1, theta, phi)
 
         expected = (
-            -math.sqrt(3.0 / (4.0 * math.pi))
+            math.sqrt(3.0 / (4.0 * math.pi))
             * math.sin(math.pi / 4)
             * math.cos(0.0)
         )

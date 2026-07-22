@@ -273,9 +273,11 @@ class TestDipoleIntensitiesAllOrbitals:
         I: Array
 
         basis = make_orbital_basis(
-            n_values=(1, 2, 2),
-            l_values=(0, 1, 1),
-            m_values=(0, 0, 1),
+            atom_indices=(0, 0, 0),
+            n=(1, 2, 2),
+            l=(0, 1, 1),
+            m=(0, 0, 1),
+            spin=(),
             labels=("1s", "2pz", "2px"),
         )
         sp = make_slater_params(
@@ -303,9 +305,11 @@ class TestDipoleIntensitiesAllOrbitals:
         I: Array
 
         basis = make_orbital_basis(
-            n_values=(1, 2, 2, 2),
-            l_values=(0, 1, 1, 1),
-            m_values=(0, -1, 0, 1),
+            atom_indices=(0, 0, 0, 0),
+            n=(1, 2, 2, 2),
+            l=(0, 1, 1, 1),
+            m=(0, -1, 0, 1),
+            spin=(),
             labels=("1s", "2py", "2pz", "2px"),
         )
         sp = make_slater_params(
@@ -332,9 +336,11 @@ class TestDipoleIntensitiesAllOrbitals:
         grad: Array
 
         basis = make_orbital_basis(
-            n_values=(1,),
-            l_values=(0,),
-            m_values=(0,),
+            atom_indices=(0,),
+            n=(1,),
+            l=(0,),
+            m=(0,),
+            spin=(),
             labels=("1s",),
         )
 

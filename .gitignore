@@ -140,9 +140,13 @@ target/
 
 # Chinook from https://github.com/qmlab-ubc-ca/chinook (untracked)
 /chinook
+/chinook/*
+/chinook/__pycache__/
 
 # dynamics-w90 code from https://github.com/michaelschueler/dynamics-w90 (untracked)
 /dynamics-w90
+/dynamics-w90/*
 
 # aurelia code from https://github.com/qmlab-ubc-ca/aurelia (untracked)
 /aurelia
+/aurelia/*

@@ -303,9 +303,8 @@ class TestKzFromInnerPotential(chex.TestCase):
         the artifact tolerance.
         """
         reference_path: Path = (
-            Path(__file__).resolve().parents[3]
-            / "diffpes-plans"
-            / "verification"
+            Path(__file__).resolve().parents[2]
+            / "data"
             / "kspace"
             / "kz_kpt_reference.json"
         )

@@ -843,13 +843,9 @@ class TestDetectorRotation(chex.TestCase):
         Load gate 03.G4 without a Chinook import. Compare all points on the
         two 5 by 5 angle grids at the recorded relative tolerance.
         """
-        repository_root: Path = Path(__file__).resolve().parents[3]
+        tests_root: Path = Path(__file__).resolve().parents[2]
         artifact_path: Path = (
-            repository_root
-            / "diffpes-plans"
-            / "verification"
-            / "kspace"
-            / "tilt_polarization_reference.json"
+            tests_root / "data" / "kspace" / "tilt_polarization_reference.json"
         )
         reference: dict[str, Any] = json.loads(
             artifact_path.read_text(encoding="utf-8")

@@ -242,7 +242,7 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
     .. math::
 
         Y_l^m(\text{real}) = \frac{1}{\sqrt{2}}
-            \bigl(Y_l^m + (-1)^m Y_l^{-m}\bigr)
+            \bigl(Y_l^{-m} + (-1)^m Y_l^m\bigr)
             \quad (m > 0)
 
         Y_l^0(\text{real}) = Y_l^0 \quad (m = 0)
@@ -319,7 +319,7 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
         The helper computes the unitary transformation coefficients
         :math:`U_{m,\mu}` such that
         :math:`Y_l^m(\text{real}) = \sum_\mu U_{m,\mu} Y_l^\mu`.
-        For m > 0, two terms with :math:`\mu = \pm m` contribute with
+        For m > 0, two terms with :math:`\mu = -m,+m` contribute with
         coefficients :math:`1/\sqrt{2}` and :math:`(-1)^m/\sqrt{2}`.
         For m = 0, a single term with coefficient 1. For m < 0, two
         terms with imaginary coefficients that isolate the sine component.
@@ -338,8 +338,8 @@ def _real_gaunt_dipole(l: int, m: int, lp: int, mp: int, q: int) -> float:
         """
         if mm > 0:
             coeffs: list[tuple[complex, int]] = [
-                (complex(1.0 / sqrt2), mm),
-                (complex((-1) ** mm / sqrt2), -mm),
+                (complex(1.0 / sqrt2), -mm),
+                (complex((-1) ** mm / sqrt2), mm),
             ]
         elif mm == 0:
             coeffs = [(1.0 + 0.0j, 0)]

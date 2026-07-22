@@ -19,10 +19,8 @@ from jaxtyping import Array
 import diffpes
 from diffpes.inout import load_from_h5, save_to_h5
 from diffpes.types import (
-    make_1d_chain_model,
     make_arpes_spectrum,
     make_band_structure,
-    make_crystal_geometry,
     make_density_of_states,
     make_diagonalized_bands,
     make_experiment_geometry,
@@ -30,7 +28,6 @@ from diffpes.types import (
     make_kgrid,
     make_kpath,
     make_kpath_info,
-    make_orbital_basis,
     make_orbital_projection,
     make_polarization_config,
     make_self_energy_config,
@@ -42,6 +39,7 @@ from diffpes.types import (
     make_volumetric_data,
     make_workflow_context,
 )
+from tests._factories import make_1d_chain_model
 
 
 def _all_carriers() -> dict[str, eqx.Module]:
@@ -50,6 +48,8 @@ def _all_carriers() -> dict[str, eqx.Module]:
     kpoints: Array
     bands: diffpes.types.BandStructure
     projections: diffpes.types.OrbitalProjection
+    tb_model: diffpes.types.TBModel
+    geometry: diffpes.types.CrystalGeometry
     basis: diffpes.types.OrbitalBasis
     diagonalized: diffpes.types.DiagonalizedBands
     charge: Array
@@ -58,11 +58,15 @@ def _all_carriers() -> dict[str, eqx.Module]:
     kpoints = jnp.zeros((2, 3), dtype=jnp.float64)
     bands = make_band_structure(energy[:, None], kpoints)
     projections = make_orbital_projection(jnp.ones((2, 1, 1, 9)))
-    basis = make_orbital_basis((1,), (0,), (0,), labels=("s",))
+    tb_model = make_1d_chain_model()
+    geometry = tb_model.geometry
+    basis = tb_model.basis
     diagonalized = make_diagonalized_bands(
         eigenvalues=energy[:, None],
         eigenvectors=jnp.ones((2, 1, 1), dtype=jnp.complex128),
         kpoints=kpoints,
+        geometry=geometry,
+        basis=basis,
     )
     charge = jnp.ones((2, 2, 2), dtype=jnp.float64)
     carriers: dict[str, eqx.Module] = {
@@ -79,11 +83,7 @@ def _all_carriers() -> dict[str, eqx.Module]:
         "full_dos": make_full_density_of_states(
             energy, jnp.ones(2), jnp.arange(2.0), natoms=0
         ),
-        "geometry": make_crystal_geometry(
-            jnp.eye(3),
-            jnp.zeros((1, 3)),
-            ("X",),
-        ),
+        "geometry": geometry,
         "experiment": make_experiment_geometry(
             21.2,
             jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.complex128),
@@ -102,7 +102,7 @@ def _all_carriers() -> dict[str, eqx.Module]:
         "slater": make_slater_params(jnp.ones(1), basis),
         "self_energy": make_self_energy_config(),
         "diagonalized": diagonalized,
-        "tb_model": make_1d_chain_model(),
+        "tb_model": tb_model,
         "volumetric": make_volumetric_data(
             jnp.eye(3),
             jnp.zeros((1, 3)),

@@ -2,10 +2,11 @@
 
 Extended Summary
 ----------------
-Builds the three CPU/x64 behavioral baselines required before the Equinox
-migration. The archives deliberately pin current behavior rather than physics
-truth and use deterministic ZIP metadata so unchanged arrays produce identical
-files and SHA-256 digests.
+Builds the three CPU/x64 behavioral baselines first established before the
+Equinox migration. Plan 04 intentionally repins the tight-binding cases to the
+basis-position gauge and carrier-native orbital bases. The archives capture
+behavior rather than independent physics truth and use deterministic ZIP
+metadata so unchanged arrays produce identical files and SHA-256 digests.
 """
 
 import hashlib
@@ -104,11 +105,15 @@ def build_payloads() -> dict[str, dict[str, np.ndarray]]:
     )
     _, graphene_bands = toy_graphene_diagonalized(n_k=12)
     _, chain_bands = toy_chain_diagonalized(n_k=16)
-    slater: SlaterParams = toy_slater_params()
+    graphene_slater: SlaterParams = toy_slater_params()
+    chain_slater: SlaterParams = make_slater_params(
+        zeta=jnp.asarray([1.625], dtype=jnp.float64),
+        orbital_basis=chain_bands.basis,
+    )
     payloads: dict[str, dict[str, np.ndarray]] = {
         "novice_toy": _spectrum_arrays(novice_spectrum),
-        "tb_radial_graphene": _tb_payload(graphene_bands, slater),
-        "tb_radial_chain": _tb_payload(chain_bands, slater),
+        "tb_radial_graphene": _tb_payload(graphene_bands, graphene_slater),
+        "tb_radial_chain": _tb_payload(chain_bands, chain_slater),
     }
     return payloads
 
@@ -139,11 +144,14 @@ def _manifest(payloads: dict[str, dict[str, np.ndarray]]) -> str:
     lines: list[str] = [
         "# WP6.1 regression-reference manifest",
         "",
-        "> These files pin pre-refactor behavior, not correctness. They",
-        "> intentionally include known physics defects documented by Plan 01.",
-        "> Regenerate only with a stated physics or migration justification.",
+        "> These files pin deterministic behavior, not independent physics",
+        "> truth.",
+        "> The tight-binding cases were repinned for Plan 04's basis-position",
+        "> gauge and carrier-native orbital bases.",
+        "> Regenerate only with a stated physics or migration",
+        "> justification.",
         "",
-        "- Generation date: 2026-07-19",
+        "- Generation date: 2026-07-22",
         f"- Seed: `{_SEED}`",
         "- Device policy: CPU, JAX x64 enabled",
         f"- Platform: `{platform.platform()}`",
@@ -162,7 +170,8 @@ def _manifest(payloads: dict[str, dict[str, np.ndarray]]) -> str:
         "toy_simulation_params(fidelity=512), "
         "toy_polarization_config())`, plus intensity sum and zeta gradient",
         "- `tb_radial_chain`: `simulate_tb_radial("
-        "toy_chain_diagonalized(n_k=16)[1], toy_slater_params(), "
+        "toy_chain_diagonalized(n_k=16)[1], "
+        "make_slater_params(zeta=[1.625], orbital_basis=bands.basis), "
         "toy_simulation_params(fidelity=512), "
         "toy_polarization_config())`, plus intensity sum and zeta gradient",
         "",

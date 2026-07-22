@@ -32,14 +32,13 @@ from diffpes.types import (
     SimulationParams,
     SlaterParams,
     TBModel,
-    make_1d_chain_model,
-    make_graphene_model,
     make_orbital_basis,
     make_polarization_config,
     make_self_energy_config,
     make_simulation_params,
     make_slater_params,
 )
+from tests._factories import make_1d_chain_model, make_graphene_model
 
 
 @pytest.fixture
@@ -80,12 +79,7 @@ def chain_setup() -> tuple[
         :, None
     ] * jnp.array([[1.0, 0.0, 0.0]])
     diag: DiagonalizedBands = diagonalize_tb(model, kpoints)
-    basis: OrbitalBasis = make_orbital_basis(
-        n_values=(1,),
-        l_values=(0,),
-        m_values=(0,),
-        labels=("1s",),
-    )
+    basis: OrbitalBasis = diag.basis
     slater: SlaterParams = make_slater_params(
         zeta=jnp.array([1.0]),
         orbital_basis=basis,
@@ -116,8 +110,9 @@ class TestSimulateTBRadial:
     ARPES spectra from tight-binding Hamiltonians and Slater radial
     wavefunctions. The tests cover shapes, finite nonnegative values, and
     polarization modes. They cover optional broadening and work-function
-    sensitivity. They also verify derivatives for Slater exponents and
-    tight-binding hopping parameters.
+    sensitivity. They reject mismatched Slater and diagonalized orbital
+    metadata. They also verify derivatives for Slater exponents and
+    tight-binding hopping amplitudes.
     A graphene test confirms multi-orbital, multi-atom generality.
 
     :see: :func:`~diffpes.simul.simulate_tb_radial`
@@ -154,6 +149,51 @@ class TestSimulateTBRadial:
         spectrum = simulate_tb_radial(diag, slater, params, pol)
         assert spectrum.intensity.shape == (10, 500)
         assert spectrum.energy_axis.shape == (500,)
+
+    def test_rejects_slater_basis_mismatch(self, chain_setup) -> None:
+        """Reject Slater metadata that differs from the diagonalized basis.
+
+        The eigensystem coefficients and radial parameters must describe the
+        same ordered orbitals. A same-sized but different principal quantum
+        number must therefore fail before numerical simulation begins.
+
+        Notes
+        -----
+        Build a valid one-orbital ``2s`` Slater basis against the fixture's
+        ``1s`` diagonalized basis and require the explicit ``ValueError``.
+        """
+        diag: diffpes.types.DiagonalizedBands
+        slater: diffpes.types.SlaterParams
+        params: diffpes.types.SimulationParams
+        pol: diffpes.types.PolarizationConfig
+        mismatch_basis: diffpes.types.OrbitalBasis
+        mismatch_slater: diffpes.types.SlaterParams
+
+        diag, slater, params, pol = chain_setup
+        del slater
+        mismatch_basis = make_orbital_basis(
+            atom_indices=diag.basis.atom_indices,
+            n=(2,),
+            l=(0,),
+            m=(0,),
+            spin=diag.basis.spin,
+            labels=("2s",),
+        )
+        mismatch_slater = make_slater_params(
+            zeta=jnp.array([1.0]),
+            orbital_basis=mismatch_basis,
+        )
+        with pytest.raises(
+            ValueError,
+            match="orbital_basis must equal diag_bands.basis",
+        ):
+            simulate_tb_radial(
+                diag,
+                mismatch_slater,
+                params,
+                pol,
+                r_grid=jnp.linspace(1e-6, 5.0, 16),
+            )
 
     def test_output_finite(self, chain_setup) -> None:
         """Verify that all intensity and energy axis values are finite.
@@ -372,11 +412,7 @@ class TestSimulateTBRadial:
         grad: Array
 
         diag, _, params, pol = chain_setup
-        basis = make_orbital_basis(
-            n_values=(1,),
-            l_values=(0,),
-            m_values=(0,),
-        )
+        basis = diag.basis
 
         def loss(zeta_val):
             sp: diffpes.types.SlaterParams
@@ -409,7 +445,8 @@ class TestSimulateTBRadial:
         1. **Setup**: Build a five-point chain with one 1s orbital.
            Define a scalar loss that replaces the hopping parameters.
            Diagonalize the model and simulate with an explicit radial grid.
-        2. **Differentiate**: Call ``jax.grad(loss)(model.hopping_params)``
+        2. **Differentiate**: Call
+           ``jax.grad(loss)(model.hopping_amplitudes)``
            to compute the gradient of the total intensity with respect to
            the tight-binding hopping parameter(s).
         3. **Check finiteness**: Assert all gradient components are finite.
@@ -431,11 +468,7 @@ class TestSimulateTBRadial:
         kpoints = jnp.linspace(-0.3, 0.3, 5)[:, None] * jnp.array(
             [[1.0, 0.0, 0.0]]
         )
-        basis = make_orbital_basis(
-            n_values=(1,),
-            l_values=(0,),
-            m_values=(0,),
-        )
+        basis = model.basis
         slater = make_slater_params(
             zeta=jnp.array([1.0]),
             orbital_basis=basis,
@@ -456,7 +489,11 @@ class TestSimulateTBRadial:
             diag: diffpes.types.DiagonalizedBands
             spec: diffpes.types.ArpesSpectrum
 
-            m = eqx.tree_at(lambda item: item.hopping_params, model, hop)
+            m = eqx.tree_at(
+                lambda item: item.hopping_amplitudes,
+                model,
+                hop,
+            )
             diag = diagonalize_tb(m, kpoints)
             spec = simulate_tb_radial(
                 diag,
@@ -467,7 +504,7 @@ class TestSimulateTBRadial:
             )
             return jnp.sum(spec.intensity)
 
-        grad = jax.grad(loss)(model.hopping_params)
+        grad = jax.grad(loss)(model.hopping_amplitudes)
         assert jnp.all(jnp.isfinite(grad)), (
             f"Gradient w.r.t. hopping is {grad}"
         )
@@ -512,12 +549,7 @@ class TestSimulateTBRadial:
             ]
         )
         diag = diagonalize_tb(model, kpoints)
-        basis = make_orbital_basis(
-            n_values=(2, 2),
-            l_values=(1, 1),
-            m_values=(0, 0),
-            labels=("A_pz", "B_pz"),
-        )
+        basis = diag.basis
         slater = make_slater_params(
             zeta=jnp.array([1.625, 1.625]),
             orbital_basis=basis,

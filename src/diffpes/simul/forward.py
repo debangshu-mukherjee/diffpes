@@ -185,6 +185,10 @@ def simulate_tb_radial(  # noqa: PLR0915
 
     Implementation Logic
     --------------------
+    Before the numerical stages, the function requires exact agreement
+    between the static Slater and diagonalized orbital bases. This keeps each
+    radial row paired with coefficients for the same orbital.
+
     The simulation proceeds in five stages:
 
     1. **Create the numerical grids**::
@@ -251,10 +255,10 @@ def simulate_tb_radial(  # noqa: PLR0915
         and eigenvectors of shape ``(K, B, O)``. O is the orbital count. The
         carrier also contains k-points and the Fermi energy.
     slater_params : SlaterParams
-        Slater radial wavefunction parameters including Slater
-        exponents ``zeta`` of shape ``(O,)``, expansion coefficients,
-        and the ``orbital_basis`` specifying (n, l, m) quantum
-        numbers for each orbital.
+        Slater radial parameters with exponents ``zeta`` of shape ``(O,)``
+        and expansion coefficients. Its ``orbital_basis`` specifies atom
+        assignments and ``(n, l, m)`` quantum numbers. This basis must equal
+        ``diag_bands.basis``.
     params : SimulationParams
         Simulation parameters including ``energy_min``, ``energy_max``,
         ``fidelity``, ``sigma`` (Gaussian width), ``gamma``
@@ -282,6 +286,12 @@ def simulate_tb_radial(  # noqa: PLR0915
         Simulated ARPES spectrum with ``intensity`` of shape
         ``(K, E)`` and ``energy_axis`` of shape ``(E,)``.
 
+    Raises
+    ------
+    ValueError
+        If the orbital metadata in ``slater_params.orbital_basis`` differs
+        from ``diag_bands.basis``.
+
     Notes
     -----
     The inner function ``_single_k_band`` uses :func:`safe_norm` and
@@ -300,6 +310,22 @@ def simulate_tb_radial(  # noqa: PLR0915
     evaluate_self_energy : Energy-dependent broadening model.
     apply_momentum_broadening : k-space Gaussian convolution.
     """
+    basis: OrbitalBasis = slater_params.orbital_basis
+    bands_basis: OrbitalBasis = diag_bands.basis
+    if (
+        basis.atom_indices != bands_basis.atom_indices
+        or basis.n != bands_basis.n
+        or basis.l != bands_basis.l
+        or basis.m != bands_basis.m
+        or basis.spin != bands_basis.spin
+        or basis.labels != bands_basis.labels
+    ):
+        message: str = (
+            "slater_params.orbital_basis must equal diag_bands.basis"
+        )
+        raise ValueError(message)
+    n_orbitals: int = len(basis.n)
+
     energy_axis: Float[Array, " E"] = jnp.linspace(
         params.energy_min, params.energy_max, params.fidelity
     )
@@ -313,9 +339,6 @@ def simulate_tb_radial(  # noqa: PLR0915
     is_unpolarized: bool = (
         pol_config.polarization_type.lower() == "unpolarized"
     )
-
-    basis: OrbitalBasis = slater_params.orbital_basis
-    n_orbitals: int = len(basis.n_values)
 
     def _evaluate_radial(
         operand: tuple[Float[Array, ""], Float[Array, ""]],
@@ -336,9 +359,7 @@ def simulate_tb_radial(  # noqa: PLR0915
             Float[Array, " R"],
         ],
         ...,
-    ] = tuple(
-        partial(_evaluate_radial, n=n_value) for n_value in basis.n_values
-    )
+    ] = tuple(partial(_evaluate_radial, n=n_value) for n_value in basis.n)
 
     def _scan_radial(
         carry: None,
@@ -413,8 +434,8 @@ def simulate_tb_radial(  # noqa: PLR0915
     ] = tuple(
         partial(_evaluate_orbital_contribution, l=l_value, m=m_value)
         for l_value, m_value in zip(
-            basis.l_values,
-            basis.m_values,
+            basis.l,
+            basis.m,
             strict=True,
         )
     )

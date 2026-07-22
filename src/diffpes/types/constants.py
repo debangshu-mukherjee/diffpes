@@ -44,6 +44,8 @@ Routine Listings
     Set the physical kinetic-energy floor in eV.
 :obj:`EPS`
     Epsilon floor guarding divisions and norms.
+:obj:`EPS_DEG`
+    Lorentzian width regularizing degenerate eigenvector derivatives.
 :obj:`FLOAT_TOKEN_RE`
     Compiled regex matching floating-point tokens.
 :obj:`GAUNT_IMAG_TOL`
@@ -156,6 +158,7 @@ EIG_UP_INDEX: Final[int] = 1
 ENERGY_AXIS_NDIM: Final[int] = 1
 EKIN_FLOOR_EV: Final[float] = 1e-2
 EPS: Final[float] = 1e-12
+EPS_DEG: Final[float] = 1e-9
 FLOAT_TOKEN_RE: Final[re.Pattern[str]] = re.compile(
     r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 )
@@ -283,6 +286,7 @@ __all__: list[str] = [
     "ENERGY_AXIS_NDIM",
     "EKIN_FLOOR_EV",
     "EPS",
+    "EPS_DEG",
     "FLOAT_TOKEN_RE",
     "GAUNT_IMAG_TOL",
     "HBAR_C_EV_A",

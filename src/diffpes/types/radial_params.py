@@ -19,9 +19,8 @@ Routine Listings
 
 Notes
 -----
-``OrbitalBasis`` contains only static auxiliary data. The quantum numbers
-(n, l, m) control recurrence depths in spherical Bessel functions and
-associated Legendre polynomials.
+``OrbitalBasis`` contains only static auxiliary data. Atom assignments,
+quantum numbers, spin channels, and labels define the traced program shape.
 ``SlaterParams`` wraps differentiable Slater exponents alongside
 the static orbital basis.
 """
@@ -31,6 +30,60 @@ import jax.numpy as jnp
 from beartype import beartype
 from beartype.typing import Optional
 from jaxtyping import Array, Float, jaxtyped
+
+
+def _validate_orbital_basis_structure(
+    atom_indices: tuple[int, ...],
+    n: tuple[int, ...],
+    l: tuple[int, ...],  # noqa: E741
+    m: tuple[int, ...],
+    spin: tuple[int, ...],
+    labels: tuple[str, ...],
+) -> None:
+    """Validate static orbital-basis metadata."""
+    if any(
+        type(values) is not tuple
+        for values in (atom_indices, n, l, m, spin, labels)
+    ):
+        message: str = "all OrbitalBasis fields must be tuples"
+        raise ValueError(message)
+    n_orbitals: int = len(n)
+    if not (
+        len(atom_indices) == len(l) == len(m) == len(labels) == n_orbitals
+    ):
+        message: str = (
+            "atom_indices, n, l, m, and labels must have the same length"
+        )
+        raise ValueError(message)
+    if any(type(index) is not int or index < 0 for index in atom_indices):
+        message = "atom_indices must contain non-negative integers"
+        raise ValueError(message)
+    if any(type(value) is not int or value < 1 for value in n):
+        message = "n must contain integers of at least 1"
+        raise ValueError(message)
+    if any(
+        type(angular) is not int or angular < 0 or angular >= principal
+        for principal, angular in zip(n, l, strict=True)
+    ):
+        message = "l must contain integers satisfying 0 <= l < n"
+        raise ValueError(message)
+    if any(
+        type(magnetic) is not int or abs(magnetic) > angular
+        for angular, magnetic in zip(l, m, strict=True)
+    ):
+        message = "m must contain integers satisfying abs(m) <= l"
+        raise ValueError(message)
+    if spin and len(spin) != n_orbitals:
+        message = "spin must be empty or have one entry per orbital"
+        raise ValueError(message)
+    if any(
+        type(channel) is not int or channel not in (-1, 1) for channel in spin
+    ):
+        message = "spin entries must be +1 or -1"
+        raise ValueError(message)
+    if any(type(label) is not str for label in labels):
+        message = "labels must contain strings"
+        raise ValueError(message)
 
 
 class OrbitalBasis(eqx.Module):
@@ -53,20 +106,30 @@ class OrbitalBasis(eqx.Module):
 
     Attributes
     ----------
-    n_values : tuple[int, ...]
-        Principal quantum numbers, one per orbital. Each value determines the
-        radial node count and the power of *r* in the Slater-type radial
-        function R_nl(r) ~ r^{n-1} exp(-zeta*r). These values are static.
-    l_values : tuple[int, ...]
+    atom_indices : tuple[int, ...]
+        Atom-row index for each orbital. Each entry refers to a row of
+        :attr:`~diffpes.types.CrystalGeometry.positions` (**static** -- a
+        compile-time constant; changing it triggers retracing).
+    n : tuple[int, ...]
+        Principal quantum numbers, one per orbital. Each value controls the
+        radial node count and the power of *r*. The Slater form
+        R_nl(r) ~ r^{n-1} exp(-zeta*r) uses static compile-time values;
+        changing them triggers retracing.
+    l : tuple[int, ...]
         Angular momentum quantum numbers, one per orbital (0=s, 1=p,
         2=d, 3=f). Determines the spherical harmonic Y_l^m used in
         the matrix element integral (**static** -- compile-time constants;
         changing them triggers retracing).
-    m_values : tuple[int, ...]
+    m : tuple[int, ...]
         Magnetic quantum numbers, one per orbital. Ranges from -l to
         +l for each orbital. Selects the specific spherical harmonic
         component (**static** -- compile-time constants; changing them
         triggers retracing).
+    spin : tuple[int, ...]
+        Spin channel for each orbital. The empty tuple denotes a spinless
+        basis; a spinor basis stores ``+1`` or ``-1`` for every orbital
+        (**static** -- a compile-time constant; changing it triggers
+        retracing).
     labels : tuple[str, ...]
         Human-readable orbital labels (e.g. ``("2s", "2px", ...)``).
         Used for plotting and debugging (**static** -- compile-time constants;
@@ -87,10 +150,23 @@ class OrbitalBasis(eqx.Module):
         default label generation.
     """
 
-    n_values: tuple[int, ...] = eqx.field(static=True)
-    l_values: tuple[int, ...] = eqx.field(static=True)
-    m_values: tuple[int, ...] = eqx.field(static=True)
+    atom_indices: tuple[int, ...] = eqx.field(static=True)
+    n: tuple[int, ...] = eqx.field(static=True)
+    l: tuple[int, ...] = eqx.field(static=True)  # noqa: E741
+    m: tuple[int, ...] = eqx.field(static=True)
+    spin: tuple[int, ...] = eqx.field(static=True)
     labels: tuple[str, ...] = eqx.field(static=True)
+
+    def __check_init__(self) -> None:
+        """Validate the static orbital-basis invariants again."""
+        _validate_orbital_basis_structure(
+            self.atom_indices,
+            self.n,
+            self.l,
+            self.m,
+            self.spin,
+            self.labels,
+        )
 
 
 class SlaterParams(eqx.Module):
@@ -150,10 +226,12 @@ class SlaterParams(eqx.Module):
 
 
 @jaxtyped(typechecker=beartype)
-def make_orbital_basis(
-    n_values: tuple[int, ...],
-    l_values: tuple[int, ...],
-    m_values: tuple[int, ...],
+def make_orbital_basis(  # noqa: DOC502
+    atom_indices: tuple[int, ...],
+    n: tuple[int, ...],
+    l: tuple[int, ...],  # noqa: E741
+    m: tuple[int, ...],
+    spin: tuple[int, ...] = (),
     labels: Optional[tuple[str, ...]] = None,
 ) -> OrbitalBasis:
     """Create a validated ``OrbitalBasis`` instance.
@@ -173,14 +251,14 @@ def make_orbital_basis(
     --------------------
     1. **Prepare the normalized values**::
 
-           n_orbitals = len(n_values)
+           n_orbitals = len(n)
 
        This expression gives the later validation steps a stable shape and
        dtype.
 
     2. **Apply static validation**::
 
-           len(l_values) != n_orbitals or len(m_values) != n_orbitals
+           _validate_orbital_basis_structure(...)
 
        This predicate rejects invalid structure before JAX traces the
        numerical checks.
@@ -194,15 +272,22 @@ def make_orbital_basis(
 
     Parameters
     ----------
-    n_values : tuple[int, ...]
+    atom_indices : tuple[int, ...]
+        Atom-row indices (**static** -- compile-time constants; changing them
+        triggers retracing), one per orbital.
+    n : tuple[int, ...]
         Principal quantum numbers (**static** -- compile-time constants;
         changing them triggers retracing), one per orbital.
-    l_values : tuple[int, ...]
+    l : tuple[int, ...]
         Angular momentum quantum numbers (**static** -- compile-time
         constants; changing them triggers retracing), one per orbital.
-    m_values : tuple[int, ...]
+    m : tuple[int, ...]
         Magnetic quantum numbers (**static** -- compile-time constants;
         changing them triggers retracing), one per orbital.
+    spin : tuple[int, ...], optional
+        Spin channels (**static** -- compile-time constants; changing them
+        triggers retracing). The empty tuple denotes a spinless basis;
+        otherwise every entry must be ``+1`` or ``-1``. Default is empty.
     labels : Optional[tuple[str, ...]], optional
         Human-readable orbital labels (**static** -- compile-time constants;
         changing them triggers retracing). Defaults to
@@ -216,9 +301,8 @@ def make_orbital_basis(
     Raises
     ------
     ValueError
-        If the quantum-number tuples have different lengths or ``labels`` has
-        a different length. The function also rejects invalid values of
-        ``n``, ``l``, or ``m``.
+        If any per-orbital tuple has a different length. The function also
+        rejects invalid atom indices, quantum numbers, or spin channels.
 
     Notes
     -----
@@ -231,37 +315,26 @@ def make_orbital_basis(
     --------
     OrbitalBasis : The PyTree class constructed by this factory.
     """
-    n_orbitals: int = len(n_values)
-    if len(l_values) != n_orbitals or len(m_values) != n_orbitals:
-        msg: str = "n_values, l_values, m_values must have the same length"
-        raise ValueError(msg)
+    n_orbitals: int = len(n)
     resolved_labels: tuple[str, ...] = (
         tuple(f"orb_{i}" for i in range(n_orbitals))
         if labels is None
         else labels
     )
-    if len(resolved_labels) != n_orbitals:
-        msg: str = "labels must have the same length as quantum numbers"
-        raise ValueError(msg)
-    if any(n < 1 for n in n_values):
-        msg = "n_values must all be at least 1"
-        raise ValueError(msg)
-    if any(
-        angular < 0 or angular >= principal
-        for principal, angular in zip(n_values, l_values, strict=True)
-    ):
-        msg = "l_values must satisfy 0 <= l < n"
-        raise ValueError(msg)
-    if any(
-        abs(magnetic) > angular
-        for angular, magnetic in zip(l_values, m_values, strict=True)
-    ):
-        msg = "m_values must satisfy abs(m) <= l"
-        raise ValueError(msg)
+    _validate_orbital_basis_structure(
+        atom_indices,
+        n,
+        l,
+        m,
+        spin,
+        resolved_labels,
+    )
     basis: OrbitalBasis = OrbitalBasis(
-        n_values=n_values,
-        l_values=l_values,
-        m_values=m_values,
+        atom_indices=atom_indices,
+        n=n,
+        l=l,
+        m=m,
+        spin=spin,
         labels=resolved_labels,
     )
     return basis
@@ -297,7 +370,7 @@ def make_slater_params(  # noqa: DOC503
 
     2. **Apply static validation**::
 
-           len(orbital_basis.n_values) != n_orbitals
+           len(orbital_basis.n) != n_orbitals
 
        This predicate rejects invalid structure before JAX traces the
        numerical checks.
@@ -357,7 +430,7 @@ def make_slater_params(  # noqa: DOC503
     """
     zeta_arr: Float[Array, " O"] = jnp.asarray(zeta, dtype=jnp.float64)
     n_orbitals: int = zeta_arr.shape[0]
-    if len(orbital_basis.n_values) != n_orbitals:
+    if len(orbital_basis.n) != n_orbitals:
         msg: str = "zeta length must match orbital_basis size"
         raise ValueError(msg)
     if coefficients is None:

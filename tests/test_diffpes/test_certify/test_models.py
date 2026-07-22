@@ -20,13 +20,12 @@ from diffpes.tightb import diagonalize_tb
 from diffpes.types import (
     TB_RADIAL_MODEL_ID,
     TB_RADIAL_MODEL_VERSION,
-    make_1d_chain_model,
     make_execution_manifest,
-    make_orbital_basis,
     make_polarization_config,
     make_simulation_params,
     make_slater_params,
 )
+from tests._factories import make_1d_chain_model
 
 
 class TestTbRadialModelSpec:
@@ -123,12 +122,7 @@ class TestExecuteTbRadial:
         model = make_1d_chain_model(t=-1.0)
         kpoints = jnp.array([[-0.1, 0.0, 0.0], [0.1, 0.0, 0.0]])
         bands = diagonalize_tb(model, kpoints)
-        basis = make_orbital_basis(
-            n_values=(1,),
-            l_values=(0,),
-            m_values=(0,),
-            labels=("1s",),
-        )
+        basis = bands.basis
         radial = make_slater_params(zeta=jnp.array([1.0]), orbital_basis=basis)
         simulation = make_simulation_params(
             energy_min=-3.0,

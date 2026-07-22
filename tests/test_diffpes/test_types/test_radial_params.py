@@ -1,13 +1,14 @@
-"""Validate orbital-basis and Slater-parameter carriers and factories.
+"""Validate orbital-basis and Slater-parameter carriers.
 
-The cases cover static PyTree metadata, differentiable radial parameters,
-default labels and coefficients, and quantum-number and shape validation.
+The tests cover static PyTree metadata, differentiable Slater leaves,
+factory defaults, dtype normalization, and eager or compiled rejection.
 """
 
 import chex
 import jax
 import jax.numpy as jnp
 import pytest
+from absl.testing import parameterized
 
 from diffpes.types import (
     OrbitalBasis,
@@ -18,66 +19,73 @@ from diffpes.types import (
 from tests._assertions import assert_rejects
 
 
-class TestOrbitalBasis:
-    """Validate :class:`~diffpes.types.OrbitalBasis` as static PyTree data.
+def _basis() -> OrbitalBasis:
+    """Create a two-orbital, two-atom spinless test basis."""
+    basis: OrbitalBasis = make_orbital_basis(
+        atom_indices=(0, 1),
+        n=(1, 2),
+        l=(0, 1),
+        m=(0, 0),
+        labels=("1s", "2pz"),
+    )
+    return basis
 
-    Quantum numbers and labels must survive JAX reconstruction without
-    becoming differentiable leaves.
 
-    :see: :class:`~diffpes.types.OrbitalBasis`
-    """
+class TestOrbitalBasis(chex.TestCase):
+    """Validate :class:`~diffpes.types.OrbitalBasis`."""
 
-    def test_pytree_round_trip(self) -> None:
-        """Preserve three orbital labels and quantum-number tuples.
+    def test_pytree_round_trip_preserves_all_static_fields(self) -> None:
+        """Preserve atom, quantum-number, spin, and label tuples exactly.
 
-        The check compares ``s``, ``p``, and ``d`` metadata before and after a
-        JAX PyTree round trip.
+        The case flattens and rebuilds a spinful two-atom orbital basis.
 
         Notes
         -----
-        The test constructs the basis with explicit tuples, flattens and unflattens it,
-        and compares every static field exactly.
+        Compare every static tuple after reconstruction and require no leaves.
         """
         basis: OrbitalBasis = make_orbital_basis(
-            n_values=(1, 2, 3),
-            l_values=(0, 1, 2),
-            m_values=(0, 0, 0),
-            labels=("s", "p", "d"),
+            atom_indices=(0, 0, 1, 1),
+            n=(2, 2, 2, 2),
+            l=(1, 1, 1, 1),
+            m=(-1, 0, -1, 0),
+            spin=(1, 1, -1, -1),
+            labels=("a_px_up", "a_pz_up", "b_px_dn", "b_pz_dn"),
         )
         leaves: list[object]
         tree: jax.tree_util.PyTreeDef
         leaves, tree = jax.tree_util.tree_flatten(basis)
         restored: OrbitalBasis = jax.tree_util.tree_unflatten(tree, leaves)
 
-        assert restored.n_values == basis.n_values
-        assert restored.l_values == basis.l_values
-        assert restored.m_values == basis.m_values
+        assert leaves == []
+        assert restored.atom_indices == basis.atom_indices
+        assert restored.n == basis.n
+        assert restored.l == basis.l
+        assert restored.m == basis.m
+        assert restored.spin == basis.spin
         assert restored.labels == basis.labels
 
 
-class TestSlaterParams:
-    """Validate :class:`~diffpes.types.SlaterParams` gradient behavior.
-
-    Slater exponents and coefficients must remain differentiable JAX leaves
-    while their orbital basis remains static structure.
-
-    :see: :class:`~diffpes.types.SlaterParams`
-    """
+class TestSlaterParams(chex.TestCase):
+    """Validate :class:`~diffpes.types.SlaterParams`."""
 
     def test_zeta_gradient(self) -> None:
-        r"""Differentiate a quadratic loss through the Slater exponent.
+        """Differentiate a quadratic loss through Slater exponents.
 
-        At exponent 2 inverse Angstrom, the derivative of :math:`\zeta^2`
-        must equal 4 within the default Chex numerical tolerance.
+        The case traces one positive exponent through a scalar square loss.
 
         Notes
         -----
-        The test constructs one radial parameter carrier, differentiates an independent
-        quadratic loss with JAX, and compares its ``zeta`` gradient with 4.
+        Compare the resulting derivative with the analytic value four.
         """
-        basis: OrbitalBasis = make_orbital_basis((1,), (0,), (0,))
+        basis: OrbitalBasis = make_orbital_basis(
+            atom_indices=(0,),
+            n=(1,),
+            l=(0,),
+            m=(0,),
+        )
         params: SlaterParams = make_slater_params(
-            zeta=jnp.array([2.0]), orbital_basis=basis
+            zeta=jnp.array([2.0], dtype=jnp.float64),
+            orbital_basis=basis,
         )
 
         def loss(candidate: SlaterParams) -> jax.Array:
@@ -90,93 +98,134 @@ class TestSlaterParams:
         chex.assert_trees_all_close(gradient.zeta, 4.0)
 
 
-class TestMakeOrbitalBasis:
-    """Validate :func:`~diffpes.types.make_orbital_basis`.
+class TestMakeOrbitalBasis(chex.TestCase):
+    """Validate :func:`~diffpes.types.make_orbital_basis`."""
 
-    The factory must generate stable labels and reject inconsistent tuple
-    lengths or quantum numbers outside their physical ranges.
+    def test_generates_labels_and_spinless_default(self) -> None:
+        """Generate stable labels and an empty spin tuple by default.
 
-    :see: :func:`~diffpes.types.make_orbital_basis`
-    """
-
-    def test_generates_default_labels(self) -> None:
-        """Generate zero-indexed labels for unlabeled orbitals.
-
-        The check verifies the independent naming convention ``orb_0`` and
-        ``orb_1`` for a two-orbital basis.
+        The case omits optional metadata for a two-orbital basis.
 
         Notes
         -----
-        The test constructs a valid two-orbital basis without labels and compares the
-        immutable generated tuple exactly.
+        Compare generated labels by position and require an empty spin tuple.
         """
         basis: OrbitalBasis = make_orbital_basis(
-            n_values=(1, 2),
-            l_values=(0, 1),
-            m_values=(0, 0),
+            atom_indices=(0, 1),
+            n=(1, 2),
+            l=(0, 1),
+            m=(0, 0),
         )
 
         assert basis.labels == ("orb_0", "orb_1")
+        assert basis.spin == ()
 
-    def test_rejects_mismatched_lengths(self) -> None:
-        """Reject unequal quantum-number and label tuple lengths.
+    @parameterized.named_parameters(
+        (
+            "length_mismatch",
+            "length",
+            "must have the same length",
+        ),
+        (
+            "negative_atom_index",
+            "atom",
+            "atom_indices must contain non-negative integers",
+        ),
+        (
+            "invalid_principal_quantum_number",
+            "principal",
+            "n must contain integers of at least 1",
+        ),
+        (
+            "invalid_angular_quantum_number",
+            "angular",
+            "l must contain integers satisfying",
+        ),
+        (
+            "invalid_spin_length",
+            "spin_length",
+            "spin must be empty or have one entry per orbital",
+        ),
+        (
+            "invalid_spin_channel",
+            "spin_channel",
+            r"spin entries must be \+1 or -1",
+        ),
+    )
+    def test_rejects_invalid_static_metadata_eager_and_jit(
+        self,
+        defect: str,
+        match: str,
+    ) -> None:
+        """Reject malformed atom, quantum-number, and spin tuples.
 
-        The check covers both the three required quantum-number axes and the
-        optional label axis.
+        Parameterized cases isolate one structural metadata defect at a time.
 
         Notes
         -----
-        The test calls the factory once with mismatched quantum numbers and once with an
-        extra label, matching the shared static diagnostic.
+        Route every case through the shared eager and compiled rejection gate.
         """
-        with pytest.raises(ValueError, match="same length"):
-            make_orbital_basis((1, 2), (0,), (0, 0))
-        with pytest.raises(ValueError, match="same length"):
-            make_orbital_basis((1,), (0,), (0,), labels=("s", "extra"))
+        arguments: dict[str, object] = {
+            "atom_indices": (0,),
+            "n": (1,),
+            "l": (0,),
+            "m": (0,),
+            "spin": (),
+        }
+        if defect == "length":
+            arguments["m"] = (0, 0)
+        elif defect == "atom":
+            arguments["atom_indices"] = (-1,)
+        elif defect == "principal":
+            arguments["n"] = (0,)
+        elif defect == "angular":
+            arguments["l"] = (1,)
+        elif defect == "spin_length":
+            arguments["atom_indices"] = (0, 0)
+            arguments["n"] = (1, 1)
+            arguments["l"] = (0, 0)
+            arguments["m"] = (0, 0)
+            arguments["spin"] = (1,)
+        else:
+            arguments["spin"] = (0,)
 
-    def test_rejects_invalid_quantum_numbers(self) -> None:
-        """Reject principal quantum numbers below one.
+        assert_rejects(make_orbital_basis, match=match, **arguments)
 
-        The check isolates the lower bound on ``n`` from the angular and
-        magnetic quantum-number constraints.
+    def test_raw_constructor_reasserts_static_invariants(self) -> None:
+        """Prevent direct construction from bypassing spin validation.
+
+        The case supplies an invalid spin channel to the raw module constructor.
 
         Notes
         -----
-        Supplies a length-consistent one-orbital tuple with ``n=0`` and matches
-        the factory's principal-quantum-number diagnostic.
+        Require the same validation error that the public factory emits.
         """
-        assert_rejects(
-            make_orbital_basis,
-            (0,),
-            (0,),
-            (0,),
-            match="n_values must all be at least 1",
-        )
+        with pytest.raises(ValueError, match="spin entries"):
+            OrbitalBasis(
+                atom_indices=(0,),
+                n=(1,),
+                l=(0,),
+                m=(0,),
+                spin=(0,),
+                labels=("s",),
+            )
 
 
-class TestMakeSlaterParams:
-    """Validate :func:`~diffpes.types.make_slater_params`.
-
-    The factory must provide unit default coefficients, normalize dtype, and
-    reject incompatible or nonpositive radial parameters.
-
-    :see: :func:`~diffpes.types.make_slater_params`
-    """
+class TestMakeSlaterParams(chex.TestCase):
+    """Validate :func:`~diffpes.types.make_slater_params`."""
 
     def test_supplies_unit_coefficients(self) -> None:
         """Create one unit coefficient per orbital when omitted.
 
-        The check expects a ``2 x 1`` float64 matrix of ones for two Slater
-        exponents.
+        The case constructs two single-zeta orbitals without coefficients.
 
         Notes
         -----
-        The test constructs a two-orbital basis and radial carrier without coefficients,
-        then compares shape, dtype, and values with Chex.
+        Check the generated column shape, dtype, and unit values.
         """
-        basis: OrbitalBasis = make_orbital_basis((1, 2), (0, 1), (0, 0))
         params: SlaterParams = make_slater_params(
-            zeta=jnp.array([1.0, 1.5]), orbital_basis=basis
+            zeta=jnp.array([1.0, 1.5], dtype=jnp.float64),
+            orbital_basis=_basis(),
         )
 
         chex.assert_shape(params.coefficients, (2, 1))
@@ -184,51 +233,52 @@ class TestMakeSlaterParams:
         chex.assert_trees_all_close(params.coefficients, jnp.ones((2, 1)))
 
     def test_casts_explicit_coefficients_to_float64(self) -> None:
-        """Promote explicit float32 coefficients to float64.
+        """Promote explicit float32 coefficients to project precision.
 
-        The check verifies the project-wide precision policy for a two-orbital,
-        two-term Slater expansion.
+        The case supplies a two-column contraction in lower precision.
 
         Notes
         -----
-        Supplies a float32 coefficient matrix and checks its stored shape and
-        dtype after factory normalization.
+        Check the preserved shape and required float64 output dtype.
         """
-        basis: OrbitalBasis = make_orbital_basis((1, 2), (0, 1), (0, 0))
         coefficients: jax.Array = jnp.array(
-            [[0.8, 0.2], [0.6, 0.4]], dtype=jnp.float32
+            [[0.8, 0.2], [0.6, 0.4]],
+            dtype=jnp.float32,
         )
         params: SlaterParams = make_slater_params(
-            zeta=jnp.array([1.0, 1.5]),
-            orbital_basis=basis,
+            zeta=jnp.array([1.0, 1.5], dtype=jnp.float64),
+            orbital_basis=_basis(),
             coefficients=coefficients,
         )
 
         chex.assert_shape(params.coefficients, (2, 2))
         assert params.coefficients.dtype == jnp.float64
 
-    def test_rejects_invalid_radial_arrays(self) -> None:
+    def test_rejects_invalid_radial_arrays_eager_and_jit(self) -> None:
         """Reject nonpositive exponents and coefficient-axis mismatches.
 
-        The check covers the physical lower bound on ``zeta`` and the static
-        first-axis agreement with the orbital basis.
+        The cases exercise traced value checks and static leading-axis checks.
 
         Notes
         -----
-        The test uses the eager-and-JIT rejection helper with zero exponent and then a
-        two-row coefficient matrix for a one-orbital basis.
+        Use the shared rejection helper and match each diagnostic fragment.
         """
-        basis: OrbitalBasis = make_orbital_basis((1,), (0,), (0,))
+        basis: OrbitalBasis = make_orbital_basis(
+            atom_indices=(0,),
+            n=(1,),
+            l=(0,),
+            m=(0,),
+        )
         assert_rejects(
             make_slater_params,
-            zeta=jnp.array([0.0]),
+            zeta=jnp.array([0.0], dtype=jnp.float64),
             orbital_basis=basis,
             match="zeta positive",
         )
         assert_rejects(
             make_slater_params,
-            zeta=jnp.array([1.0]),
+            zeta=jnp.array([1.0], dtype=jnp.float64),
             orbital_basis=basis,
-            coefficients=jnp.ones((2, 1)),
+            coefficients=jnp.ones((2, 1), dtype=jnp.float64),
             match="coefficients first dimension must match",
         )

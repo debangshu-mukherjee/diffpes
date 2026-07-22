@@ -10,6 +10,10 @@ the random-key fixture supplies stable, worker-independent test randomness.
 """
 
 import hashlib
+import sys
+from importlib.abc import MetaPathFinder
+from importlib.machinery import ModuleSpec
+from types import ModuleType
 
 # ruff: noqa: I001 -- diffpes must configure JAX before JAX is imported.
 import diffpes  # noqa: F401 -- Import activates the package-wide x64 contract.
@@ -26,6 +30,54 @@ pytest_plugins: tuple[str, ...] = ("pytester",)
 
 RSS_LEAK_LIMIT_MB: float = 500.0
 _BYTES_PER_MEBIBYTE: int = 1024**2
+
+
+class _ChinookImportBlocker(MetaPathFinder):
+    """Reject Chinook imports throughout pytest collection and execution."""
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: object | None,
+        target: ModuleType | None = None,
+    ) -> ModuleSpec | None:
+        """Raise for the forbidden Chinook module namespace."""
+        del path, target
+        if fullname == "chinook" or fullname.startswith("chinook."):
+            raise RuntimeError(
+                "DiffPES tests must consume frozen Chinook artifacts; "
+                f"importing {fullname!r} is forbidden"
+            )
+        return None
+
+
+_CHINOOK_IMPORT_BLOCKER = _ChinookImportBlocker()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Install the test-suite firewall before pytest collects test modules."""
+    del config
+    imported: tuple[str, ...] = tuple(
+        sorted(
+            name
+            for name in sys.modules
+            if name == "chinook" or name.startswith("chinook.")
+        )
+    )
+    if imported:
+        raise RuntimeError(
+            "Chinook was imported before DiffPES test collection: "
+            + ", ".join(imported)
+        )
+    if _CHINOOK_IMPORT_BLOCKER not in sys.meta_path:
+        sys.meta_path.insert(0, _CHINOOK_IMPORT_BLOCKER)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove the test-suite firewall when pytest shuts down."""
+    del config
+    if _CHINOOK_IMPORT_BLOCKER in sys.meta_path:
+        sys.meta_path.remove(_CHINOOK_IMPORT_BLOCKER)
 
 
 @pytest.fixture(autouse=True, scope="session")

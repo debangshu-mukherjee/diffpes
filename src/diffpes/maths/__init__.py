@@ -33,6 +33,8 @@ Routine Listings
     Module-level precomputed Gaunt coefficient table for l_max=4.
 :func:`build_gaunt_table`
     Build the dipole Gaunt coefficient lookup table.
+:func:`bond_angles`
+    Convert a Cartesian bond to safe polar and azimuthal angles.
 :func:`dipole_intensities_all_orbitals`
     Compute ``|M|^2`` for all orbitals in the basis.
 :func:`dipole_intensity_orbital`
@@ -45,6 +47,8 @@ Routine Listings
     Evaluate a single real spherical harmonic.
 :func:`real_spherical_harmonics_all`
     Evaluate all real spherical harmonics up to l_max.
+:func:`real_harmonic_unitary`
+    Construct the complex-to-real harmonic basis-function unitary.
 :func:`rodrigues_rotation`
     Construct a rotation matrix with Rodrigues' formula.
 :func:`safe_arccos`
@@ -61,6 +65,10 @@ Routine Listings
     Raise positive inputs to a power and return zero otherwise.
 :func:`safe_sqrt`
     Evaluate sqrt on positive inputs and return zero otherwise.
+:func:`wigner_d`
+    Construct a Wigner D matrix for an active z--y--z rotation.
+:func:`wigner_small_d`
+    Construct a Wigner small-d matrix from its finite factorial sum.
 
 Notes
 -----
@@ -75,7 +83,13 @@ from .dipole import (
     dipole_matrix_element_single,
 )
 from .gaunt import GAUNT_TABLE, build_gaunt_table, gaunt_lookup
-from .rotations import rodrigues_rotation
+from .rotations import (
+    bond_angles,
+    real_harmonic_unitary,
+    rodrigues_rotation,
+    wigner_d,
+    wigner_small_d,
+)
 from .safe import (
     safe_arccos,
     safe_arctan2,
@@ -92,6 +106,7 @@ from .spherical_harmonics import (
 
 __all__: list[str] = [
     "GAUNT_TABLE",
+    "bond_angles",
     "build_gaunt_table",
     "dipole_intensities_all_orbitals",
     "dipole_intensity_orbital",
@@ -99,6 +114,7 @@ __all__: list[str] = [
     "gaunt_lookup",
     "real_spherical_harmonic",
     "real_spherical_harmonics_all",
+    "real_harmonic_unitary",
     "rodrigues_rotation",
     "safe_arccos",
     "safe_arctan2",
@@ -107,4 +123,6 @@ __all__: list[str] = [
     "safe_norm",
     "safe_power",
     "safe_sqrt",
+    "wigner_d",
+    "wigner_small_d",
 ]

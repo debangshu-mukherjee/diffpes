@@ -20,19 +20,21 @@ from diffpes.simul import simulate_tb_radial
 from diffpes.tightb import diagonalize_tb
 from diffpes.types import (
     ArpesSpectrum,
+    CrystalGeometry,
     DiagonalizedBands,
     OrbitalBasis,
     PolarizationConfig,
     SimulationParams,
     SlaterParams,
     TBModel,
+    make_crystal_geometry,
     make_diagonalized_bands,
-    make_graphene_model,
     make_orbital_basis,
     make_polarization_config,
     make_simulation_params,
     make_slater_params,
 )
+from tests._factories import make_graphene_model
 from tests._gradients import assert_grad_matches_fd, assert_nonzero_grad
 
 
@@ -44,6 +46,19 @@ def _generic_radial_fixture() -> tuple[
     Float[Array, " R"],
 ]:
     """Build a lightweight radial fixture with generic complex state data."""
+    basis: OrbitalBasis = make_orbital_basis(
+        atom_indices=(0, 0),
+        n=(1, 2),
+        l=(0, 1),
+        m=(0, 1),
+        spin=(),
+        labels=("1s", "2px"),
+    )
+    geometry: CrystalGeometry = make_crystal_geometry(
+        lattice=jnp.eye(3, dtype=jnp.float64),
+        positions=jnp.zeros((1, 3), dtype=jnp.float64),
+        species=("X",),
+    )
     eigenvectors: Complex[Array, "1 2 2"] = jnp.array(
         [
             [
@@ -57,13 +72,9 @@ def _generic_radial_fixture() -> tuple[
         eigenvalues=jnp.array([[-0.03, 0.04]], dtype=jnp.float64),
         eigenvectors=eigenvectors,
         kpoints=jnp.array([[0.12, 0.17, 0.08]], dtype=jnp.float64),
+        geometry=geometry,
+        basis=basis,
         fermi_energy=0.0,
-    )
-    basis: OrbitalBasis = make_orbital_basis(
-        n_values=(1, 2),
-        l_values=(0, 1),
-        m_values=(0, 1),
-        labels=("1s", "2px"),
     )
     slater: SlaterParams = make_slater_params(
         zeta=jnp.array([1.1, 1.6], dtype=jnp.float64),
@@ -206,26 +217,30 @@ class TestTBRadialCarrierGradients:
 
 
 class TestTBRadialBaselineGradient:
-    """Pin the fully specified pre-migration graphene gradient baseline.
+    """Pin the fully specified Plan 04 basis-position gradient baseline.
 
     :see: :func:`diffpes.simul.simulate_tb_radial`
     """
 
     @pytest.mark.big_mem
     @pytest.mark.rss_limit_mb(1200)
-    def test_common_zeta_gradient_matches_v01_fixture(self) -> None:
-        """Reproduce the tagged-v0.1 graphene/LHP common-zeta gradient.
+    def test_common_zeta_gradient_matches_basis_position_fixture(self) -> None:
+        """Reproduce the Plan 04 graphene/LHP common-zeta gradient.
 
         Extended Summary
         ----------------
-        The test uses the v0.1 graphene fixture. It contains three Gamma/K/M
-        points, carbon 2p orbitals, 300 energies, and 2,000 radial points.
-        An independent run against tag ``v0.1`` supplies the expected
-        derivative.
+        The test uses the carrier-native graphene fixture in the pinned
+        basis-position gauge. It contains three Gamma/K/M points, carbon 2p
+        orbitals, 300 energies, and 2,000 radial points. Repeated fresh-process
+        runs after the independent finite-difference gate supply the fixed
+        regression derivative.
 
         Notes
         -----
-        The test builds the inputs in the test body and checks the stated property with the documented numerical or structural assertions."""
+        The basis-position gauge changes eigenvector phases relative to the
+        tagged-v0.1 cell-origin fixture. Keep the ``1e-6`` tolerance unchanged
+        while pinning the intentional Plan 04 value.
+        """
         model: TBModel = make_graphene_model(t=-2.7)
         kpoints: Float[Array, "3 3"] = jnp.array(
             [
@@ -236,12 +251,7 @@ class TestTBRadialBaselineGradient:
             dtype=jnp.float64,
         )
         bands: DiagonalizedBands = diagonalize_tb(model, kpoints)
-        basis: OrbitalBasis = make_orbital_basis(
-            n_values=(2, 2),
-            l_values=(1, 1),
-            m_values=(0, 0),
-            labels=("A_pz", "B_pz"),
-        )
+        basis: OrbitalBasis = bands.basis
         params: SimulationParams = make_simulation_params(
             energy_min=-10.0,
             energy_max=10.0,
@@ -269,5 +279,5 @@ class TestTBRadialBaselineGradient:
         common_zeta: Float[Array, ""] = jnp.asarray(1.625)
         assert_grad_matches_fd(loss, common_zeta, modes=("rev",))
         gradient: Float[Array, ""] = jax.grad(loss)(common_zeta)
-        expected: Float[Array, ""] = jnp.asarray(-18.895708715290983)
+        expected: Float[Array, ""] = jnp.asarray(-18.86954908011316)
         assert jnp.isclose(gradient, expected, rtol=1e-6, atol=0.0)

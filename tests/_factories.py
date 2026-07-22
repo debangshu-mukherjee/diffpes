@@ -12,13 +12,14 @@ import chex
 import jax
 import jax.numpy as jnp
 from beartype import beartype
-from jaxtyping import Array, Float, PRNGKeyArray, jaxtyped
+from jaxtyping import Array, Complex, Float, PRNGKeyArray, jaxtyped
 
 from diffpes.tightb import (
     diagonalize_tb,
 )
 from diffpes.types import (
     BandStructure,
+    CrystalGeometry,
     DiagonalizedBands,
     OrbitalBasis,
     OrbitalProjection,
@@ -26,21 +27,131 @@ from diffpes.types import (
     SimulationParams,
     SlaterParams,
     TBModel,
-    make_1d_chain_model,
     make_band_structure,
-    make_graphene_model,
+    make_crystal_geometry,
     make_orbital_basis,
     make_orbital_projection,
     make_polarization_config,
     make_simulation_params,
     make_slater_params,
+    make_tb_model,
 )
+from diffpes.types.aliases import ScalarFloat
 
 
 def _assert_finite(tree: object) -> None:
     """Require every numerical leaf in a toy carrier to be finite."""
     leaves: tuple[object, ...] = tuple(jax.tree.leaves(tree))
     chex.assert_tree_all_finite(leaves)
+
+
+@jaxtyped(typechecker=beartype)
+def make_1d_chain_model(t: ScalarFloat = -1.0) -> TBModel:
+    r"""Build the closed nearest-neighbor one-dimensional chain fixture.
+
+    The single-orbital model is an external-truth fixture for
+    :math:`E(k)=2t\cos(2\pi k)`. It uses exact integer cells and explicit
+    reverse hoppings under the basis-position gauge.
+
+    Parameters
+    ----------
+    t : ScalarFloat, optional
+        Nearest-neighbor hopping in eV. Default is ``-1.0`` eV.
+
+    Returns
+    -------
+    model : TBModel
+        Validated one-orbital chain model.
+    """
+    geometry: CrystalGeometry = make_crystal_geometry(
+        lattice=jnp.eye(3, dtype=jnp.float64),
+        positions=jnp.zeros((1, 3), dtype=jnp.float64),
+        species=("X",),
+    )
+    basis: OrbitalBasis = make_orbital_basis(
+        atom_indices=(0,),
+        n=(1,),
+        l=(0,),
+        m=(0,),
+        labels=("s",),
+    )
+    hopping_value: Complex[Array, ""] = jnp.asarray(t, dtype=jnp.complex128)
+    hopping: Complex[Array, " 2"] = jnp.stack((hopping_value, hopping_value))
+    model: TBModel = make_tb_model(
+        hopping_amplitudes=hopping,
+        onsite_energies=jnp.zeros((1,), dtype=jnp.float64),
+        soc_lambdas=jnp.zeros((0,), dtype=jnp.float64),
+        geometry=geometry,
+        basis=basis,
+        hopping_pairs=((0, 0), (0, 0)),
+        hopping_cells=((1, 0, 0), (-1, 0, 0)),
+        shell_index=(-1,),
+    )
+    return model
+
+
+@jaxtyped(typechecker=beartype)
+def make_graphene_model(t: ScalarFloat = -2.7) -> TBModel:
+    """Build the closed nearest-neighbor graphene fixture.
+
+    Parameters
+    ----------
+    t : ScalarFloat, optional
+        Carbon pz nearest-neighbor hopping in eV. Default is ``-2.7`` eV.
+
+    Returns
+    -------
+    model : TBModel
+        Validated two-orbital honeycomb model in the basis-position gauge.
+    """
+    lattice_constant: float = 2.46
+    lattice: Float[Array, "3 3"] = jnp.asarray(
+        [
+            [lattice_constant, 0.0, 0.0],
+            [
+                lattice_constant / 2.0,
+                lattice_constant * jnp.sqrt(3.0) / 2.0,
+                0.0,
+            ],
+            [0.0, 0.0, 10.0],
+        ],
+        dtype=jnp.float64,
+    )
+    geometry: CrystalGeometry = make_crystal_geometry(
+        lattice=lattice,
+        positions=jnp.asarray(
+            [[0.0, 0.0, 0.0], [1.0 / 3.0, 1.0 / 3.0, 0.0]],
+            dtype=jnp.float64,
+        ),
+        species=("C", "C"),
+    )
+    basis: OrbitalBasis = make_orbital_basis(
+        atom_indices=(0, 1),
+        n=(2, 2),
+        l=(1, 1),
+        m=(0, 0),
+        labels=("A_pz", "B_pz"),
+    )
+    hopping_value: Complex[Array, ""] = jnp.asarray(t, dtype=jnp.complex128)
+    hopping: Complex[Array, " 6"] = jnp.stack((hopping_value,) * 6)
+    model: TBModel = make_tb_model(
+        hopping_amplitudes=hopping,
+        onsite_energies=jnp.zeros((2,), dtype=jnp.float64),
+        soc_lambdas=jnp.zeros((0,), dtype=jnp.float64),
+        geometry=geometry,
+        basis=basis,
+        hopping_pairs=((0, 1), (0, 1), (0, 1), (1, 0), (1, 0), (1, 0)),
+        hopping_cells=(
+            (0, 0, 0),
+            (-1, 0, 0),
+            (0, -1, 0),
+            (0, 0, 0),
+            (1, 0, 0),
+            (0, 1, 0),
+        ),
+        shell_index=(-1, -1),
+    )
+    return model
 
 
 @jaxtyped(typechecker=beartype)
@@ -205,9 +316,10 @@ def toy_slater_params() -> SlaterParams:
     Bohr. The analytic fixture policy uses no random seed.
     """
     basis: OrbitalBasis = make_orbital_basis(
-        n_values=(2, 2),
-        l_values=(1, 1),
-        m_values=(0, 0),
+        atom_indices=(0, 1),
+        n=(2, 2),
+        l=(1, 1),
+        m=(0, 0),
         labels=("A_pz", "B_pz"),
     )
     params: SlaterParams = make_slater_params(

@@ -1,279 +1,555 @@
-"""Validate tight-binding and diagonalized-band carriers and factories.
+"""Validate native tight-binding and diagonalized-band carriers.
 
-The cases cover PyTree reconstruction, differentiable hopping parameters,
-eigensystem validation, connectivity bounds, and two analytic model presets.
+The tests cover PyTree structure, differentiable leaves, exact connectivity,
+geometry context, runtime checks, and randomized Hermitian closure.
 """
 
 import chex
+import equinox as eqx
 import jax
 import jax.numpy as jnp
+import pytest
+from absl.testing import parameterized
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from diffpes.types import (
+    CrystalGeometry,
     DiagonalizedBands,
     OrbitalBasis,
     TBModel,
-    make_1d_chain_model,
+    make_crystal_geometry,
     make_diagonalized_bands,
-    make_graphene_model,
     make_orbital_basis,
     make_tb_model,
 )
 from tests._assertions import assert_rejects
 
 
-def _one_orbital_basis() -> OrbitalBasis:
-    """Create the single-s-orbital basis shared by model tests.
+def _geometry(n_atoms: int = 1) -> CrystalGeometry:
+    """Create a simple right-handed test geometry."""
+    positions: jax.Array = jnp.zeros((n_atoms, 3), dtype=jnp.float64)
+    geometry: CrystalGeometry = make_crystal_geometry(
+        lattice=jnp.eye(3, dtype=jnp.float64),
+        positions=positions,
+        species=tuple("X" for _ in range(n_atoms)),
+    )
+    return geometry
 
-    Returns
-    -------
-    basis : OrbitalBasis
-        Validated static basis for one ``s`` orbital.
 
-    Notes
-    -----
-    Delegates construction to the public factory so tests do not duplicate the
-    quantum-number validation contract.
-    """
-    basis: OrbitalBasis = make_orbital_basis((1,), (0,), (0,), labels=("s",))
+def _basis(
+    atom_indices: tuple[int, ...] = (0,),
+    spin: tuple[int, ...] = (),
+) -> OrbitalBasis:
+    """Create one valid s orbital for every supplied atom index."""
+    n_orbitals: int = len(atom_indices)
+    basis: OrbitalBasis = make_orbital_basis(
+        atom_indices=atom_indices,
+        n=(1,) * n_orbitals,
+        l=(0,) * n_orbitals,
+        m=(0,) * n_orbitals,
+        spin=spin,
+    )
     return basis
 
 
-class TestDiagonalizedBands:
-    """Validate :class:`~diffpes.types.DiagonalizedBands` as a JAX PyTree.
+def _model_arguments() -> dict[str, object]:
+    """Return a minimal complex Hermitian-closed model argument mapping."""
+    arguments: dict[str, object] = {
+        "hopping_amplitudes": jnp.array(
+            [1.0 + 2.0j, 1.0 - 2.0j],
+            dtype=jnp.complex128,
+        ),
+        "onsite_energies": jnp.array([0.25], dtype=jnp.float64),
+        "soc_lambdas": jnp.zeros((0,), dtype=jnp.float64),
+        "geometry": _geometry(),
+        "basis": _basis(),
+        "hopping_pairs": ((0, 0), (0, 0)),
+        "hopping_cells": ((1, 0, 0), (-1, 0, 0)),
+        "shell_index": (-1,),
+        "spinor": False,
+    }
+    return arguments
 
-    Real eigenvalues and complex eigenvectors must survive JAX reconstruction
-    without changing their k-point and orbital axes.
 
-    :see: :class:`~diffpes.types.DiagonalizedBands`
-    """
+class TestDiagonalizedBands(chex.TestCase):
+    """Validate :class:`~diffpes.types.DiagonalizedBands`."""
 
-    def test_pytree_round_trip(self) -> None:
-        """Preserve a two-point eigensystem through JAX reconstruction.
+    def test_pytree_round_trip_preserves_context(self) -> None:
+        """Preserve numerical leaves and the static basis on reconstruction.
 
-        The check compares a ``2 x 2`` energy matrix and its complex identity
-        eigenvectors after a PyTree round trip.
+        The case flattens and rebuilds a geometry-bearing eigensystem.
 
         Notes
         -----
-        The test constructs the carrier through its factory, flattens and unflattens it
-        with JAX, and compares both numerical leaves with Chex.
+        Compare all leaves and inspect the restored atom and quantum metadata.
         """
+        geometry: CrystalGeometry = _geometry()
+        basis: OrbitalBasis = _basis()
         bands: DiagonalizedBands = make_diagonalized_bands(
-            eigenvalues=jnp.array([[1.0, 2.0], [3.0, 4.0]]),
-            eigenvectors=jnp.eye(2, dtype=jnp.complex128)[None].repeat(
-                2, axis=0
-            ),
-            kpoints=jnp.zeros((2, 3)),
+            eigenvalues=jnp.array([[1.0], [2.0]], dtype=jnp.float64),
+            eigenvectors=jnp.ones((2, 1, 1), dtype=jnp.complex128),
+            kpoints=jnp.zeros((2, 3), dtype=jnp.float64),
+            geometry=geometry,
+            basis=basis,
         )
         leaves: list[object]
         tree: jax.tree_util.PyTreeDef
         leaves, tree = jax.tree_util.tree_flatten(bands)
         restored: DiagonalizedBands = jax.tree_util.tree_unflatten(
-            tree, leaves
+            tree,
+            leaves,
         )
 
-        chex.assert_trees_all_close(restored.eigenvalues, bands.eigenvalues)
-        chex.assert_trees_all_close(restored.eigenvectors, bands.eigenvectors)
+        assert len(leaves) == 7
+        chex.assert_trees_all_close(restored, bands)
+        assert restored.basis.atom_indices == (0,)
+        assert restored.basis.n == (1,)
 
 
-class TestTBModel:
-    """Validate :class:`~diffpes.types.TBModel` gradient behavior.
+class TestTBModel(chex.TestCase):
+    """Validate :class:`~diffpes.types.TBModel`."""
 
-    Hopping amplitudes must remain differentiable leaves while connectivity and
-    the orbital basis remain static model structure.
+    def test_pytree_round_trip_preserves_nine_field_contract(self) -> None:
+        """Preserve all differentiable leaves and static connectivity.
 
-    :see: :class:`~diffpes.types.TBModel`
-    """
-
-    def test_hopping_gradient(self) -> None:
-        """Differentiate a quadratic loss through hopping amplitudes.
-
-        At hopping value 1 eV, the derivative of :math:`t^2` must equal 2
-        within the default Chex numerical tolerance.
+        The case flattens and rebuilds the complete nine-field model carrier.
 
         Notes
         -----
-        The test constructs a one-hop model, differentiates an independently defined
-        quadratic loss with JAX, and compares the hopping leaf with 2.
+        Compare leaves, exact hopping metadata, shell indices, and spin mode.
         """
-        model: TBModel = make_tb_model(
-            hopping_params=jnp.array([1.0]),
-            lattice_vectors=jnp.eye(3),
-            hopping_indices=((0, 0, (1, 0, 0)),),
-            n_orbitals=1,
-            orbital_basis=_one_orbital_basis(),
-        )
+        model: TBModel = make_tb_model(**_model_arguments())
+        leaves: list[object]
+        tree: jax.tree_util.PyTreeDef
+        leaves, tree = jax.tree_util.tree_flatten(model)
+        restored: TBModel = jax.tree_util.tree_unflatten(tree, leaves)
+
+        assert len(leaves) == 6
+        chex.assert_trees_all_close(restored, model)
+        assert restored.hopping_pairs == model.hopping_pairs
+        assert restored.hopping_cells == model.hopping_cells
+        assert restored.shell_index == (-1,)
+        assert not restored.spinor
+
+    def test_array_fields_remain_differentiable(self) -> None:
+        """Differentiate a real loss through hoppings, onsite, and geometry.
+
+        The case traces a quadratic loss through every relevant numerical leaf.
+
+        Notes
+        -----
+        Require finite gradients with the original hopping and onsite shapes.
+        """
+        model: TBModel = make_tb_model(**_model_arguments())
 
         def loss(candidate: TBModel) -> jax.Array:
-            """Return the quadratic hopping-amplitude loss."""
-            result: jax.Array = jnp.sum(candidate.hopping_params**2)
+            """Return a real quadratic loss over traced model leaves."""
+            result: jax.Array = (
+                jnp.sum(jnp.abs(candidate.hopping_amplitudes) ** 2)
+                + jnp.sum(candidate.onsite_energies**2)
+                + jnp.sum(candidate.geometry.positions**2)
+            )
             return result
 
         gradient: TBModel = jax.grad(loss)(model)
 
-        chex.assert_trees_all_close(gradient.hopping_params, 2.0)
+        chex.assert_tree_all_finite(jax.tree.leaves(gradient))
+        chex.assert_shape(gradient.hopping_amplitudes, (2,))
+        chex.assert_shape(gradient.onsite_energies, (1,))
 
 
-class TestMakeDiagonalizedBands:
-    """Validate :func:`~diffpes.types.make_diagonalized_bands`.
+class TestMakeDiagonalizedBands(chex.TestCase):
+    """Validate :func:`~diffpes.types.make_diagonalized_bands`."""
 
-    The factory must preserve compatible eigensystem dimensions and reject
-    non-finite eigenvectors or mismatched k-point axes.
+    def test_constructs_geometry_and_basis_context(self) -> None:
+        """Store the frozen geometry and basis contract with normalized dtypes.
 
-    :see: :func:`~diffpes.types.make_diagonalized_bands`
-    """
-
-    def test_constructs_expected_shapes(self) -> None:
-        """Construct a five-point, three-band, four-orbital eigensystem.
-
-        The check gates the exact eigenvalue and eigenvector dimensions after
-        dtype normalization by the factory.
+        The case builds a two-orbital eigensystem on a two-atom geometry.
 
         Notes
         -----
-        Supplies finite zero energies and unit complex vectors, then checks both
-        carrier shapes with Chex.
+        Check eigensystem shapes, numerical dtypes, and atom assignments.
         """
+        geometry: CrystalGeometry = _geometry(2)
+        basis: OrbitalBasis = _basis((0, 1))
         bands: DiagonalizedBands = make_diagonalized_bands(
-            eigenvalues=jnp.zeros((5, 3)),
-            eigenvectors=jnp.ones((5, 3, 4), dtype=jnp.complex128),
-            kpoints=jnp.zeros((5, 3)),
+            eigenvalues=jnp.zeros((5, 3), dtype=jnp.float64),
+            eigenvectors=jnp.ones((5, 3, 2), dtype=jnp.complex128),
+            kpoints=jnp.zeros((5, 3), dtype=jnp.float64),
+            geometry=geometry,
+            basis=basis,
+            fermi_energy=0.5,
         )
 
         chex.assert_shape(bands.eigenvalues, (5, 3))
-        chex.assert_shape(bands.eigenvectors, (5, 3, 4))
+        chex.assert_shape(bands.eigenvectors, (5, 3, 2))
+        assert bands.eigenvalues.dtype == jnp.float64
+        assert bands.eigenvectors.dtype == jnp.complex128
+        assert bands.basis.atom_indices == (0, 1)
 
-    def test_rejects_invalid_eigensystems(self) -> None:
-        """Reject non-finite vectors and inconsistent k-point dimensions.
+    @parameterized.named_parameters(
+        (
+            "k_axis_mismatch",
+            "k_axis",
+            "eigenvalues and eigenvectors must agree",
+        ),
+        (
+            "basis_axis_mismatch",
+            "basis_axis",
+            "eigenvector orbital axis must match basis",
+        ),
+        (
+            "atom_mapping_out_of_range",
+            "atom_mapping",
+            "basis atom_indices must refer",
+        ),
+    )
+    def test_rejects_structural_mismatch(
+        self,
+        defect: str,
+        match: str,
+    ) -> None:
+        """Reject incompatible eigensystem axes and structural context.
 
-        The check covers the numerical finiteness guard and the static leading
-        dimension contract between eigenvalues and eigenvectors.
+        Parameterized cases vary k axes, orbital axes, and atom mappings.
 
         Notes
         -----
-        The test uses the eager-and-JIT rejection helper first with a NaN vector and
-        then with unequal one- and two-point eigensystem arrays.
+        Match the factory diagnostic for each isolated structural mismatch.
+        """
+        eigenvectors: jax.Array = jnp.ones(
+            (1, 1, 1),
+            dtype=jnp.complex128,
+        )
+        geometry: CrystalGeometry = _geometry()
+        basis: OrbitalBasis = _basis()
+        if defect == "k_axis":
+            eigenvectors = jnp.ones((2, 1, 1), dtype=jnp.complex128)
+        elif defect == "basis_axis":
+            eigenvectors = jnp.ones((1, 1, 2), dtype=jnp.complex128)
+        else:
+            basis = _basis((1,))
+
+        assert_rejects(
+            make_diagonalized_bands,
+            eigenvalues=jnp.zeros((1, 1), dtype=jnp.float64),
+            eigenvectors=eigenvectors,
+            kpoints=jnp.zeros((1, 3), dtype=jnp.float64),
+            geometry=geometry,
+            basis=basis,
+            match=match,
+        )
+
+    def test_rejects_nonfinite_data_eager_and_jit(self) -> None:
+        """Reject a NaN eigenvector through runtime validation.
+
+        The case injects one nonfinite complex orbital coefficient.
+
+        Notes
+        -----
+        Use the shared eager and compiled rejection helper for the runtime gate.
         """
         assert_rejects(
             make_diagonalized_bands,
-            eigenvalues=jnp.zeros((1, 1)),
+            eigenvalues=jnp.zeros((1, 1), dtype=jnp.float64),
             eigenvectors=jnp.array([[[jnp.nan + 0.0j]]]),
-            kpoints=jnp.zeros((1, 3)),
+            kpoints=jnp.zeros((1, 3), dtype=jnp.float64),
+            geometry=_geometry(),
+            basis=_basis(),
             match="eigenvectors finite",
         )
-        assert_rejects(
-            make_diagonalized_bands,
-            eigenvalues=jnp.zeros((1, 1)),
-            eigenvectors=jnp.zeros((2, 1, 1), dtype=jnp.complex128),
-            kpoints=jnp.zeros((1, 3)),
-            match="eigenvalues and eigenvectors must agree",
-        )
 
 
-class TestMakeTBModel:
-    """Validate :func:`~diffpes.types.make_tb_model`.
+class TestMakeTBModel(chex.TestCase):
+    """Validate :func:`~diffpes.types.make_tb_model`."""
 
-    The factory must preserve hopping arrays and reject connectivity that
-    references an orbital outside the declared basis.
+    def test_constructs_complex_nine_field_model(self) -> None:
+        """Normalize dtypes while preserving exact closed metadata.
 
-    :see: :func:`~diffpes.types.make_tb_model`
-    """
-
-    def test_constructs_hopping_array(self) -> None:
-        """Store two nearest-neighbor hopping amplitudes.
-
-        The check verifies the one-dimensional hopping shape for forward and
-        backward translations of a single orbital.
+        The case builds a complex one-orbital model with two reverse hoppings.
 
         Notes
         -----
-        The test constructs a validated model with two static connectivity entries and
-        checks the differentiable hopping leaf shape with Chex.
+        Check numerical shapes, complex precision, and exact orbital pairs.
         """
-        model: TBModel = make_tb_model(
-            hopping_params=jnp.array([1.0, 1.0]),
-            lattice_vectors=jnp.eye(3),
-            hopping_indices=((0, 0, (1, 0, 0)), (0, 0, (-1, 0, 0))),
-            n_orbitals=1,
-            orbital_basis=_one_orbital_basis(),
-        )
+        model: TBModel = make_tb_model(**_model_arguments())
 
-        chex.assert_shape(model.hopping_params, (2,))
+        chex.assert_shape(model.hopping_amplitudes, (2,))
+        chex.assert_shape(model.onsite_energies, (1,))
+        chex.assert_shape(model.soc_lambdas, (0,))
+        assert model.hopping_amplitudes.dtype == jnp.complex128
+        assert model.hopping_pairs == ((0, 0), (0, 0))
 
-    def test_rejects_out_of_range_orbital_index(self) -> None:
-        """Reject connectivity referencing an absent second orbital.
+    @parameterized.named_parameters(
+        (
+            "open_hopping_list",
+            "open",
+            "Hermitian-closed",
+        ),
+        (
+            "bad_pair_index",
+            "pair_index",
+            "hopping pair indices must be in",
+        ),
+        (
+            "duplicate_hopping_record",
+            "duplicate",
+            "duplicate \\(i, j, R\\) hopping records",
+        ),
+        (
+            "bad_shell_count",
+            "shell_count",
+            "soc_lambdas length must equal",
+        ),
+        (
+            "noncontiguous_shell_ids",
+            "shell_gap",
+            "shell_index IDs must be contiguous",
+        ),
+        (
+            "one_id_spans_two_atomic_shells",
+            "mixed_shell_group",
+            "each shell_index ID must map to one",
+        ),
+        (
+            "one_atomic_shell_has_two_ids",
+            "split_shell_group",
+            "each \\(atom, n, l\\) group must map to one",
+        ),
+        (
+            "spinor_without_spin",
+            "spinor",
+            "spinor models require",
+        ),
+    )
+    def test_rejects_static_defects_eager_and_jit(
+        self,
+        defect: str,
+        match: str,
+    ) -> None:
+        """Reject malformed connectivity, shell, and spin metadata.
 
-        The check isolates the static orbital-index bound for a model declaring
-        exactly one orbital.
+        Parameterized cases isolate open records, duplicates, shells, and spin.
 
         Notes
         -----
-        Supplies connectivity ending at index one and matches the factory's
-        allowed-index diagnostic.
+        Match the public factory diagnostic for each static defect.
         """
-        basis: OrbitalBasis = _one_orbital_basis()
+        arguments: dict[str, object] = _model_arguments()
+        if defect == "open":
+            arguments["hopping_amplitudes"] = jnp.array(
+                [1.0 + 0.0j],
+                dtype=jnp.complex128,
+            )
+            arguments["hopping_pairs"] = ((0, 0),)
+            arguments["hopping_cells"] = ((1, 0, 0),)
+        elif defect == "pair_index":
+            arguments["hopping_pairs"] = ((0, 1), (1, 0))
+        elif defect == "duplicate":
+            arguments["hopping_amplitudes"] = jnp.array(
+                [1.0 + 2.0j, 3.0 + 4.0j, 1.0 - 2.0j, 3.0 - 4.0j],
+                dtype=jnp.complex128,
+            )
+            arguments["hopping_pairs"] = ((0, 0),) * 4
+            arguments["hopping_cells"] = (
+                (1, 0, 0),
+                (1, 0, 0),
+                (-1, 0, 0),
+                (-1, 0, 0),
+            )
+        elif defect == "shell_count":
+            arguments["shell_index"] = (0,)
+        elif defect == "shell_gap":
+            arguments.update(
+                {
+                    "hopping_amplitudes": jnp.zeros(
+                        (0,),
+                        dtype=jnp.complex128,
+                    ),
+                    "onsite_energies": jnp.zeros(2, dtype=jnp.float64),
+                    "soc_lambdas": jnp.zeros(3, dtype=jnp.float64),
+                    "basis": _basis((0, 0)),
+                    "hopping_pairs": (),
+                    "hopping_cells": (),
+                    "shell_index": (0, 2),
+                }
+            )
+        elif defect == "mixed_shell_group":
+            arguments.update(
+                {
+                    "hopping_amplitudes": jnp.zeros(
+                        (0,),
+                        dtype=jnp.complex128,
+                    ),
+                    "onsite_energies": jnp.zeros(2, dtype=jnp.float64),
+                    "soc_lambdas": jnp.zeros(1, dtype=jnp.float64),
+                    "geometry": _geometry(2),
+                    "basis": _basis((0, 1)),
+                    "hopping_pairs": (),
+                    "hopping_cells": (),
+                    "shell_index": (0, 0),
+                }
+            )
+        elif defect == "split_shell_group":
+            arguments.update(
+                {
+                    "hopping_amplitudes": jnp.zeros(
+                        (0,),
+                        dtype=jnp.complex128,
+                    ),
+                    "onsite_energies": jnp.zeros(2, dtype=jnp.float64),
+                    "soc_lambdas": jnp.zeros(2, dtype=jnp.float64),
+                    "basis": _basis((0, 0)),
+                    "hopping_pairs": (),
+                    "hopping_cells": (),
+                    "shell_index": (0, 1),
+                }
+            )
+        else:
+            arguments["spinor"] = True
 
-        assert_rejects(
-            make_tb_model,
-            hopping_params=jnp.ones(1),
-            lattice_vectors=jnp.eye(3),
-            hopping_indices=((0, 1, (0, 0, 0)),),
-            n_orbitals=1,
-            orbital_basis=basis,
-            match="hopping orbital indices must be in",
-        )
+        assert_rejects(make_tb_model, match=match, **arguments)
 
+    @parameterized.named_parameters(
+        (
+            "mismatched_conjugates",
+            "amplitudes",
+            "reverse hopping amplitudes must be complex conjugates",
+        ),
+        (
+            "nonfinite_onsite",
+            "onsite",
+            "onsite energies finite",
+        ),
+        (
+            "nonfinite_geometry",
+            "geometry",
+            "geometry positions finite",
+        ),
+    )
+    def test_rejects_traced_defects_eager_and_jit(
+        self,
+        defect: str,
+        match: str,
+    ) -> None:
+        """Reject numerical defects through runtime checks under compilation.
 
-class TestMake1dChainModel:
-    """Validate :func:`~diffpes.types.make_1d_chain_model`.
-
-    The preset must construct one orbital with two translated nearest-neighbor
-    hopping entries and preserve the supplied amplitude.
-
-    :see: :func:`~diffpes.types.make_1d_chain_model`
-    """
-
-    def test_constructs_chain_connectivity(self) -> None:
-        """Construct the two-hop one-orbital chain preset.
-
-        The check verifies two amplitudes of ``-1.5`` eV and the declared
-        single-orbital model size.
+        Parameterized cases corrupt amplitudes, onsite values, or geometry.
 
         Notes
         -----
-        The test calls the convenience factory with an explicit hopping value and
-        compares the carrier's static size and numerical hopping leaf.
+        Use the shared eager and compiled rejection helper for every case.
         """
-        model: TBModel = make_1d_chain_model(t=-1.5)
+        arguments: dict[str, object] = _model_arguments()
+        if defect == "amplitudes":
+            arguments["hopping_amplitudes"] = jnp.array(
+                [1.0 + 2.0j, 1.0 - 3.0j],
+                dtype=jnp.complex128,
+            )
+        elif defect == "onsite":
+            arguments["onsite_energies"] = jnp.array(
+                [jnp.nan],
+                dtype=jnp.float64,
+            )
+        else:
+            geometry: CrystalGeometry = _geometry()
+            arguments["geometry"] = eqx.tree_at(
+                lambda item: item.positions,
+                geometry,
+                jnp.full((1, 3), jnp.nan),
+            )
 
-        assert model.n_orbitals == 1
-        chex.assert_trees_all_close(
-            model.hopping_params, jnp.array([-1.5, -1.5])
-        )
+        assert_rejects(make_tb_model, match=match, **arguments)
 
+    def test_raw_constructor_reasserts_static_invariants(self) -> None:
+        """Prevent direct construction from bypassing metadata closure.
 
-class TestMakeGrapheneModel:
-    """Validate :func:`~diffpes.types.make_graphene_model`.
-
-    The preset must construct the two-sublattice honeycomb model with the
-    expected number of nearest-neighbor hopping entries.
-
-    :see: :func:`~diffpes.types.make_graphene_model`
-    """
-
-    def test_constructs_two_orbital_model(self) -> None:
-        """Construct the two-orbital graphene preset.
-
-        The check verifies the A/B orbital count and that every generated
-        hopping amplitude equals the supplied ``-2.7`` eV value.
+        The case removes the reverse partner from otherwise valid arguments.
 
         Notes
         -----
-        The test calls the convenience factory, checks its static orbital count, and
-        compares all numerical hopping leaves with an independent constant.
+        Require the raw module constructor to emit the closure diagnostic.
         """
-        model: TBModel = make_graphene_model(t=-2.7)
-        expected: jax.Array = jnp.full(model.hopping_params.shape, -2.7)
+        arguments: dict[str, object] = _model_arguments()
+        arguments["hopping_amplitudes"] = jnp.array(
+            [1.0 + 0.0j],
+            dtype=jnp.complex128,
+        )
+        arguments["hopping_pairs"] = ((0, 0),)
+        arguments["hopping_cells"] = ((1, 0, 0),)
 
-        assert model.n_orbitals == 2
-        chex.assert_trees_all_close(model.hopping_params, expected)
+        with pytest.raises(ValueError, match="Hermitian-closed"):
+            TBModel(**arguments)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        cells=st.lists(
+            st.integers(min_value=1, max_value=20),
+            min_size=1,
+            max_size=6,
+            unique=True,
+        ),
+        real_parts=st.lists(
+            st.floats(
+                min_value=-10.0,
+                max_value=10.0,
+                allow_nan=False,
+                allow_infinity=False,
+            ),
+            min_size=6,
+            max_size=6,
+        ),
+        imaginary_parts=st.lists(
+            st.floats(
+                min_value=-10.0,
+                max_value=10.0,
+                allow_nan=False,
+                allow_infinity=False,
+            ),
+            min_size=6,
+            max_size=6,
+        ),
+    )
+    def test_random_closed_lists_accept_and_corruption_rejects(
+        self,
+        cells: list[int],
+        real_parts: list[float],
+        imaginary_parts: list[float],
+    ) -> None:
+        """Accept random closed lists and reject one corrupted reverse entry.
+
+        Hypothesis supplies unique cells and finite complex hopping components.
+
+        Notes
+        -----
+        Build exact reverse entries, then perturb one amplitude and require rejection.
+        """
+        n_hoppings: int = len(cells)
+        forward_values: list[complex] = [
+            complex(real_parts[index], imaginary_parts[index])
+            for index in range(n_hoppings)
+        ]
+        amplitudes: jax.Array = jnp.asarray(
+            forward_values + [value.conjugate() for value in forward_values],
+            dtype=jnp.complex128,
+        )
+        hopping_cells: tuple[tuple[int, int, int], ...] = tuple(
+            [(cell, 0, 0) for cell in cells]
+            + [(-cell, 0, 0) for cell in cells]
+        )
+        hopping_pairs: tuple[tuple[int, int], ...] = ((0, 0),) * (
+            2 * n_hoppings
+        )
+        arguments: dict[str, object] = _model_arguments()
+        arguments["hopping_amplitudes"] = amplitudes
+        arguments["hopping_pairs"] = hopping_pairs
+        arguments["hopping_cells"] = hopping_cells
+
+        model: TBModel = make_tb_model(**arguments)
+        chex.assert_trees_all_close(model.hopping_amplitudes, amplitudes)
+
+        corrupted: jax.Array = amplitudes.at[0].add(0.25j)
+        arguments["hopping_amplitudes"] = corrupted
+        with pytest.raises(RuntimeError, match="complex conjugates"):
+            make_tb_model(**arguments)
