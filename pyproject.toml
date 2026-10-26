@@ -74,7 +74,7 @@ test = [
 ]
 dev = [
     "diffpes[docs,test]",
-    "ruff==0.16.2",
+    "ruff==0.17.2",
     "pygount>=3.1.0",
     "pre-commit>=4.5.1",
     "ty>=0.0.19",
@@ -87,7 +87,7 @@ all = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.10.4,<0.11.0"]
+requires = ["uv_build>=0.10.4,<0.14.0"]
 build-backend = "uv_build"
 
 [[tool.uv.index]]
